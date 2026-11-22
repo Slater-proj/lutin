@@ -189,7 +189,7 @@ def after_turn(ident, demande, reponse, fichiers=()):
     write(ident, sections)
 
 
-def render(sections, budget_caracteres):
+def render(sections, budget):
     """Le texte de la fiche pour le modèle, dans la limite demandée. L'objectif et l'étape en cours viennent d'abord ; si c'est trop long, on retire les
     plus anciennes demandes, puis les fichiers, les plus anciennes lignes de « fait », la fin du plan (les étapes lointaines), les décisions du milieu
     (la première et les plus récentes restent), le reste de « fait », enfin les questions ouvertes. Une coupe nette, en dernier recours, n'enlève que la
@@ -203,14 +203,14 @@ def render(sections, budget_caracteres):
                 morceaux.append("{} :\n".format(TITLES[cle]) + "\n".join("- " + ligne for ligne in sections[cle]))
         return "\n".join(morceaux)
     for cle, garder in (("demandes", 0), ("fichiers", 0), ("fait", 2), ("plan", 1), ("decisions", 2), ("fait", 0), ("ouvert", 1)):
-        while len(texte()) > budget_caracteres and len(sections.get(cle) or []) > garder:
+        while len(texte()) > budget and len(sections.get(cle) or []) > garder:
             if cle == "plan":
                 sections[cle].pop()                               # la fin du plan : les étapes les plus lointaines
             elif cle == "decisions":
                 sections[cle].pop(1)                              # celles du milieu : la première et les plus récentes restent
             else:
                 sections[cle].pop(0)
-    return texte()[:budget_caracteres]
+    return texte()[:budget]
 
 
 def max_share():
@@ -221,13 +221,13 @@ def max_share():
         return MAX_SHARE
 
 
-def budget_caracteres(num_ctx):
+def character_budget(num_ctx):
     return int(num_ctx * max_share() * CHARS_PER_TOKEN)
 
 
 def text_for_model(ident, num_ctx):
     """Le bloc à donner au modèle ('' si la fiche est vide)."""
-    t = render(read(ident), budget_caracteres(num_ctx))
+    t = render(read(ident), character_budget(num_ctx))
     if not t:
         return ""
     return "[Fiche de suivi] " + _t("Tenue à jour pour cette conversation : fie-toi à elle pour savoir où on en est. Elle fait foi sur l'objectif, les décisions et l'étape en cours.") + "\n" + t

@@ -1399,24 +1399,24 @@ class Chat(unittest.TestCase):
         patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"id": "t0000001", "nom": "Documents", "chemin": str(folder)}])
         patch.start()
         self.addCleanup(patch.stop)
-        self.addCleanup(lambda: [background_jobs.action(job["id"], "supprimer") for job in background_jobs.liste()])
+        self.addCleanup(lambda: [background_jobs.action(job["id"], "supprimer") for job in background_jobs.list_works()])
         p.evaluer("location.hash = '#/agents/jobs'")
         p.attendre("!!document.querySelector('.jobs form.add')")
         fill = "(() => { const boxes = document.querySelectorAll('.jobs form.add input[type=text], .jobs form.add textarea'); const values = %s; values.forEach((v, i) => { boxes[i].value = v; boxes[i].dispatchEvent(new Event('input', {bubbles: true})); }); })()"
         p.evaluer(fill % js(["Factures", str(folder), "*.pdf", "Donne le montant total."]))
         self.press("document.querySelector('.jobs form.add button[type=submit]')")
         p.attendre("document.querySelectorAll('.jobs .cards .card').length === 1")
-        job = background_jobs.liste()[0]
+        job = background_jobs.list_works()[0]
         self.assertEqual((job["nom"], job["valide"]), ("Factures", False), "a trial by default: it waits for a check")
         self.press("[...document.querySelectorAll('.jobs .cards .button')].find(b => b.innerText === 'Pause')")
         p.attendre("[...document.querySelectorAll('.jobs .cards .button')].some(b => b.innerText === 'Reprendre')")
-        self.assertTrue(background_jobs.liste()[0]["pause"])
+        self.assertTrue(background_jobs.list_works()[0]["pause"])
         if AXE.is_file():
             self.axe("on the background work")
         self.press("[...document.querySelectorAll('.jobs .cards .button')].find(b => b.innerText.startsWith('Supprimer'))")
         self.press("document.querySelector('.jobs .cards .button.danger:not(.quiet)')")
         p.attendre("document.querySelectorAll('.jobs .cards .card').length === 0")
-        self.assertEqual(background_jobs.liste(), [])
+        self.assertEqual(background_jobs.list_works(), [])
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

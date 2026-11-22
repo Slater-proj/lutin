@@ -152,7 +152,7 @@ class Engine:
         """La fiche du moteur d'après le catalogue signé (description, forces, faiblesses, site, version testée), ou None : alors les textes écrits dans le code servent."""
         try:
             from . import engine_catalog
-            return engine_catalog.fiche(self.id)
+            return engine_catalog.engine_card(self.id)
         except Exception:  # noqa: BLE001  (la page ne dépend jamais du catalogue pour s'afficher)
             return None
 

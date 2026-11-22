@@ -132,7 +132,7 @@ class Modeles(Base):
             return Faux(["ok\n"])
         C.CACHE.clear()
         X.download_model("turboderp/Qwen3-8B-exl3", "4.0bpw", self.dossiers, lancer=lancer, http=faux_hf())
-        m = X.modeles(self.dossiers)
+        m = X.list_models(self.dossiers)
         self.assertEqual([(x["nom"], x["depot"], x["revision"], x["commit"]) for x in m], [("Qwen3-8B-exl3_4.0bpw", "turboderp/Qwen3-8B-exl3", "4.0bpw", "a" * 40)])
         self.assertEqual(X.name_folder_model("turboderp/Qwen3-8B-exl3", ""), "Qwen3-8B-exl3")
 
@@ -140,7 +140,7 @@ class Modeles(Base):
         d = X.folder_models(self.dossiers) / "maison"
         d.mkdir(parents=True)
         (d / "config.json").write_text("{}", encoding="utf-8")
-        self.assertEqual([(m["nom"], m["depot"], m["commit"]) for m in X.modeles(self.dossiers)], [("maison", "", "")])
+        self.assertEqual([(m["nom"], m["depot"], m["commit"]) for m in X.list_models(self.dossiers)], [("maison", "", "")])
 
     def test_un_depot_sans_reseau_ne_fait_pas_echouer_le_telechargement(self):
         self.installer()
@@ -155,7 +155,7 @@ class Modeles(Base):
             raise OSError("hors ligne")
         C.CACHE.clear()
         self.assertTrue(X.download_model("turboderp/M-exl3", "", self.dossiers, lancer=lancer, http=coupe))
-        self.assertEqual(X.modeles(self.dossiers)[0]["commit"], "")
+        self.assertEqual(X.list_models(self.dossiers)[0]["commit"], "")
 
     def test_un_fichier_de_poids_coupe_rend_le_modele_incomplet(self):
         """Maintainer (2026-11-22): « Tensor model.language_model.layers.19.self_attn.q_proj.trellis … extends past end of file: needs 6212421986 bytes » at load,
@@ -174,7 +174,7 @@ class Modeles(Base):
         (racine / "Illisible").mkdir()
         (racine / "Illisible" / "config.json").write_text("{}", encoding="utf-8")
         (racine / "Illisible" / "model.safetensors").write_bytes(b"x" * 1000)
-        self.assertEqual({m["nom"]: m["incomplet"] for m in X.modeles(self.dossiers)}, {"Entier": False, "Coupe": True, "Illisible": False}, "a header that cannot be read is unknown, not cut")
+        self.assertEqual({m["nom"]: m["incomplet"] for m in X.list_models(self.dossiers)}, {"Entier": False, "Coupe": True, "Illisible": False}, "a header that cannot be read is unknown, not cut")
 
     def test_supprimer_n_efface_que_le_dossier_d_un_modele(self):
         racine = X.folder_models(self.dossiers)
@@ -186,7 +186,7 @@ class Modeles(Base):
                 X.remove_model(mauvais, self.dossiers)
         self.assertTrue((self.tmp / "intouchable").is_dir())
         self.assertTrue(X.remove_model("A", self.dossiers))
-        self.assertEqual(X.modeles(self.dossiers), [])
+        self.assertEqual(X.list_models(self.dossiers), [])
 
     def test_le_dossier_des_modeles_choisi_va_dans_la_configuration_de_tabby(self):
         ailleurs = self.tmp / "disque-d" / "modeles"
@@ -308,7 +308,7 @@ class SuppressionSure(Base):
             with self.assertRaises(PermissionError):
                 X.remove_model(d.name, self.dossiers)
         self.assertTrue((d / "config.json").is_file() and (d / "model.safetensors").is_file(), "rien n'a été touché")
-        self.assertEqual([m["nom"] for m in X.modeles(self.dossiers)], [d.name], "il est toujours dans la liste")
+        self.assertEqual([m["nom"] for m in X.list_models(self.dossiers)], [d.name], "il est toujours dans la liste")
 
     def test_la_suppression_reussie_ne_laisse_aucun_dossier(self):
         d = self.modele()
@@ -319,15 +319,15 @@ class SuppressionSure(Base):
         reste = X.folder_models(self.dossiers) / ".suppression-Vieux-a1b2c3"
         reste.mkdir(parents=True)
         (reste / "config.json").write_text("{}", encoding="utf-8")
-        self.assertEqual(X.modeles(self.dossiers), [])
+        self.assertEqual(X.list_models(self.dossiers), [])
         self.assertFalse(reste.exists())
 
     def test_un_dossier_sans_config_mais_avec_des_poids_est_liste_comme_incomplet(self):
         d = self.modele("Abime-exl3", config=False)
-        m = X.modeles(self.dossiers)
+        m = X.list_models(self.dossiers)
         self.assertEqual([(x["nom"], x["incomplet"]) for x in m], [(d.name, True)])
         X.remove_model(d.name, self.dossiers)          # et il se supprime comme un autre
-        self.assertEqual(X.modeles(self.dossiers), [])
+        self.assertEqual(X.list_models(self.dossiers), [])
 
 
 class ContexteBorne(Base):
@@ -462,7 +462,7 @@ class Carte(unittest.TestCase):
         with self.assertRaises(ml.EngineError):
             self.mo.supprimer_modele("../x")
         self.mo.supprimer_modele("A-exl3")
-        self.assertEqual(X.modeles(self.mo._dossiers()), [])
+        self.assertEqual(X.list_models(self.mo._dossiers()), [])
         with mock.patch.object(X, "remove_model", mock.Mock(side_effect=PermissionError())):
             with self.assertRaises(ml.EngineError) as e:
                 self.mo.supprimer_modele("A-exl3")

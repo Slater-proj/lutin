@@ -120,7 +120,7 @@ def _launch(p):
 def part_read(piece_id, nom):
     """(octets, type MIME, nom) d'une pièce jointe, pour la télécharger de nouveau sous son vrai nom."""
     from . import attachments
-    p = attachments.chemin(piece_id)
+    p = attachments.path_of(piece_id)
     nom = attachments.clean_name(nom) if nom else p.name
     return p.read_bytes(), mimetypes.guess_type(nom)[0] or "application/octet-stream", nom
 
@@ -129,7 +129,7 @@ def part_open(piece_id, nom):
     """Ouvre une pièce jointe avec l'application par défaut : une copie est faite sous son vrai nom (la pièce gardée porte un nom tiré de son contenu), seulement pour les documents et médias."""
     import shutil
     from . import attachments
-    p = attachments.chemin(piece_id)
+    p = attachments.path_of(piece_id)
     nom = attachments.clean_name(nom) if nom else p.name
     if Path(nom).suffix.lower() not in OPENABLE:
         raise ValueError(_t("Ce type de fichier ne s'ouvre pas d'ici (seuls les documents et les médias le permettent) : ouvre-le depuis son dossier."))

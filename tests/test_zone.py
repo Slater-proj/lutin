@@ -121,7 +121,7 @@ class PremiereUtilisation(unittest.TestCase):
 class Commande(unittest.TestCase):
     def test_refuse_hors_windows_avec_un_message(self):
         with mock.patch.object(zone, "available", return_value=False), mock.patch("sys.stderr"):
-            self.assertEqual(zone.commande({"donnees": "x"}, {"installe": True}), 1)
+            self.assertEqual(zone.command({"donnees": "x"}, {"installe": True}), 1)
 
     def test_adresse_selon_le_port(self):
         self.assertEqual(zone.address({"securite": {"port": 8790}}), "http://127.0.0.1:8790/")

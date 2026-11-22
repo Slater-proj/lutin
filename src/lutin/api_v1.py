@@ -3716,7 +3716,7 @@ def download_attachment(request):
     """A document sent in a conversation, as it was sent. READ, like the images: a link in the page carries the session cookie and not the page token.
     Always a download, never displayed (a document is not trusted to be harmless in the page's own origin); `?name=` is the name the file is saved under."""
     try:
-        data = _pieces.chemin(request.params["id"]).read_bytes()
+        data = _pieces.path_of(request.params["id"]).read_bytes()
     except (ValueError, OSError):
         raise ApiError(404, "not_found", _t("Fichier joint inconnu.")) from None
     name = _pieces.clean_name(request.query.get("name") or "") or request.params["id"]
@@ -4279,7 +4279,7 @@ def _job_view(job):
 
 def _jobs_view():
     from . import background_jobs as _jobs
-    return {"jobs": [_job_view(job) for job in _jobs.liste()]}
+    return {"jobs": [_job_view(job) for job in _jobs.list_works()]}
 
 
 @route("GET", "/background-jobs", SESSION)

@@ -56,13 +56,13 @@ def extension_of(nom, octets):
     return ".txt" if decode(octets) is not None else None
 
 
-def file_text(chemin, ext):
+def file_text(path, ext):
     if ext in TEXT_EXTENSIONS or ext == ".txt":
-        t = decode(Path(chemin).read_bytes())
+        t = decode(Path(path).read_bytes())
         if t is None:
             raise text_extraction.ExtractionError(_t("Ce fichier n'est pas du texte lisible."))
         return t.strip()
-    return text_extraction.texte(chemin)
+    return text_extraction.extract_text(path)
 
 
 def save(octets, nom):
@@ -101,7 +101,7 @@ def save(octets, nom):
     return ident, nom, len(texte)
 
 
-def chemin(ident):
+def path_of(ident):
     if not RE_ID.match(str(ident or "")):
         raise ValueError(_t("Fichier joint inconnu."))
     f = folder() / ident
@@ -123,7 +123,7 @@ def _extract_when_readable(f, essais=40):
 
 def read_text(ident):
     """Le texte extrait de la pièce (extrait une fois, gardé à côté)."""
-    f = chemin(ident)
+    f = path_of(ident)
     cache = folder() / (ident + ".texte")
     try:
         if cache.is_file() and cache.stat().st_mtime >= f.stat().st_mtime:
@@ -144,7 +144,7 @@ def check_list(pieces):
     for p in pieces or []:
         if not isinstance(p, dict):
             raise ValueError(_t("Fichier joint inconnu."))
-        chemin(p.get("id"))
+        path_of(p.get("id"))
         sortie.append({"id": p["id"], "nom": clean_name(p.get("nom"))})
     if len(sortie) > PER_MESSAGE:
         raise ValueError(_t("{} fichiers au plus par message.").format(PER_MESSAGE))

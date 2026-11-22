@@ -184,7 +184,7 @@ class RateLimiter:
         return True
 
 
-def nom_appareil(donne, agent="", sur_la_machine=False):
+def device_name(donne, agent="", sur_la_machine=False):
     """Le nom affiché d'un appareil appairé : celui qu'on a tapé, sinon d'après le navigateur (« Chrome · Windows »). Un appairage par QR code ou par adresse ne porte pas de nom : on ne l'appelle pas « QR »."""
     donne = (donne or "").strip()
     if donne and donne.lower() != "qr":
@@ -229,7 +229,7 @@ class Devices:
         self.echecs = 0
         return self.pin
 
-    def appairer(self, pin, nom_appareil=""):
+    def appairer(self, pin, device=""):
         """Renvoie un jeton de session si le PIN est bon ; None sinon. Après ESSAIS_PIN échecs, le PIN est invalidé et plus aucun essai n'est accepté pendant BLOCAGE_S."""
         maintenant = self.horloge()
         if maintenant < self.bloque_jusqua or not self.pin or maintenant > (self.pin_expire or 0):
@@ -240,7 +240,7 @@ class Devices:
                 self.pin, self.bloque_jusqua = None, maintenant + LOCK_OUT_S
             return None
         jeton = secrets.token_urlsafe(32)
-        self.sessions[_digest(jeton)] = {"nom": (nom_appareil or "Appareil")[:60], "cree": maintenant, "vu": maintenant}
+        self.sessions[_digest(jeton)] = {"nom": (device or "Appareil")[:60], "cree": maintenant, "vu": maintenant}
         self.pin = None                                     # un PIN ne sert qu'une fois
         self._ecrire()
         return jeton

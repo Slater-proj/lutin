@@ -192,7 +192,7 @@ def text(valeur):
     return valeur
 
 
-def fiche(ident, catalogue=None):
+def engine_card(ident, catalogue=None):
     """La fiche d'un moteur que Lutin gère lui-même (« ollama », « llamacpp ») telle que le catalogue la décrit : {description, points_forts, points_faibles, site, remarque, version_testee} dans la langue
     courante, ou None si le catalogue ne la contient pas (la page garde alors les textes écrits dans le code)."""
     try:
@@ -225,15 +225,15 @@ def view(moteur):
             "materiel": list(moteur.get("materiel", [])), "docker": bool(moteur.get("docker", True))}
 
 
-def compatibility(fiche, systeme, en_docker, fabricants):
+def compatibility(card, systeme, en_docker, fabricants):
     """(compatible, raison) : ce serveur peut-il tourner sur CETTE machine ? `systeme` : windows | linux | macos ; `fabricants` : les fabricants de cartes graphiques détectées.
     Une machine dont on ne connaît pas les cartes n'est pas écartée à tort : seul un fabricant CONNU et différent exclut."""
     from .i18n import t as _t
-    if systeme not in fiche.get("plateformes", SYSTEMS):
+    if systeme not in card.get("plateformes", SYSTEMS):
         return False, _t("pas disponible sous {}").format({"windows": "Windows", "linux": "Linux", "macos": "macOS"}.get(systeme, systeme))
-    if en_docker and not fiche.get("docker", True):
+    if en_docker and not card.get("docker", True):
         return False, _t("ne s'installe pas dans Docker (pas de carte graphique ni d'environnement Python dédié dans le conteneur)")
-    voulus = fiche.get("materiel") or []
+    voulus = card.get("materiel") or []
     connus = {f for f in (fabricants or []) if f and f != "inconnu"}
     if voulus and connus and not (connus & set(voulus)):
         return False, _t("demande une carte graphique {}").format(" ou ".join(v.upper() if v != "apple" else "Apple" for v in voulus))

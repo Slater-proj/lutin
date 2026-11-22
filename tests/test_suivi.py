@@ -71,7 +71,7 @@ class Fiche(unittest.TestCase):
         progress_sheet.modify(ID, "etape", "Étape en cours importante")
         for num_ctx in (4096, 24576):
             texte = progress_sheet.text_for_model(ID, num_ctx)
-            self.assertLessEqual(len(texte), progress_sheet.budget_caracteres(num_ctx) + 400)
+            self.assertLessEqual(len(texte), progress_sheet.character_budget(num_ctx) + 400)
             self.assertIn("Mon objectif principal", texte, "l'objectif survit toujours")
             self.assertIn("Étape en cours importante", texte)
             self.assertTrue(texte.startswith("[Fiche de suivi]"))
@@ -134,9 +134,9 @@ class PartDuContexte(unittest.TestCase):
 
     def test_le_plafond_suit_le_reglage_et_reste_borne(self):
         self.assertEqual(_m.settings()["fiche_part"], 10)
-        self.assertEqual(progress_sheet.budget_caracteres(16384), int(16384 * 0.10 * 3))
+        self.assertEqual(progress_sheet.character_budget(16384), int(16384 * 0.10 * 3))
         _m.save_settings({"fiche_part": 25})
-        self.assertEqual(progress_sheet.budget_caracteres(16384), int(16384 * 0.25 * 3), "25 % : la fiche peut garder plus de détails")
+        self.assertEqual(progress_sheet.character_budget(16384), int(16384 * 0.25 * 3), "25 % : la fiche peut garder plus de détails")
         _m.save_settings({"fiche_part": 400})
         self.assertEqual(_m.settings()["fiche_part"], 25, "borné à 25 %")
         _m.save_settings({"fiche_part": 1})

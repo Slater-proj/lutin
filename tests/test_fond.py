@@ -147,7 +147,7 @@ class Fond(unittest.TestCase):
             (self.docs / ("c%d.txt" % i)).write_text("Court %d." % i, encoding="utf-8")
         background_jobs.create("Court", str(self.docs), "*.txt", "Résume.", False, 24, essai=True)
         self.tout_traiter()
-        self.assertEqual(background_jobs.liste()[0]["etat"], "termine", "moins de documents que l'essai : rien à valider")
+        self.assertEqual(background_jobs.list_works()[0]["etat"], "termine", "moins de documents que l'essai : rien à valider")
         for t in background_jobs.read_works():
             background_jobs.action(t["id"], "supprimer")
         for i in range(6):

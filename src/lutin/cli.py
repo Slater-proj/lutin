@@ -246,7 +246,7 @@ def start_child(sans_navigateur):
 def command_tray(args):
     from . import tray
     d, cfg = context()
-    return tray.commande(d, cfg, ouvrir=not getattr(args, "no_browser", False))
+    return tray.command(d, cfg, ouvrir=not getattr(args, "no_browser", False))
 
 
 def command_serve(args):

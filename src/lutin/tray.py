@@ -161,10 +161,10 @@ class Server:
         from .cli import RESTART_CODE
         if self.arret:
             return 0
-        commande = [sys.executable, "-m", "lutin", "serve", "--no-supervisor"] + ([] if premiere and self.ouvrir else ["--no-browser"])
+        cmd = [sys.executable, "-m", "lutin", "serve", "--no-supervisor"] + ([] if premiere and self.ouvrir else ["--no-browser"])
         Path(self.dossiers["donnees"]).mkdir(parents=True, exist_ok=True)
         with open(Path(self.dossiers["donnees"]) / "serveur.log", "a", encoding="utf-8") as sortie:
-            self.enfant = subprocess.Popen(commande, env=dict(os.environ, LUTIN_SUPERVISE="1"), stdout=sortie, stderr=subprocess.STDOUT,
+            self.enfant = subprocess.Popen(cmd, env=dict(os.environ, LUTIN_SUPERVISE="1"), stdout=sortie, stderr=subprocess.STDOUT,
                                            creationflags=CREATE_NO_WINDOW)
             code = self.enfant.wait()
         if self.arret:
@@ -333,7 +333,7 @@ class Tray:
             user32.DispatchMessageW(ctypes.byref(msg))
 
 
-def commande(dossiers, cfg, ouvrir=True):
+def command(dossiers, cfg, ouvrir=True):
     """Lance Lutin dans la zone de notification. Renvoie un code de sortie."""
     if not available():
         print(_t("L'icône de zone de notification n'existe que sous Windows : utilise « lutin » dans un terminal."), file=sys.stderr)

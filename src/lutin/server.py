@@ -670,7 +670,7 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/fichiers-crees":                      # tout ce que Lutin a créé (documents, images, vidéos, sons) : de quoi faire le ménage
             return self._envoyer(200, _fichiers.entries())
         if chemin == "/api/fond":                                # le travail de fond : travaux et avancement
-            return self._envoyer(200, {"liste": _fond.liste()})
+            return self._envoyer(200, {"liste": _fond.list_works()})
         if chemin == "/api/fond-rapport":
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
@@ -1752,7 +1752,7 @@ class Handler(BaseHTTPRequestHandler):
         if not _m.PIN_LIMITER.autoriser(self.client_address[0]):
             return self._envoyer(429, {"erreur": "Trop d'essais : attends une minute."})
         nom = donnees.get("nom")
-        jeton = _m.DEVICES.appairer(str(donnees.get("pin", "")), _sec.nom_appareil(nom if isinstance(nom, str) else "", self.headers.get("User-Agent"), self._sur_cette_machine()))
+        jeton = _m.DEVICES.appairer(str(donnees.get("pin", "")), _sec.device_name(nom if isinstance(nom, str) else "", self.headers.get("User-Agent"), self._sur_cette_machine()))
         if not jeton:
             return self._envoyer(403, {"erreur": "Code incorrect ou expiré. Demande-en un nouveau sur l'ordinateur (lutin pin)."})
         return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.set_cookie_header(jeton, _m.SECURITY.url_publique.startswith("https://"))})

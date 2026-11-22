@@ -99,11 +99,11 @@ class NomAppareil(unittest.TestCase):
     IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
     def test_le_nom_tape_est_garde_et_qr_n_est_plus_un_nom(self):
-        self.assertEqual(security.nom_appareil("Mon téléphone", self.IPHONE), "Mon téléphone")
-        self.assertEqual(security.nom_appareil("QR", self.IPHONE), "Safari · iPhone")
-        self.assertEqual(security.nom_appareil("", self.CHROME), "Chrome · Windows")
-        self.assertEqual(security.nom_appareil("qr", self.CHROME, sur_la_machine=True), "Cet ordinateur (Chrome · Windows)")
-        self.assertEqual(security.nom_appareil(None, ""), "Appareil")
+        self.assertEqual(security.device_name("Mon téléphone", self.IPHONE), "Mon téléphone")
+        self.assertEqual(security.device_name("QR", self.IPHONE), "Safari · iPhone")
+        self.assertEqual(security.device_name("", self.CHROME), "Chrome · Windows")
+        self.assertEqual(security.device_name("qr", self.CHROME, sur_la_machine=True), "Cet ordinateur (Chrome · Windows)")
+        self.assertEqual(security.device_name(None, ""), "Appareil")
 
 
 class Dossiers(unittest.TestCase):

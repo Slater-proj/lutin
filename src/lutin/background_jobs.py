@@ -46,12 +46,12 @@ def folder():
 
 
 def read_works():
-    liste = _m.read_json(folder() / "travaux.json", [])
-    return [t for t in liste if isinstance(t, dict) and RE_ID.match(str(t.get("id", "")))] if isinstance(liste, list) else []
+    works = _m.read_json(folder() / "travaux.json", [])
+    return [t for t in works if isinstance(t, dict) and RE_ID.match(str(t.get("id", "")))] if isinstance(works, list) else []
 
 
-def _write_works(liste):
-    _m.write_atomic(folder() / "travaux.json", json.dumps(liste, ensure_ascii=False, indent=1))
+def _write_works(works):
+    _m.write_atomic(folder() / "travaux.json", json.dumps(works, ensure_ascii=False, indent=1))
 
 
 def folder_work(ident):
@@ -105,13 +105,13 @@ def create(nom, chemin, motifs, consigne, regulier=False, intervalle_h=24, essai
     except (TypeError, ValueError):
         intervalle_h = 24
     with LOCK:
-        liste = read_works()
-        if len(liste) >= MAX_WORKS:
+        works = read_works()
+        if len(works) >= MAX_WORKS:
             raise ValueError(_t("{} travaux de fond au plus : supprime-en un.").format(MAX_WORKS))
         t = {"id": secrets.token_hex(4), "nom": nom, "dossier": str(p), "motifs": liste_motifs, "consigne": consigne, "regulier": bool(regulier), "intervalle_h": intervalle_h,
              "cree": int(time.time()), "pause": False, "essai": bool(essai), "valide": not essai}
-        liste.append(t)
-        _write_works(liste)
+        works.append(t)
+        _write_works(works)
     write_state(t["id"], {"faits": {}, "erreurs": {}, "etat": "attente", "total": 0, "debut": 0, "fin": 0})
     return t
 
@@ -127,19 +127,19 @@ def action(ident, quoi):
     """pause, reprendre, relancer (tout refaire), supprimer."""
     t = find(ident)
     with LOCK:
-        liste = read_works()
+        works = read_works()
         if quoi == "supprimer":
-            _write_works([x for x in liste if x["id"] != t["id"]])
+            _write_works([x for x in works if x["id"] != t["id"]])
             import shutil
             shutil.rmtree(str(folder_work(t["id"])), ignore_errors=True)
             if ALIVE["document"] and ALIVE["document"][0] == t["id"]:
                 ALIVE["interrompre"].set()
             return {"ok": True}
         if quoi in ("pause", "reprendre"):
-            for x in liste:
+            for x in works:
                 if x["id"] == t["id"]:
                     x["pause"] = quoi == "pause"
-            _write_works(liste)
+            _write_works(works)
             if quoi == "reprendre":                                           # reprendre = réessayer aussi les documents en erreur
                 e = read_state(t["id"])
                 e.update(erreurs={}, de_suite=0, etat="attente", message="")
@@ -148,10 +148,10 @@ def action(ident, quoi):
                 ALIVE["interrompre"].set()
             return {"ok": True}
         if quoi == "valider":                                                 # les premiers résultats sont bons : le travail traite le reste
-            for x in liste:
+            for x in works:
                 if x["id"] == t["id"]:
                     x["valide"] = True
-            _write_works(liste)
+            _write_works(works)
             e = read_state(t["id"])
             if e.get("etat") == "a_valider":
                 e.update(etat="attente", message="")
@@ -200,7 +200,7 @@ def progression(t):
             "dernier_message": e.get("message", ""), "debut": e.get("debut", 0), "fin": e.get("fin", 0), "rapport": (folder_work(t["id"]) / "rapport.md").is_file()}
 
 
-def liste():
+def list_works():
     return [progression(t) for t in read_works()]
 
 
@@ -210,7 +210,7 @@ def document_text(chemin):
     if f.stat().st_size > MAX_SIZE:
         raise text_extraction.ExtractionError(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1_000_000))
     if f.suffix.lower() in text_extraction.FORMATS:
-        return text_extraction.texte(f)
+        return text_extraction.extract_text(f)
     if f.suffix.lower() in TEXTS:
         return f.read_text(encoding="utf-8", errors="replace")
     raise text_extraction.ExtractionError(_t("Format non géré : {}").format(f.suffix))
@@ -370,11 +370,11 @@ def one_step(modele_pret=None):
 
 def _pause(ident):
     with LOCK:
-        liste = read_works()
-        for x in liste:
+        works = read_works()
+        for x in works:
             if x["id"] == ident:
                 x["pause"] = True
-        _write_works(liste)
+        _write_works(works)
 
 
 def interrupt_for_user(attente=8):

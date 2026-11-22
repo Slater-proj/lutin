@@ -93,7 +93,7 @@ def _on_disk(kind, mo):
     """(models on disk, server present, models folder, catalogue search, quantisations) for `kind`."""
     if kind == "exllamav3":
         from . import exllamav3 as _exl
-        return _exl.modeles(mo._dossiers()), mo._exl() is not None, str(_exl.folder_models(mo._dossiers())), _exl_cat.search, _exl_cat.quantizations
+        return _exl.list_models(mo._dossiers()), mo._exl() is not None, str(_exl.folder_models(mo._dossiers())), _exl_cat.search, _exl_cat.quantizations
     if kind == "lmstudio":
         from . import lmstudio as _lmstudio
         present = mo._lms() is not None
@@ -214,7 +214,7 @@ def check(kind, scope):
     mo = _require(kind)
     if kind == "exllamav3":
         from . import exllamav3 as _exl
-        installed = _exl.modeles(mo._dossiers())
+        installed = _exl.list_models(mo._dossiers())
         if scope == "maj":
             return _exl_cat.newer_versions(installed)
         candidates, known = _exl_cat.search("", "recent", False, 1)["modeles"], {x.get("depot") for x in installed}

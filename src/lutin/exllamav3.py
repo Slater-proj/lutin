@@ -132,7 +132,7 @@ def latest_commit(http=updates.http_get):
 DEFAULT_CONTEXT = 16384          # jetons de conversation gardés en mémoire vidéo quand on ne sait pas mieux (le modèle en annonce parfois 128 000 ou plus : sa mémoire à elle seule dépasserait la carte)
 
 
-def config_yaml(port, modeles, contexte=0):
+def config_yaml(port, models, contexte=0):
     """Le config.yml de TabbyAPI : adresse locale, aucune clé (réservé à cette machine), pas de page web, aucune origine de navigateur admise, modèle chargé à la demande.
     `contexte` : la longueur de conversation gardée en mémoire vidéo (celle des réglages de Lutin) et une mémoire de conversation compressée (Q8) : sans cela TabbyAPI réserve la longueur maximale du modèle
     (262 144 jetons pour un Qwen récent) et refuse de le charger (« Insufficient VRAM in split for model and cache »).
@@ -141,7 +141,7 @@ def config_yaml(port, modeles, contexte=0):
     contexte = int(contexte or 0)
     contexte = max(2048, min(262144, contexte)) if contexte else DEFAULT_CONTEXT
     cache = -(-contexte // 256) * 256
-    chemin = Path(modeles).as_posix()
+    chemin = Path(models).as_posix()
     if "#" in chemin or "\n" in chemin or chemin.startswith(("'", '"')):
         raise ValueError(_t("Le chemin du dossier des modèles contient un caractère que TabbyAPI ne sait pas lire ('#', guillemet ou retour à la ligne)."))
     return ("network:\n  host: {}\n  port: {}\n  disable_auth: true\n  allowed_origins: []\n  web_ui: false\n"
@@ -468,7 +468,7 @@ def truncated_safetensors(f):
     return tronque
 
 
-def modeles(dossiers=None):
+def list_models(dossiers=None):
     """Les modèles téléchargés : [{nom, taille_go, depot, revision, commit}] (un dossier avec un config.json ; depot/revision/commit vides pour un modèle posé à la main)."""
     sortie = []
     racine = folder_models(dossiers)

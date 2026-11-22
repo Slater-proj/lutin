@@ -204,7 +204,7 @@ class Vie(Base):
         X.uninstall(self.dossiers)
         self.assertIsNone(X.installed(self.dossiers))
         self.assertFalse(X.folder_tabby(self.dossiers).exists())
-        self.assertEqual([m["nom"] for m in X.modeles(self.dossiers)], ["Qwen-exl3"])
+        self.assertEqual([m["nom"] for m in X.list_models(self.dossiers)], ["Qwen-exl3"])
 
 
 class Modeles(Base):
@@ -240,7 +240,7 @@ class Modeles(Base):
             if config:
                 (racine / nom / "config.json").write_text("{}", encoding="utf-8")
                 (racine / nom / "model.safetensors").write_bytes(b"x" * 2_000_000)
-        m = X.modeles(self.dossiers)
+        m = X.list_models(self.dossiers)
         self.assertEqual([x["nom"] for x in m], ["A-exl3"])
         self.assertGreater(m[0]["taille_go"] + 1, 0)
 

@@ -34,7 +34,7 @@ def bloc(**plus):
 class Fiches(unittest.TestCase):
     def test_les_cartes_d_ollama_et_de_llamacpp_viennent_du_catalogue(self):
         for ident in ("ollama", "llamacpp"):
-            f = cm.fiche(ident)
+            f = cm.engine_card(ident)
             self.assertIsNotNone(f, ident)
             vue = engines.ENGINES[ident].vue()
             self.assertEqual(vue["source_fiche"], "catalogue")
@@ -49,7 +49,7 @@ class Fiches(unittest.TestCase):
             self.assertIn("managed by Lutin", engines.ENGINES["ollama"].vue()["description"])
         finally:
             os.environ.pop("LUTIN_LANGUE", None)
-        self.assertIsNone(cm.fiche("ollama", {"moteurs": []}), "pas dans le catalogue : la page garde les textes du code")
+        self.assertIsNone(cm.engine_card("ollama", {"moteurs": []}), "pas dans le catalogue : la page garde les textes du code")
         self.assertEqual(engines.ENGINES["openai"].vue()["source_fiche"], "code", "le serveur externe n'est pas un moteur géré")
 
     def test_les_moteurs_geres_ne_sont_pas_des_prereglages(self):

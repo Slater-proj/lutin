@@ -26,11 +26,11 @@ class Suspect(ExtractionError):
     """Un document qui se décompresse en trop de données : on arrête tout (les autres erreurs d'objet, elles, sont sautées)."""
 
 
-def clean(texte):
-    texte = html.unescape(texte)
-    texte = re.sub(r"[ \t ]+", " ", texte)
-    texte = re.sub(r" ?\n ?", "\n", texte)
-    return re.sub(r"\n{3,}", "\n\n", texte).strip()
+def clean(text):
+    text = html.unescape(text)
+    text = re.sub(r"[ \t ]+", " ", text)
+    text = re.sub(r" ?\n ?", "\n", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 # ----------------------------------------------------------------- formats zip
@@ -67,10 +67,10 @@ def docx(chemin):
         raise ExtractionError(_t("Ce n'est pas un document Word (.docx) lisible."))
     paragraphes = []
     for m in re.finditer(r"<w:p(?:\s[^>]*)?>(.*?)</w:p>", xml, re.S):
-        texte = _concat(m.group(1), "w:t").strip()
+        text = _concat(m.group(1), "w:t").strip()
         titre = re.search(r'<w:pStyle w:val="(?:Heading|Titre)(\d)"', m.group(1))
-        if texte:
-            paragraphes.append(("#" * int(titre.group(1)) + " " + texte) if titre else texte)
+        if text:
+            paragraphes.append(("#" * int(titre.group(1)) + " " + text) if titre else text)
     return [("", clean("\n\n".join(paragraphes)))]
 
 
@@ -82,9 +82,9 @@ def odt(chemin):
     xml = re.sub(r"<text:s\s*/>", " ", xml)
     blocs = []
     for m in re.finditer(r"<text:(h|p)(?:\s[^>]*)?>(.*?)</text:\1>", xml, re.S):
-        texte = re.sub(r"<[^>]+>", "", re.sub(r"<text:(?:tab|line-break)\s*/>", " ", m.group(2))).strip()
-        if texte:
-            blocs.append(("# " + texte) if m.group(1) == "h" else texte)
+        text = re.sub(r"<[^>]+>", "", re.sub(r"<text:(?:tab|line-break)\s*/>", " ", m.group(2))).strip()
+        if text:
+            blocs.append(("# " + text) if m.group(1) == "h" else text)
     return [("", clean("\n\n".join(blocs)))]
 
 
@@ -95,9 +95,9 @@ def pptx(chemin):
     for i, n in enumerate(noms, 1):
         xml = _read(z, n)
         paragraphes = [_concat(m.group(1), "a:t").strip() for m in re.finditer(r"<a:p(?:\s[^>]*)?>(.*?)</a:p>", xml, re.S)]
-        texte = clean("\n".join(p for p in paragraphes if p))
-        if texte:
-            sortie.append((_t("Diapositive {}").format(i), texte))
+        text = clean("\n".join(p for p in paragraphes if p))
+        if text:
+            sortie.append((_t("Diapositive {}").format(i), text))
     return sortie
 
 
@@ -122,9 +122,9 @@ def xlsx(chemin):
                     cases.append(v.group(1))
             if any(cases):
                 lignes.append(" | ".join(cases))
-        texte = clean("\n".join(lignes))
-        if texte:
-            sortie.append((html.unescape(noms_feuilles[i]) if i < len(noms_feuilles) else _t("Feuille {}").format(i + 1), texte))
+        text = clean("\n".join(lignes))
+        if text:
+            sortie.append((html.unescape(noms_feuilles[i]) if i < len(noms_feuilles) else _t("Feuille {}").format(i + 1), text))
     return sortie
 
 
@@ -340,7 +340,7 @@ def _resolve(objets, v):
 
 def _cmap(flux):
     """Table code → texte d'une police (CMap ToUnicode) ; la longueur des codes (1 ou 2 octets) est déduite."""
-    texte = flux.decode("latin-1")
+    text = flux.decode("latin-1")
     table, longueur = {}, 1
 
     def u(h):
@@ -349,11 +349,11 @@ def _cmap(flux):
             return bytes.fromhex(h if len(h) % 2 == 0 else "0" + h).decode("utf-16-be", "replace")
         except ValueError:
             return ""
-    for bloc in re.findall(r"beginbfchar(.*?)endbfchar", texte, re.S):
+    for bloc in re.findall(r"beginbfchar(.*?)endbfchar", text, re.S):
         for src, dst in re.findall(r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>", bloc):
             table[int(src, 16)] = u(dst)
             longueur = max(longueur, (len(src) + 1) // 2)
-    for bloc in re.findall(r"beginbfrange(.*?)endbfrange", texte, re.S):
+    for bloc in re.findall(r"beginbfrange(.*?)endbfrange", text, re.S):
         for lo, hi, dst in re.findall(r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<[0-9A-Fa-f]+>|\[[^\]]*\])", bloc):
             a, b = int(lo, 16), int(hi, 16)
             longueur = max(longueur, (len(lo) + 1) // 2)
@@ -492,9 +492,9 @@ def pdf(chemin):
         contenu = _resolve(objets, page.get("/Contents"))
         refs = contenu if isinstance(contenu, list) else [page.get("/Contents")]
         flux = b"\n".join(objets[r[1]][1] for r in refs if isinstance(r, tuple) and r[1] in objets and objets[r[1]][1])
-        texte = clean(_content_text(flux, polices)) if flux else ""
-        if texte:
-            sortie.append((_t("Page {}").format(numero), texte))
+        text = clean(_content_text(flux, polices)) if flux else ""
+        if text:
+            sortie.append((_t("Page {}").format(numero), text))
     return sortie
 
 
@@ -512,6 +512,6 @@ def parts(chemin):
         raise ExtractionError(_t("Document illisible : {}").format(e)) from e
 
 
-def texte(chemin):
+def extract_text(chemin):
     """Tout le texte d'un document, parties séparées par leur titre en Markdown."""
     return "\n\n".join(("## {}\n\n".format(titre) if titre else "") + corps for titre, corps in parts(chemin))
