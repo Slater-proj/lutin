@@ -63,11 +63,11 @@ class Projects(unittest.TestCase):
         moved = self.root / "elsewhere" / "site2"
         self.assertTrue((moved / "index.html").is_file(), "the files went with it")
         self.assertFalse((self.root / "site").exists())
-        self.assertEqual(Path(next(p for p in view["projects"] if p["id"] == self.project["id"])["path"]), moved)
+        self.assertEqual(Path(next(p for p in view["projects"] if p["id"] == self.project["id"])["path"]).resolve(), moved.resolve(), "the same folder, whatever the spelling of the path (short names on Windows runners)")
         shutil.move(str(moved), str(self.root / "by-hand"))
         status, view = call("PATCH", "/projects/" + self.project["id"], {"path": str(self.root / "by-hand")})
         self.assertEqual(status, 200, view)
-        self.assertEqual(Path(next(p for p in view["projects"] if p["id"] == self.project["id"])["path"]), self.root / "by-hand")
+        self.assertEqual(Path(next(p for p in view["projects"] if p["id"] == self.project["id"])["path"]).resolve(), (self.root / "by-hand").resolve())
         self.assertEqual(call("PATCH", "/projects/" + self.project["id"], {"chemin": "x"})[0], 400)
 
     def test_a_paired_device_may_look_but_not_move(self):
