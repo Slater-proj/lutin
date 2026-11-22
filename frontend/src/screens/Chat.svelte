@@ -64,7 +64,8 @@
   const FOLLOW_MARGIN = 80; // pixels: closer than this to the end counts as « at the end »
   let following = $state(true);
   let box = $state<HTMLTextAreaElement | null>(null);
-  let inMemory = $state<{ known: boolean; loaded: boolean } | null>(null);
+  type InMemory = { known: boolean; loaded: boolean; state?: "loaded" | "loading" | "not_loaded" | "unknown"; loading_bytes?: number };
+  let inMemory = $state<InMemory | null>(null);
   let renaming = $state(false);
   let options = $state<ConversationOptions | null>(null);
   let optionsToSend = $state<Partial<ConversationOptions>>({}); // chosen before the conversation exists: sent when the first message creates it
@@ -179,7 +180,7 @@
 
   /** Is the model in use in memory? Asked again every few seconds with the marks of the list, and after a turn or a change of model. `known` false: the engine cannot say, nothing is shown. */
   async function readLoaded(): Promise<void> {
-    inMemory = await api<{ known: boolean; loaded: boolean }>("GET", "/models/loaded").catch(() => inMemory);
+    inMemory = await api<InMemory>("GET", "/models/loaded").catch(() => inMemory);
   }
 
   /** What a new conversation starts with: the settings of the machine, and the two automatic approvals off. */
@@ -369,6 +370,7 @@
       liveAt = { id, at };
       pending = { text: message, images: sent.filter((item) => item.kind === "image").map((item) => item.id), files: sent.filter((item) => item.kind === "document").map((item) => ({ id: item.id, name: item.name })) };
       live = newTurn();
+      setTimeout(() => void readLoaded(), 1000); // the turn has started on the server: the pill says « loading » at once when the model is not there
       try {
         await streamTurn(conversationPath(at, id), { message, ...(from === null ? {} : { replace_from: from }), ...turnFields(sent) }, (event) => {
           if (live) live = applyEvent(live, event);
@@ -768,7 +770,11 @@
         <p class="model on-host" title={t("chat.on_machine_help")}>{t("chat.on_machine", remote.find((entry) => entry.machine === where)?.machine_name ?? paired?.machines.find((entry) => entry.id === where)?.name ?? "")}</p>
       {:else}
       {#if inMemory?.known}
-        <span class="memory" class:loaded={inMemory.loaded} title={inMemory.loaded ? t("chat.memory_in_help") : t("chat.memory_out_help")}><span class="dot" aria-hidden="true"></span>{inMemory.loaded ? t("chat.memory_in") : t("chat.memory_out")}</span>
+        {@const loading = inMemory.state === "loading"}
+        {@const loadedGb = (inMemory.loading_bytes ?? 0) / 1e9}
+        <span class="memory" class:loaded={inMemory.loaded} class:loading role="status"
+          title={loading ? t("chat.memory_loading_help") : inMemory.loaded ? t("chat.memory_in_help") : t("chat.memory_out_help")}><span class="dot" aria-hidden="true"></span
+          >{loading ? (loadedGb >= 0.1 ? t("chat.memory_loading_gb", loadedGb.toLocaleString(undefined, { maximumFractionDigits: 1 })) : t("chat.memory_loading")) : inMemory.loaded ? t("chat.memory_in") : t("chat.memory_out")}</span>
       {/if}
       <label class="model">
         <span>{t("chat.model")}</span>
@@ -1228,6 +1234,28 @@
   .memory.loaded .dot {
     background: var(--color-accent); /* a full dot: loaded. The words say it too, the colour is not alone */
     box-shadow: none;
+  }
+
+  .memory.loading {
+    border-color: var(--color-accent);
+  }
+
+  .memory.loading .dot {
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+    background: conic-gradient(var(--color-accent) 0 30%, transparent 30% 100%); /* a quarter filled that turns: on its way into memory */
+    animation: memory-loading 1.2s linear infinite;
+  }
+
+  @keyframes memory-loading {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .memory.loading .dot {
+      animation: none;
+    }
   }
 
   .on-host {

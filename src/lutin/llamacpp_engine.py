@@ -867,8 +867,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
             return super().en_memoire(modele)
         with SERVEUR["verrou"]:
             p = SERVEUR["proc"]
-            if p is not None and p.poll() is None and (SERVEUR["modele"] == modele or (SERVEUR["modele"] == ROUTEUR and modele in SERVEUR["noms"])):
-                return {"taille": 0, "vram": 0}
+            if p is not None and p.poll() is None and SERVEUR.get("pret", True) and (SERVEUR["modele"] == modele or (SERVEUR["modele"] == ROUTEUR and modele in SERVEUR["noms"])):
+                return {"taille": 0, "vram": 0}          # started but still reading its model: not yet
         return None
 
     def vecteurs(self, modele, textes, delai=60):
@@ -1029,7 +1029,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 raise ErreurMoteur(_t("Impossible de lancer llama-server : {}").format(e))
             finally:
                 sortie.close()          # le processus garde sa propre copie du fichier journal
-            SERVEUR.update({"modele": ROUTEUR if routeur else modele, "ctx": ctx, "cache_8": "-ctk" in commande or "cache-type-k = q8_0" in (texte if routeur else "")})
+            SERVEUR.update({"pret": False, "modele": ROUTEUR if routeur else modele, "ctx": ctx, "cache_8": "-ctk" in commande or "cache-type-k = q8_0" in (texte if routeur else "")})
         lance = SERVEUR["proc"]
         fin = time.time() + attente
         while time.time() < fin:
@@ -1044,6 +1044,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 fin = self._fin_du_journal()
                 raise ErreurMoteur(_t("llama-server s'est arrêté au démarrage : {}").format(fin) + aide_bibliotheque(fin))
             if self._pret():
+                SERVEUR["pret"] = True          # the model is in memory: until now the pill says « loading »
                 return
             time.sleep(0.5)
         self.arreter()

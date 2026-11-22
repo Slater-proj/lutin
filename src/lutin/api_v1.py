@@ -17,6 +17,7 @@ import json
 import os
 import re
 import threading
+import time
 import traceback
 import urllib.error
 import urllib.parse
@@ -377,22 +378,48 @@ def models(request):
 
 @route("GET", "/models/loaded", SESSION)
 def models_loaded(request):
-    """Is the model in use in the memory of this machine right now? `{"engine", "model", "known", "loaded", "size_bytes", "vram_bytes"}`. `known` is false when the engine cannot say (a server Lutin only
-    connects to, a model of another machine): the page then shows nothing rather than a « not loaded » that may be wrong. A model that is not loaded is loaded by the first message
-    (the engines load on demand), which waits for it."""
+    """Is the model in use in the memory of this machine right now? `{"engine", "model", "known", "loaded", "state", "loading_bytes", "size_bytes", "vram_bytes"}`. `known` is false when the engine cannot
+    say (a server Lutin only connects to, a model of another machine): the page then shows nothing rather than a « not loaded » that may be wrong. A model that is not loaded is loaded by the first
+    message (the engines load on demand), which waits for it. `state`: loaded, loading (a turn waits for it; `loading_bytes` is what the graphics card took since), not_loaded, unknown."""
     engine = _m.moteur_actuel()
     settings = _m.reglages()
     model = str(settings.get("modele") or "")
-    answer = {"engine": engine.id, "model": model, "known": False, "loaded": False, "size_bytes": 0, "vram_bytes": 0}
+    answer = {"engine": engine.id, "model": model, "known": False, "loaded": False, "state": "unknown", "loading_bytes": 0, "size_bytes": 0, "vram_bytes": 0}
     if not model or settings.get("machine") or not engine.charge_connue():
         return answer
+    key = (engine.id, model)
     held = engine.en_memoire(model)
-    answer["known"] = True
+    answer.update(known=True, state="not_loaded")
     if held:
-        answer.update(loaded=True, size_bytes=int(held.get("taille") or 0), vram_bytes=int(held.get("vram") or 0))
-    elif _m.TOURS_ACTIFS:          # a turn of this machine answers with this engine: its model is in memory or being loaded; a busy server may just be late to say so
-        answer["loaded"] = True
+        _SEEN_LOADED.add(key)
+        _LOADING.pop(key, None)
+        answer.update(loaded=True, state="loaded", size_bytes=int(held.get("taille") or 0), vram_bytes=int(held.get("vram") or 0))
+    elif _m.TOURS_ACTIFS and key in _SEEN_LOADED:
+        answer.update(loaded=True, state="loaded")          # a server busy generating (TabbyAPI) is late to say it holds the model it was seen holding
+    elif _m.TOURS_ACTIFS:
+        answer.update(state="loading", loading_bytes=_loading_bytes(key))          # a turn waits for it: the engines load on the first request
+    else:
+        _SEEN_LOADED.discard(key)
+        _LOADING.pop(key, None)
     return answer
+
+
+_SEEN_LOADED = set()          # (engine, model) the engine said it held, forgotten when it says otherwise with no turn running
+_LOADING = {}                 # (engine, model) -> memory used on the graphics card when the load was first seen
+
+
+def _loading_bytes(key):
+    """How much the memory of the graphics card has grown since the load began: what the pill shows climbing. 0 without a card that says it (nvidia-smi).
+    The start is the last measure taken before (the resource guard measures just before a turn), when it is recent; otherwise the first one seen loading."""
+    before = _health.MEMO.get("vram")          # read before the measure below replaces it
+    now = _health.memo("vram", _health.video_memory)
+    if not now or now.get("utilise") is None:
+        return 0
+    if key not in _LOADING:
+        _LOADING[key] = now["utilise"]
+        if before and before[1] and before[1].get("utilise") is not None and time.monotonic() - before[0] < 60:
+            _LOADING[key] = min(now["utilise"], before[1]["utilise"])
+    return max(0, int(now["utilise"] - _LOADING[key]))
 
 
 # --------------------------------------------------------------------------- paired machines (ADR 0016): other computers whose engine Lutin may use

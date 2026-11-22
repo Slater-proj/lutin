@@ -104,6 +104,12 @@ class Routeur(Base):
         self.assertEqual(self.m.en_memoire("un"), {"taille": 0, "vram": 0})
         self.assertEqual(self.m.en_memoire("deux"), {"taille": 0, "vram": 0})
         self.assertIsNone(self.m.en_memoire("absent"))
+        self.assertIs(ml.SERVEUR["pret"], True, "the server answered: its model is in memory")
+        ml.SERVEUR["pret"] = False          # as between the launch and its first answer
+        try:
+            self.assertIsNone(self.m.en_memoire("un"), "a server still reading its model is not « in memory » (the pill says « loading »)")
+        finally:
+            ml.SERVEUR["pret"] = True
         self.assertIn("Routeur démarré", self.m.statut()["detail"])
         preset = (self.m.dossier() / "modeles.ini").read_text(encoding="utf-8")
         for nom in ("un", "deux", "nomic-embed-text"):
