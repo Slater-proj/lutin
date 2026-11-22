@@ -72,6 +72,18 @@ export function readName(name: string, revision = ""): NameFacts {
   };
 }
 
+/** The order of the groups of a list sorted by use (maintainer, 2026-11-22: « tri des modèles par usage, général, code… »): conversation first, the
+ *  models that cannot converse last. */
+export const USE_ORDER: readonly Use[] = ["chat", "code", "reasoning", "vision", "embedding"];
+
+/** Models grouped by what their name says they are for (their first use), in USE_ORDER, empty groups left out; inside a group by family, then by size,
+ *  then by name. A name that says nothing is « chat ». `nameOf` reads the name of an entry (names themselves by default). */
+export function byUse<T = string>(items: readonly T[], nameOf: (item: T) => string = (item) => String(item)): { use: Use; names: T[] }[] {
+  const facts = items.map((item) => ({ item, name: nameOf(item), facts: readName(nameOf(item)) }));
+  facts.sort((a, b) => a.facts.family.localeCompare(b.facts.family) || (a.facts.paramsB ?? 0) - (b.facts.paramsB ?? 0) || a.name.localeCompare(b.name));
+  return USE_ORDER.map((use) => ({ use, names: facts.filter((entry) => entry.facts.uses[0] === use).map((entry) => entry.item) })).filter((group) => group.names.length > 0);
+}
+
 /** The page of a model, to read more about it: Hugging Face for a repository (« owner/name »), ollama.com for an Ollama tag. */
 export function detailsLink(ref: string, engine: string): string {
   if (/^[\w.-]+\/[\w.-]+$/.test(ref) && engine !== "ollama") return "https://huggingface.co/" + ref;

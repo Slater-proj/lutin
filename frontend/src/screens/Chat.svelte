@@ -15,6 +15,7 @@
   import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
   import { t, type MessageKey } from "../lib/messages";
+  import { byUse } from "../lib/model_card";
   import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
   import ConversationTools from "../components/ConversationTools.svelte";
   import { COMMANDS, MODE_NAMES, onOff, parse, suggest as suggestCommands, type Parsed } from "../lib/slash";
@@ -46,6 +47,7 @@
   let models = $state<Models | null>(null);
   let paired = $state<MachinesView | null>(null); // who answers by default and the names of the paired machines (GET /machines never waits)
   const choices = $derived(models ? selector(models.models.map((model) => model.name), models.current, models.remote ?? [], paired) : null);
+  const localByUse = $derived(choices ? byUse(choices.local) : []); // the models of this machine by use, then family and size
   let live = $state<LiveTurn | null>(null);
   let pending = $state<({ text: string } & Sent) | null>(null);
   // The conversation the answer being written belongs to. Another one may be opened meanwhile: the answer is shown only in its own, and its end
@@ -788,18 +790,24 @@
             {#if choices.missing}
               <option value={choices.current} selected>{choices.missing.off ? t("chat.machine_off", choices.missing.model, choices.missing.name) : choices.missing.model}</option>
             {/if}
+            {#snippet option(machine: string, name: string)}
+              <option value={choiceValue(machine, name)} selected={choiceValue(machine, name) === choices!.current}>{name}</option>
+            {/snippet}
             {#snippet here()}
-              {#each choices!.local as name (name)}
-                <option value={choiceValue("", name)} selected={choiceValue("", name) === choices!.current}>{name}</option>
-              {/each}
+              {#each localByUse.flatMap((group) => group.names) as name (name)}{@render option("", name)}{/each}
             {/snippet}
             {#if choices.groups.length}
               {#if choices.local.length}<optgroup label={t("chat.this_machine")}>{@render here()}</optgroup>{/if}
               {#each choices.groups as group (group.machine)}
                 <optgroup label={group.name}>
-                  {#each group.models as name (name)}
-                    <option value={choiceValue(group.machine, name)} selected={choiceValue(group.machine, name) === choices.current}>{name}</option>
-                  {/each}
+                  {#each byUse(group.models).flatMap((part) => part.names) as name (name)}{@render option(group.machine, name)}{/each}
+                </optgroup>
+              {/each}
+            {:else if localByUse.length > 1}
+              <!-- One machine: the models grouped by what they are for (maintainer, 2026-11-22), conversation first. -->
+              {#each localByUse as group (group.use)}
+                <optgroup label={t(("card.use." + group.use) as MessageKey)}>
+                  {#each group.names as name (name)}{@render option("", name)}{/each}
                 </optgroup>
               {/each}
             {:else}

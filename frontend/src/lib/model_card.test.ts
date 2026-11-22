@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detailsLink, readName, shortName } from "./model_card";
+import { byUse, detailsLink, readName, shortName } from "./model_card";
 
 describe("readName", () => {
   it("reads the size, the quantisation and the format of an ExLlamaV3 model", () => {
@@ -37,5 +37,23 @@ describe("links", () => {
     expect(detailsLink("huihui_ai/qwen3-abliterated:27b", "ollama")).toBe("https://ollama.com/huihui_ai/qwen3-abliterated");
     expect(detailsLink("Qwen3-8B-exl3", "exllamav3")).toBe("");
     expect(shortName("turboderp/Qwen3-8B-exl3")).toBe("Qwen3-8B-exl3");
+  });
+});
+
+describe("byUse", () => {
+  it("groups the models by what they are for, conversation first and search by meaning last, each group by family then size", () => {
+    const groups = byUse(["nomic-embed-text", "qwen3:14b", "qwen2.5-coder:7b", "gemma3:4b", "qwen3:8b", "qwen3-vl:8b", "deepseek-r1:8b"]);
+    expect(groups).toEqual([
+      { use: "chat", names: ["gemma3:4b", "qwen3:8b", "qwen3:14b"] },
+      { use: "code", names: ["qwen2.5-coder:7b"] },
+      { use: "reasoning", names: ["deepseek-r1:8b"] },
+      { use: "vision", names: ["qwen3-vl:8b"] },
+      { use: "embedding", names: ["nomic-embed-text"] },
+    ]);
+  });
+
+  it("leaves out the empty groups, and a list of one use is one group", () => {
+    expect(byUse(["qwen3:8b", "gemma3:4b"])).toEqual([{ use: "chat", names: ["gemma3:4b", "qwen3:8b"] }]);
+    expect(byUse([])).toEqual([]);
   });
 });

@@ -9,6 +9,7 @@
   import { api, ApiError } from "../lib/api";
   import { canDownload, checkPath, downloadBody, downloadLabel, downloadPath, entryKey, installedPath, libraryQuery, recommendedPath, removePath, searchPath, sizesShown, variantsPath, type Entry } from "../lib/library";
   import { language, t, type MessageKey } from "../lib/messages";
+  import { byUse } from "../lib/model_card";
   import ModelCard from "./ModelCard.svelte";
   import ModelHelp from "./ModelHelp.svelte";
   import ModelVariants from "./ModelVariants.svelte";
@@ -41,6 +42,7 @@
   const gb = (value: number | null): string => (value === null ? "?" : new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(value));
 
   let installed = $state<Entry[] | null>(null);
+  const installedByUse = $derived(installed ? byUse(installed, (entry) => entry.name) : []);
   let loaded = $state(""); // the model in the memory of this machine now, when the engine can say it
   let recommended = $state<Entry[] | null>(null); // null while it is looked for
   let recommendedProblem = $state("");
@@ -309,8 +311,8 @@
     <p class="notice" role="status">{notice}</p>
     {#if installed && installed.length === 0}<p class="muted">{t("models.none")} {t("emodels.find_more")}</p>{/if}
     {#if installed?.length}
-      <ul class="cards">
-        {#each installed as entry (entryKey(entry))}
+      <!-- By use (maintainer, 2026-11-22: « tri des modèles par usage »), conversation first; one heading per use when there is more than one. -->
+      {#snippet installedCard(entry: Entry)}
           <ModelCard name={entry.name} reference={entry.id} revision={entry.revision} sizeGb={entry.size_gb} fit={entry.fit} installed inUse={entry.in_use} incomplete={entry.incomplete} {engine}>
             {#snippet actions()}
               {#if !entry.in_use && engine !== "colibri"}<button type="button" class="button primary" disabled={busy} onclick={() => use(entry)}>{t("models.use")}</button>{/if}
@@ -330,8 +332,13 @@
               {#if precisions === entry.name}<div class="variants"><ModelVariants model={entry.name} {onstarted} /></div>{/if}
             {/snippet}
           </ModelCard>
-        {/each}
-      </ul>
+      {/snippet}
+      {#each installedByUse as group (group.use)}
+        {#if installedByUse.length > 1}<h3 class="use-title">{t(("card.use." + group.use) as MessageKey)}</h3>{/if}
+        <ul class="cards">
+          {#each group.names as entry (entryKey(entry))}{@render installedCard(entry)}{/each}
+        </ul>
+      {/each}
     {/if}
     {#if engine === "exllamav3"}
       <div class="line"><button type="button" class="button" disabled={busy} onclick={() => check("updates")}>{t("upkeep.check_updates")}</button></div>
@@ -363,6 +370,15 @@
 
   h2 {
     font-size: var(--text-lg);
+  }
+
+  .use-title {
+    margin-top: var(--space-2);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-muted);
   }
 
   h3 {
