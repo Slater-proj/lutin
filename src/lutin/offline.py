@@ -4,10 +4,14 @@ Autorisés : l'adresse locale (127.0.0.1, localhost), l'adresse d'Ollama (OLLAMA
 Bloqués : recherche et lecture web, catalogue en ligne, empreintes du registre d'Ollama, téléchargement de modèles, mise à jour de Lutin.
 
 Le mode est lu dans config.json (clé `hors_ligne`), ou forcé par la variable LUTIN_HORS_LIGNE=1 (conteneur, poste isolé). Chaque point qui sort sur Internet appelle
-`guard(url)` ou `require_online(action)` : un seul endroit à auditer. Le test `test_hors_ligne.py` surveille les connexions réelles.
+`guard(url)` ou `require_online(action)`. The single net (`install_net`, put in place by `lutin.cli.main`) also refuses a connection to a public
+address from a caller that forgot `guard`. Le test `test_hors_ligne.py` surveille les connexions réelles.
 """
+import ipaddress
 import json
 import os
+import socket
+import sys
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
@@ -93,3 +97,57 @@ def require_online(action, chemin_config=None):
     """Pour les actions qui passent par un autre programme (Ollama télécharge lui-même ses modèles) : on ne peut pas contrôler l'adresse, on refuse l'action."""
     if is_active(chemin_config):
         raise OfflineError(_t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(action))
+
+
+# ------------------------------------------------------------------------------------------------ the single net
+# `guard(url)` above depends on every caller remembering it (a forgotten one let the llama.cpp search reach Hugging Face). The net below does not: once
+# installed (lutin.cli.main, so every command and the server), Python itself calls it before any socket of this process connects or sends, and in
+# strict mode it refuses an address that is neither this machine nor the local network. The callers keep `guard`: its message says what was refused
+# before anything is tried, the net is what holds when one forgets.
+_SHARED = ipaddress.ip_network("100.64.0.0/10")          # shared address space: Tailscale and carrier NAT, a network the user set up, not the internet
+_NET = {"installed": False}
+
+
+def _ip_allowed(text):
+    try:
+        ip = ipaddress.ip_address(str(text).split("%")[0])
+    except ValueError:
+        return False
+    if ip.version == 6 and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    return ip.is_loopback or ip.is_private or ip.is_link_local or (ip.version == 4 and ip in _SHARED)
+
+
+def address_allowed(host):
+    """True for this machine, the local network (private, link-local, shared addresses, IPv6 unique local) and the hosts allowed by name
+    (allowed_hosts). A name is resolved here and allowed only when every address it gives is."""
+    host = str(host or "").strip("[]").lower()
+    if not host or host in allowed_hosts() or _ip_allowed(host):
+        return bool(host)
+    try:
+        ipaddress.ip_address(host.split("%")[0])
+        return False                                      # a public address
+    except ValueError:
+        pass
+    try:
+        found = {info[4][0] for info in socket.getaddrinfo(host, None)}
+    except OSError:
+        return False
+    return bool(found) and all(_ip_allowed(address) for address in found)
+
+
+def _audit(event, args):
+    if event not in ("socket.connect", "socket.sendto"):
+        return
+    address = args[1] if len(args) > 1 else None
+    if not isinstance(address, tuple) or not address or not is_active():
+        return                                            # a Unix socket (a path), or the mode is off
+    if not address_allowed(address[0]):
+        raise OfflineError(_t("Mode hors ligne strict : la connexion vers {} est refusée. Désactive-le pour utiliser Internet (lutin offline off).").format(address[0]))
+
+
+def install_net():
+    """Puts the net in place for this process (once: an audit hook cannot be removed). It costs one comparison per audited event while the mode is off."""
+    if not _NET["installed"]:
+        sys.addaudithook(_audit)
+        _NET["installed"] = True

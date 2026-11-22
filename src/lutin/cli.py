@@ -962,6 +962,7 @@ def main(argv=None):
     utf8()
     args = parser().parse_args(argv)
     os.environ["LUTIN_CONFIG"] = str(Path(config.folders()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
+    offline.install_net()          # the single net of the strict offline mode: no socket of this process reaches a public address while it is on
     commandes = {"setup": command_setup, "serve": command_serve, "update": command_update, "chat": command_chat, "modeles": command_models, "pin": command_pin,
                  "appareils": command_devices, "securite": command_security, "langue": command_language, "importer": command_import, "reprendre": command_takeover, "hors-ligne": command_offline,
                  "travaux": command_works, "journal": command_log, "bench": command_bench, "sauvegarde": command_backup, "restaurer": command_restore, "doctor": command_doctor, "exporter": command_export, "demarrage-auto": command_autostart, "zone": command_tray, "mcp": command_mcp, "essai-moteur": command_trial_engine, "bench-moteurs": command_bench_engines, "colibri": command_colibri}

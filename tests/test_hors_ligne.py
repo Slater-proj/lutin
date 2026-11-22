@@ -208,5 +208,48 @@ class Serveur(Base):
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["hors_ligne"])
 
 
+class Filet(Base):
+    """The single net (offline.install_net): what holds when a caller forgets offline.guard."""
+
+    def test_adresses_permises(self):
+        for host in ("127.0.0.1", "::1", "localhost", "192.168.1.20", "10.0.0.5", "172.16.3.4", "169.254.10.1", "100.101.102.103", "fd12::1", "fe80::1%3", "::ffff:192.168.1.2"):
+            self.assertTrue(offline.address_allowed(host), host)
+        for host in ("93.184.216.34", "8.8.8.8", "2606:4700::1111", "::ffff:8.8.8.8", "", "100.128.0.1"):
+            self.assertFalse(offline.address_allowed(host), host)
+
+    def test_un_nom_est_jugé_sur_ses_adresses(self):
+        with mock.patch.object(offline.socket, "getaddrinfo", return_value=[(2, 1, 6, "", ("192.168.1.9", 0))]):
+            self.assertTrue(offline.address_allowed("nas.maison"))
+        with mock.patch.object(offline.socket, "getaddrinfo", return_value=[(2, 1, 6, "", ("192.168.1.9", 0)), (2, 1, 6, "", ("93.184.216.34", 0))]):
+            self.assertFalse(offline.address_allowed("mixte.example"), "one public address is enough to refuse")
+        with mock.patch.object(offline.socket, "getaddrinfo", side_effect=OSError("no DNS")):
+            self.assertFalse(offline.address_allowed("inconnu.example"))
+
+    def test_le_filet_refuse_une_connexion_publique_avant_tout_envoi(self):
+        offline.install_net()
+        offline.install_net()                                  # twice: still one hook
+        self.config.write_text(json.dumps({"hors_ligne": True}), encoding="utf-8")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            with self.assertRaises(offline.OfflineError):
+                s.connect(("93.184.216.34", 80))
+            u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            with self.assertRaises(offline.OfflineError):
+                u.sendto(b"x", ("8.8.8.8", 53))
+            u.close()
+        finally:
+            s.close()
+        serveur = socket.socket()
+        serveur.bind(("127.0.0.1", 0)); serveur.listen(1)
+        c = socket.create_connection(serveur.getsockname(), timeout=5)          # this machine stays reachable
+        c.close(); serveur.close()
+
+    def test_hors_mode_strict_le_filet_laisse_passer(self):
+        offline.install_net()
+        self.config.write_text(json.dumps({"hors_ligne": False}), encoding="utf-8")
+        offline._audit("socket.connect", (None, ("93.184.216.34", 80)))          # nothing raised: the mode is off
+        offline._audit("open", ("x", "r", 0))                                      # other events are ignored at once
+
+
 if __name__ == "__main__":
     unittest.main()
