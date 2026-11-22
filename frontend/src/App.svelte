@@ -125,6 +125,8 @@
           <a href={"#/" + name} aria-current={area === name ? "page" : undefined}>
             <Icon name={name as IconName} /><span>{t(("nav." + name) as MessageKey)}</span>
             {#if name === "settings" && nodeWaiting > 0}<span class="count" aria-hidden="true">{nodeWaiting}</span><span class="visually-hidden">{t("nav.waiting", nodeWaiting)}</span>{/if}
+            <!-- The health light of the old page: the machine needs attention (memory, disk, graphics card), the details in Settings › Health. -->
+            {#if name === "settings" && (healthLevel === "warning" || healthLevel === "critical")}<span class={"health-dot " + healthLevel} title={t("nav.health_" + healthLevel as MessageKey)} aria-hidden="true"></span><span class="visually-hidden">{t(("nav.health_" + healthLevel) as MessageKey)}</span>{/if}
           </a>
         </li>
       {/each}
@@ -238,6 +240,20 @@
   /* What waits for an answer (Settings): a count at the end of the line, at the corner of the icon on a phone. */
   li a {
     position: relative;
+  }
+
+  .health-dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    margin-left: auto;
+    border-radius: 50%;
+    background: var(--color-warning-soft);
+    box-shadow: inset 0 0 0 2px var(--color-danger); /* a ring: attention; a full dot: critical (the title says which, the colour is not alone) */
+    flex: none;
+  }
+
+  .health-dot.critical {
+    background: var(--color-danger);
   }
 
   .count {

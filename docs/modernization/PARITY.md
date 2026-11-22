@@ -96,7 +96,7 @@ those with no function in common were read one by one. Found missing, and brough
 - ~~Taking over another assistant's data (the « left » of item 3)~~ — `POST /api/v1/takeover/detect` and `POST /api/v1/takeover` (confirmation, backup
   first), `components/Takeover.svelte`, in the preview of a folder that holds one and on its own on the Projects screen (same tests).
 - Not brought back, on purpose: `/memoire` (ADR 0019 took it away); the resizable sidebar and the hand-kept model list (superseded, below).
-- Still open from the first audit: the health light on Settings in the navigation, the tab badge.
+- ~~The health light on Settings in the navigation~~ — a ring (attention) or a dot (critical) on Settings, said in words (test 3la). The tab badge was already there (`lib/marks.ts`, `tabTitle`): nothing is left open from either audit.
 
 ## The switch
 

@@ -180,6 +180,19 @@ class Chat(unittest.TestCase):
         self.assertFalse(p.evaluer("!!document.querySelector('.changes .files')"), "nothing left to undo")
         self.assertEqual(p.erreurs, [])
 
+    def test_3la_the_navigation_lights_settings_when_the_machine_needs_attention(self):
+        """The health light of the old page (PARITY.md, second audit): a ring on Settings when the health says « warning », said in words for a screen reader."""
+        p = self.page
+        state = {"niveau": "attention", "items": [{"id": "disque", "nom": "Disque", "niveau": "attention", "valeur": "3 Go libres", "conseil": ""}]}
+        patch = mock.patch.object(T.A, "health_state", lambda: state)
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')")))
+        p.evaluer("window.__old = true; location.reload()")
+        p.attendre("!window.__old && !!document.querySelector('.rail .health-dot.warning')")
+        self.assertIn("Réglages › Santé", p.evaluer("document.querySelector('.rail a[href=\"#/settings\"]').innerText + document.querySelector('.rail .health-dot').title"))
+        self.assertEqual(p.erreurs, [])
+
     def test_3l_the_health_of_the_machine_is_shown_and_checked(self):
         """docs/modernization/PARITY.md, item 2: the section « Health » of Settings shows the state of the machine and runs the self-test; what reads the
         computer is replaced (the fictive machine of setUpClass, and a fixed self-test)."""
