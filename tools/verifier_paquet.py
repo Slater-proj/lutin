@@ -29,7 +29,7 @@ def problemes(dossier):
         meta = next((n for n in noms if n.endswith(".dist-info/METADATA")), None)
         if meta and "Requires-Dist" in z.read(meta).decode("utf-8", "replace"):
             p.append("roue : une dépendance est déclarée (Lutin n'en a aucune)")
-        if not any(n.endswith("entry_points.txt") and b"lutin = lutin.cli:principal" in z.read(n) for n in noms):
+        if not any(n.endswith("entry_points.txt") and b"lutin = lutin.cli:main" in z.read(n) for n in noms):
             p.append("roue : la commande « lutin » n'est pas déclarée")
     for s in sources:
         with tarfile.open(s) as t:
