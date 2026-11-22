@@ -1,6 +1,6 @@
 # ADR 0020 — Every engine is installed, chosen and fed with models the same way
 
-Status: accepted by the maintainer on 2026-11-21 with the answers below. Stages 1 and 2 are done (see « Progress »); stage 3 is next.
+Status: accepted by the maintainer on 2026-11-21 with the answers below. Stages 1 to 4 are done (see « Progress »).
 
 ## Context
 
@@ -120,6 +120,13 @@ for llama.cpp) and `ManagedModels` are gone. Decisions made while coding:
   library of ollama.com no longer repeats a model the catalogue already listed.
 - **A removal waits for a second click on its card**, as in every list of models, instead of the browser's dialog.
 - **The page takes the engine's name from `/status`.** The browser tests that stand a fake engine for ExLlamaV3 or LM Studio give it that name.
+
+**Stage 4 (2026-11-22).** `/managed-servers/{id}/*` (6 routes) and `/engines/{id}/library*` (3 routes) are removed with their nine lines of the contract
+fixture; `tests/test_api_v1_library.py` and `tests/test_api_v1_managed_servers.py` go with them. What only they tested moved to `tests/test_api_v1_engine_models.py`:
+the machine not detected gives no verdict but lists the files, and strict offline mode. Moving that test found a defect: the new family had lost the offline
+check, and `llamacpp_engine._http_json` never called `offline.guard`, so a search for llama.cpp reached Hugging Face in strict offline mode (fixed, `1a6db0c`).
+Decision, to tell the maintainer: the old library routes were `configurator`, the reads of the new family are `session` (stage 2); a paired device may
+search and read the precisions, it still may not download or remove (`configurator`). `/models/library` and `/models/variants` (Ollama only) were not in this stage and stay.
 
 ## Answers of the maintainer (2026-11-21)
 

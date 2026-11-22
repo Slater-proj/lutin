@@ -2302,8 +2302,6 @@
 "Mettre à jour copie de nouveau les fichiers de ce skill depuis GitHub : confirme pour continuer.": "Updating copies the files of this skill from GitHub again: confirm to continue.",
 "Skill tiers installé : {} ({}, {}).": "Third-party skill installed: {} ({}, {}).",
 "Skill tiers retiré : {}.": "Third-party skill removed: {}.",
-"chercher un modèle sur Hugging Face": "search a model on Hugging Face",
-"lire les fichiers d'un dépôt Hugging Face": "read the files of a Hugging Face repository",
 "lire les précisions d'un modèle": "read the precisions of a model",
 "Ce téléchargement peut peser plusieurs Go : confirme pour le lancer.": "This download may weigh several GB: confirm to start it.",
 "chercher une correction de flux": "look for a flow correction",

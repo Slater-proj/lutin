@@ -260,10 +260,6 @@ before, after, engine_changed}], history}`. `POST /bench` (session) `{models: [1
 ok, errors, load_s, first_token_s, tokens_per_s, reading_tokens_per_s, ram_bytes, vram_bytes}], skipped}}`; `POST /engines/comparison`
 (configurator) `{mode: quick | deep}`: 202, `409 busy`.
 
-`/managed-servers/{id}` with `{id}` exllamav3, lmstudio or colibri (`409 not_chosen` when it is not the server in use): `GET …/models`,
-`GET …/catalog?q=&order=recent|popular&community=1&page=`, `GET …/quantizations?repo=`, `POST …/check {scope: updates | new}` (session);
-`POST …/downloads {repo, revision?, confirm: true}` (configurator): 202, `409 offline`, `502 unreachable` when a catalogue cannot be read.
-
 **The models of any engine, in the same way** (ADR 0020, stage 2), with `{id}` any engine of `GET /engines`; `409 not_chosen` when it is not the engine in use:
 `GET /engines/{id}/models` (installed), `…/models/recommended` (what this machine runs well, the largest first, at most five), `…/models/search?q=&page=` (the
 catalogue of Lutin, then the library of the engine: ollama.com, Hugging Face, the catalogue of the server; `more` says whether another page follows),
@@ -275,8 +271,9 @@ answers `502 unreachable`. Every model, whatever the engine and the list, is one
 | null, installed, in_use, summary, download: {possible, reason}, has_variants, incomplete, removable}`. `id` is the name to give to « download »; `revision` the precision to take with it;
 `download.reason` says why a model cannot be downloaded (too big for this machine, offline, a format the engine cannot read, already here); `incomplete` is a
 download that stopped halfway; `removable` is false for a model Lutin did not put there (`DELETE` answers `400`) and for the models of a server reached by its address. A server reached by its
-address (`openai`) lists the models it serves and downloads nothing (`400 action_impossible`). The families `/managed-servers/{id}/*` and `/engines/{id}/library*`
-do the same for some engines and are removed at stage 4.
+address (`openai`) lists the models it serves and downloads nothing (`400 action_impossible`). In strict offline mode the search gives the catalogue of Lutin only
+(nothing is asked of ollama.com or Hugging Face), and `variants` and `downloads` answer `409 offline`. The older families `/managed-servers/{id}/*` and
+`/engines/{id}/library*` were removed at stage 4 (2026-11-22).
 
 ## GitHub account
 
