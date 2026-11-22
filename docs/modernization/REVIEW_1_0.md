@@ -27,6 +27,29 @@ whole step in 1.0 (2026-11-22, evening). This first part was written that evenin
    `tests/test_serveur_securite.py`.
 5. **The interface page no longer declared its manifest**: a phone could not add Lutin to its home screen any more. — 230641a, `tests/test_moteur.py`.
 6. **The verdict of a model wrote « 13.2 Go » next to « 22,6 Go »** on the same card. — 4cbaf70, `tests/test_adequation.py`.
+7. **The file and the image of a request were lost after three tool calls.** Their content went to the model only while their message was among
+   the last six; inside one request, three tool calls pushed it out, and from the fourth step the model read « non rejoué ici » instead of the
+   file it was working on (and the start of the request changed mid-turn, which also emptied the engine cache). The message of the request in
+   progress is now always replayed, with its images. — 58443f9, `tests/test_moteur.py`.
+8. **A search result of ExLlamaV3 could have no precision and no button** (seen by the maintainer). Some GGUF repositories carry the « exl3 » tag
+   of their base model and came back from `filter=exl3`; they are left out. Community EXL3 repositories that keep their only quantisation on
+   `main` had an empty list; `main` is offered when it holds a whole model. — 2af53f6, `tests/test_exllamav3_modeles.py`.
+9. **The importance matrix of « i1 » GGUF repositories (`.imatrix.gguf`) was listed as the lightest precision** by llama.cpp and LM Studio,
+   so it could be advised and downloaded. — 93ec052, `tests/test_moteur_llamacpp.py`, `tests/test_modeles_geres.py`.
+10. **CI**: the Docker job asked `/api/v1/setup` after a `PATCH /settings` that makes the installation look used (147cefc); a test compared a
+    short 8.3 path with a long one on the Windows runner (c409a16).
+
+## Found, not fixed yet
+
+- **A page opened again while an approval card waits cannot show it.** The card goes only to the stream of the page that sent the message; a
+  reloaded page says so (`chat.elsewhere.waiting`) and can only stop the answer. Fix proposed: `GET /conversations/{id}/approvals` (the pending
+  cards, from `PendingApproval.EN_COURS`) and the same card in the Chat. About half a day with its tests: for the maintainer to place in 1.0 or 1.x.
+- **At the forced last step, the « last question » kept by `adjust_context` is the injected « Tu as assez d'informations » message**, not the
+  question of the user: on a small window, step 4 of the fitting may remove the real question before the tool results of the turn. Read in the
+  code, not reproduced yet: a test on the fake engine with a 4,096-token window comes first.
+- **A model whose template refuses tools loses its images** (`flatten_without_tools` keeps only the text). Read in the code, not reproduced.
+- **Some notices of `agent.turn` are not translated** (« Arrêté… », « Cette demande est déjà dans la conversation… », « Accord automatique : »,
+  « Ta demande est gardée… », « Beaucoup d'étapes d'outils… »): an English page shows them in French.
 
 ## Reviewed and kept as it is
 
@@ -35,6 +58,10 @@ whole step in 1.0 (2026-11-22, evening). This first part was written that evenin
   `suivi` from the first message would cost about 240 tokens on every request, heavy on a small window. Kept.
 - **The turn runner** (`turn_runner.py`): seats taken under the lock, freed only by the turn that holds them, a launcher's registry undone when it
   fails. No change.
+- **« Stop » in `agent.turn`**: during a tool, the calls left each get an « Interrompu » answer before the turn ends, so the conversation stays
+  valid for the engine; during an approval, the turn ends as soon as the wait does; while the model writes, the text already written is kept.
+  At the next turn, `repair_conversation` answers any call still without a result (a crash). No change.
+- **The resume of a request that got no answer**: the same text sent again is not added twice, and its images and files are given back. No change.
 - **The page's entry of a turn** (`server.Handler._chat`): the seat is freed in a `finally`, an unknown mode is refused before the stream starts,
   a page that stops reading does not stop the turn (the conversation is written at its end). No change.
 
@@ -44,6 +71,6 @@ whole step in 1.0 (2026-11-22, evening). This first part was written that evenin
 - Item 2: proposal 8, « UnTooled »: a model without tool support today answers in text only; describing the tools in the prompt and reading a
   JSON answer would give it the tools. To measure with the bench before deciding (ADR 0007).
 - Item 2: proposal 8, the one-line catalogue of the tools on a 4,096-token window (today: a core of tools with full schemas).
-- Item 4: read the rest of the chat path line by line (`agent.turn`: approvals, the « Stop » while a tool runs, the resume after a reconnection,
-  attachments in a long conversation) and add a test for each bug found.
+- Item 4: read so far: `turn`, `_run_turn`, `_step_messages`, `_prepare_request`, `_run_calls`, `agent_loop`, the attachments and images. Still
+  to read: `_prepare_loop`, the retries of `_call_model`, the memory choice; then the points of « Found, not fixed yet », a test for each first.
 - Item 5: a before/after on the fake engine for every prompt change; the evaluation suite (`tests/test_evaluation.py`) is the reduced one.
