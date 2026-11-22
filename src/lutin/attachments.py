@@ -155,10 +155,12 @@ def character_budget(num_ctx):
     return int(num_ctx * CONTEXT_SHARE * CHARS_PER_TOKEN)
 
 
-def for_model(messages, budget):
+def for_model(messages, budget, depuis=None):
     """Copie des messages où le texte des pièces des derniers messages est ajouté au message de l'utilisateur (borné par `budget` caractères pour toutes les pièces). Les anciennes pièces sont
-    seulement nommées. Le contenu enregistré dans la conversation n'est jamais modifié."""
-    recents = [n for n, m in enumerate(messages) if m.get("pieces") and n >= len(messages) - RECENT]
+    seulement nommées. Le contenu enregistré dans la conversation n'est jamais modifié. `depuis` : l'indice de la demande en cours, dont les pièces sont
+    toujours rejouées (avant, trois appels d'outils dans la même demande la sortaient des derniers messages et le modèle perdait le fichier en plein travail)."""
+    debut = len(messages) - RECENT if depuis is None else min(len(messages) - RECENT, depuis)
+    recents = [n for n, m in enumerate(messages) if m.get("pieces") and n >= debut]
     part = max(MIN_PART, budget // max(1, sum(len(messages[n]["pieces"]) for n in recents)))
     sortie = []
     for n, m in enumerate(messages):

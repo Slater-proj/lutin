@@ -4043,6 +4043,38 @@ class Assistant(unittest.TestCase):
         self.assertFalse((attachments.folder() / orpheline).exists())
         self.assertTrue((attachments.folder() / citee).exists())
 
+    def test_pieces_et_images_de_la_demande_restent_pendant_les_outils(self):
+        """Un fichier et une image joints à une demande restent sous les yeux du modèle jusqu'à la réponse, même après plusieurs appels d'outils
+        (revue de l'étape 7 : trois appels sortaient la demande des six derniers messages, et le modèle perdait le fichier en plein travail)."""
+        from lutin import attachments, images
+        note, _, _ = attachments.save("Le code secret est 4417.\n".encode("utf-8"), "note.txt")
+        png = b"\x89PNG\r\n\x1a\n" + bytes(range(41))
+        image = images.save(png)
+        image = image[0] if isinstance(image, tuple) else image
+        INSTALLES.append("qwen3-vl:8b")
+        CAPACITES_FAUX["qwen3-vl:8b"] = ["completion", "tools", "vision"]
+        A.CAPABILITIES.pop("qwen3-vl:8b", None)
+        A.save_settings({"modele": "qwen3-vl:8b"})
+        try:
+            outils = [[appel_outil("lister", dossier="docs")], [appel_outil("lister", dossier=".")], [appel_outil("chercher", motif="tonnerre")], [appel_outil("lire", chemin="docs/univers.md")]]
+            ev = chat("Lis la note et l'image, regarde docs, puis réponds", pieces=[{"id": note, "nom": "note.txt"}], images=[image], reponses=outils + [[{"content": "4417."}]])
+            derniere = RECUES[-1]["messages"]
+            self.assertGreater(len(derniere), images.RECENT + 2, "la dernière requête vient après plusieurs échanges d'outils")
+            demande = next(m for m in derniere if m.get("role") == "user" and "Lis la note" in (m.get("content") or ""))
+            self.assertIn("Le code secret est 4417", demande["content"], "le fichier joint est encore là au dernier appel")
+            self.assertEqual(demande.get("images"), [base64.b64encode(png).decode("ascii")], "l'image aussi")
+            self.assertFalse(any(images.CURRENT in m for m in derniere), "la marque de la demande en cours ne part pas au moteur")
+            # la demande suivante : l'ancienne pièce n'est plus la demande en cours, la règle des derniers messages reprend
+            chat("Autre chose", conversation=[e for e in ev if e["type"] == "debut"][0]["conversation"], reponses=[[{"content": "Oui."}]])
+            ancienne = next(m for m in RECUES[-1]["messages"] if "Lis la note" in (m.get("content") or ""))
+            self.assertNotIn("Le code secret est 4417", ancienne["content"])
+            self.assertNotIn("images", ancienne)
+        finally:
+            INSTALLES.remove("qwen3-vl:8b")
+            CAPACITES_FAUX.pop("qwen3-vl:8b", None)
+            A.CAPABILITIES.pop("qwen3-vl:8b", None)
+            A.save_settings({"modele": "qwen3.8:27b"})
+
     def test_export_de_sauvegarde(self):
         req = urllib.request.Request(BASE + "/api/v1/backup", headers={"X-Token": A.TOKEN})
         with urllib.request.urlopen(req, timeout=30) as r:

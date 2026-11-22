@@ -1963,10 +1963,13 @@ def _step_messages(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli):
             CUTS_TOLD.add((conv.get("id"), nom_coupe, taille_coupe))
             emit({"type": "info", "texte": _t("⚠ {} fait {} caractères et l'assistant n'en relit que {} à chaque conversation : le reste est ignoré. Raccourcis-le (onglet Mémoire) si des informations manquent.").format(nom_coupe, taille_coupe, relu_coupe)})
     msgs += start_block(conv)
-    historique =_pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
+    dernier_user = max((i for i, m in enumerate(conv["messages"]) if m.get("role") == "user"), default=-1)
+    historique =_pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]), depuis=dernier_user if dernier_user >= 0 else None)          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
     if getattr(p, "masquer", False):
         historique = _disposition.mask_old_results(historique, removed_result_line)          # en un lot, au début de la demande : la requête ne change qu'une fois
-    dernier_user = max((i for i, m in enumerate(historique) if m.get("role") == "user"), default=-1)
+    if dernier_user >= 0:
+        historique = list(historique)
+        historique[dernier_user] = dict(historique[dernier_user], **{_images.CURRENT: True})          # ses images restent envoyées pendant toute la demande, quel que soit le nombre d'outils
     if consigne and dernier_user >= 0:
         historique = list(historique)
         historique[dernier_user] = dict(historique[dernier_user], content=(historique[dernier_user].get("content") or "") + "\n\n[" + consigne + "]")

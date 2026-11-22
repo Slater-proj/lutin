@@ -84,12 +84,19 @@ def check_list(ids):
     return ids
 
 
+CURRENT = "demande_en_cours"          # marque posée par l'agent sur le message de la demande en cours (retirée ici, Ollama ne la reçoit pas)
+
+
 def for_model(messages, voit=True):
     """Copie des messages où les identifiants d'images des derniers messages deviennent du base64 (ce qu'attend Ollama).
-    Les anciennes images sont retirées, avec une mention dans le texte : le modèle sait qu'elles existaient."""
+    Les anciennes images sont retirées, avec une mention dans le texte : le modèle sait qu'elles existaient. Les images de la demande en cours (le message
+    marqué `CURRENT`) sont toujours envoyées : avant, trois appels d'outils dans la même demande les sortaient des derniers messages."""
     sortie = []
-    debut_recent = max(0, len(messages) - RECENT)
+    marque = next((n for n, m in enumerate(messages) if m.get(CURRENT)), len(messages))
+    debut_recent = max(0, min(len(messages) - RECENT, marque))
     for n, m in enumerate(messages):
+        if m.get(CURRENT):
+            m = {k: v for k, v in m.items() if k != CURRENT}
         ids = m.get("images")
         if not ids:
             sortie.append(m)
