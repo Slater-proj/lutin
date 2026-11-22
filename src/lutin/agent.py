@@ -184,6 +184,7 @@ def rephrase_search(texte, r):
 
 
 REQUEST_SHARE = 0.68          # part de la fenêtre que la requête peut prendre (ajuster_contexte rogne au-delà) : le reste est la place de la réponse
+ADDED = "consigne_ajoutee"          # marque d'un message que Lutin ajoute à une étape (« Tu as assez d'informations… ») : jamais pris pour la question à garder ; retirée avant l'envoi
 MAX_SHARE = 0.85              # jusqu'où la requête peut aller quand le système et les outils ne laissent pas à l'historique son plancher (un quart de la fenêtre)
 
 
@@ -1253,7 +1254,9 @@ def adjust_context(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
     systeme = estimate(msgs[:1]) if msgs and msgs[0].get("role") == "system" else 0
     budget = max(budget, min(systeme + int(num_ctx // 4 * facteur), int(num_ctx * MAX_SHARE * facteur) - poids_outils))
     msgs = [dict(m) for m in msgs]
-    dernier_user = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=-1)
+    # la question de l'utilisateur, pas un message ajouté par Lutin à cette étape : à la dernière étape forcée, « Tu as assez d'informations… » était pris
+    # pour elle, et sur une petite fenêtre la vraie question partait avant les résultats d'outils (revue de l'étape 7)
+    dernier_user = max((i for i, m in enumerate(msgs) if m["role"] == "user" and not m.get(ADDED)), default=-1)
     # les messages épinglés ne sont jamais retirés, dans la limite d'un quart du budget (les plus récents d'abord : au-delà, les plus anciens redeviennent retirables)
     protege, total = set(), 0
     for i in reversed(range(len(msgs))):
@@ -1315,6 +1318,7 @@ def adjust_context(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
         m.pop("medias", None)
         m.pop("medias_fichiers", None)
         m.pop("fichiers_joints", None)
+        m.pop(ADDED, None)
         _disposition.merge_tail(m)                               # ce qui s'écrit à la fin d'un message (la liste de tâches) s'écrit ici, la place une fois faite : un résultat coupé ne l'emporte pas
     return msgs
 
@@ -1975,9 +1979,9 @@ def _step_messages(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli):
         historique[dernier_user] = dict(historique[dernier_user], content=(historique[dernier_user].get("content") or "") + "\n\n[" + consigne + "]")
     msgs += _disposition.before_last_question(list(historique), _disposition.turn_block(fiche, extraits, rappels_texte))          # juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache du moteur)
     if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
-        msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
+        msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le.", ADDED: True})
     if faux_accompli:
-        msgs += [{"role": "assistant", "content": faux_accompli[0]}, {"role": "user", "content": faux_accompli[1]}]
+        msgs += [{"role": "assistant", "content": faux_accompli[0], ADDED: True}, {"role": "user", "content": faux_accompli[1], ADDED: True}]
     return _disposition.attach_tail(msgs, _m.text_tasks(conv))          # la liste de tâches à la fin du dernier message : quand elle change, rien de ce qui précède ne change
 
 

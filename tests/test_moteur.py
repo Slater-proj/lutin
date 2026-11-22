@@ -607,6 +607,28 @@ class Assistant(unittest.TestCase):
         self.assertLessEqual(AG.estimate([envoye]), 4096 // 10, "et c'est ce que le modèle reçoit")
         self.assertIn("zorglub", A.recall_tool("module zorglub introuvable", 3, cid, True), "le texte complet se retrouve avec « rappeler »")
 
+    def test_la_derniere_etape_forcee_garde_la_question(self):
+        """Revue de l'étape 7 : à la dernière étape, le message ajouté « Tu as assez d'informations… » était pris pour la question à garder ; sur une petite
+        fenêtre, la mise à la taille retirait alors la vraie question avant les résultats d'outils, et le modèle devait conclure sans savoir sur quoi."""
+        A.save_settings({"num_ctx": 4096, "mode": "polyvalent", "reflexion": False, "tours_max": 14})
+        noms = ["journal-{:02d}.txt".format(i) for i in range(13)]          # treize lectures : la dernière des quatorze étapes est forcée, sans outils
+        for n in noms:
+            (PROJET / n).write_text("\n".join("{} ligne {:05d} rien à signaler".format(n, i) for i in range(900)), encoding="utf-8")
+        try:
+            # une demande avant : sinon la question est aussi « la demande de départ », que la mise à la taille protège à part
+            premiere = chat("Bonjour, on va travailler sur les journaux", reponses=[[{"content": "D'accord."}]])
+            cid = next(e["conversation"] for e in premiere if e["type"] == "debut")
+            chat("Compare les journaux zorglub et dis lequel est le plus long", conversation=cid, reponses=[[appel_outil("lire", chemin=n)] for n in noms] + [[{"content": "Le même."}]])
+        finally:
+            for n in noms:
+                (PROJET / n).unlink()
+            A.save_settings({"tours_max": 14})
+        derniere = RECUES[-1]["messages"]
+        self.assertIn("Tu as assez d'informations", derniere[-1]["content"], "la dernière étape, sans outils")
+        self.assertTrue(any("journaux zorglub" in (m.get("content") or "") for m in derniere if m.get("role") == "user"), "la question est encore là")
+        from lutin import agent as AG
+        self.assertFalse(any(AG.ADDED in m for m in derniere), "la marque ne part pas au moteur")
+
     def test_un_appel_sans_argument_obligatoire_n_est_pas_lance_et_le_modele_sait_quoi_corriger(self):
         """CONTEXT_RESEARCH.md, proposition 8 : les arguments sont contrôlés contre le schéma de l'outil. « lire » sans chemin lisait « . » et
         répondait « fichier introuvable : . », sans dire que le chemin manquait ; un entier illisible partait tel quel. L'outil n'est plus lancé, et
