@@ -258,6 +258,31 @@ class Conversations(unittest.TestCase):
         self.assertEqual(answer["context"], {"used": 3200, "total": 8192})
         self.assertEqual(answer["speed"], {"write_tokens_per_s": 54.2, "read_tokens_per_s": 900, "load_s": 2.1, "total_s": 9.8, "tokens": 412})
 
+    def test_a_new_conversation_is_named_by_the_model_through_the_engine_in_use(self):
+        """Parity with the old page (its /api/titre-ia after the first answer), which only spoke to Ollama: the title now comes from the engine in use."""
+        from lutin import agent
+        identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
+        self.addCleanup(lambda: call("DELETE", "/api/v1/conversations/" + identifier, OWNER))
+        stored = A.conv_lire(identifier)
+        stored["messages"] = [{"role": "user", "content": "How much should we spend in 2027?"}, {"role": "assistant", "content": "Here is a plan."}]
+        A.conv_ecrire(stored)
+        asked = []
+        engine = mock.Mock(chat=lambda body, timeout: asked.append(body) or {"message": {"content": "<think>hmm</think> « Budget   2027 » "}})
+        with mock.patch.object(agent, "moteur_actuel", return_value=engine):
+            status, answer = call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})
+        self.assertEqual((status, answer), (200, {"title": "Budget 2027", "applied": True}), "thinking aloud and quotes are taken out")
+        self.assertEqual(A.conv_lire(identifier)["titre"], "Budget 2027")
+        self.assertIn("[U] How much should we spend in 2027?", asked[0]["messages"][0]["content"])
+        self.assertIs(asked[0]["think"], False)
+        with mock.patch.object(agent, "moteur_actuel", return_value=mock.Mock(chat=lambda body, timeout: {"message": {"content": "  "}})):
+            self.assertEqual(call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})[0], 502, "a model that answers nothing")
+        stored = A.conv_lire(identifier)
+        stored["titre"] = "🎯 Mission: budget"
+        A.conv_ecrire(stored)
+        self.assertEqual(call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})[1], {"title": "🎯 Mission: budget", "applied": False},
+                         "a mission keeps its name")
+        self.assertEqual(call("POST", "/api/v1/conversations/nope0000/ai-title", OWNER, body={})[0], 404)
+
     def test_a_conversation_that_is_answering_cannot_be_renamed_or_deleted(self):
         identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
         stop = threading.Event()

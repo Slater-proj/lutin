@@ -195,6 +195,11 @@
   "right": "session"
  },
  {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/ai-title",
+  "right": "session"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/conversations/{id}/changes",
   "right": "session"

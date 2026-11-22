@@ -1917,41 +1917,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(500, {"erreur": str(erreur)})
 
     def _titre_ia(self, donnees):
-        """Propose un titre court (3-6 mots) pour la conversation, sans l'appliquer."""
+        """Propose un titre court (3-6 mots) pour la conversation, sans l'appliquer (agent.titre_propose, partagé avec /api/v1 : par le moteur en cours)."""
         ident = str(donnees.get("conversation") or donnees.get("id") or "")
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
-        conv = _m.conv_lire(ident)
-        if str(conv.get("titre", "")).startswith("🎯"):
-            return self._envoyer(200, {"titre": ""})                                              # une conversation de mission garde le nom de sa mission
-        r = _m.reglages()
-        morceaux = []
-        for m in conv.get("messages", [])[:20]:
-            contenu = (m.get("content") or "").strip()
-            if contenu:
-                morceaux.append(("[U] " if m.get("role") == "user" else "[A] ") + contenu[:500])
-        texte_conv = "\n".join(morceaux)
-        if len(texte_conv) > 6000:
-            texte_conv = texte_conv[:6000]
-        consigne = (
-            _t("Donne un TITRE de 3 à 6 mots (en français) qui résume l'objet principal de cette conversation. "
-            "Pas de ponctuation finale, pas de guillemets, pas de préambule. Réponds UNIQUEMENT avec le titre.\n\n"
-            "CONVERSATION :\n") + texte_conv
-        )
-        corps = {
-            "model": _m.modele_annexe(r),
-            "messages": [{"role": "user", "content": consigne}],
-            "stream": False,
-            "options": _m.options_modele(r, 0.4),          # mêmes options que le chat (voir _resumer)
-        }
         try:
-            req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(_m.avec_garde(corps)).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=120) as flux:
-                reponse = json.loads(flux.read().decode("utf-8"))
-            titre = reponse.get("message", {}).get("content", "").strip().strip('"«»').strip()
-            titre = " ".join(titre.split())[:60]
-            if not titre:
-                return self._envoyer(500, {"erreur": _t("Le modèle n'a pas répondu.")})
-            return self._envoyer(200, {"titre": titre})
+            return self._envoyer(200, {"titre": _m.titre_propose(_m.conv_lire(ident), _m.reglages())})
         except (OSError, ValueError) as erreur:
             return self._envoyer(500, {"erreur": str(erreur)})

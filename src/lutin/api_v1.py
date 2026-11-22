@@ -3864,6 +3864,25 @@ def delete_conversation_sheet(request):
     return _sheet_view(identifier)
 
 
+@route("POST", "/conversations/{id}/ai-title", SESSION)
+def conversation_ai_title(request):
+    """Names the conversation from what it says, by the model of the small tasks, and applies it: `{title, applied}`. The page asks it after the first
+    answer of a new conversation, as the old page did. A mission keeps its name (`applied` false). 409 `turn_running` during an answer."""
+    identifier = request.params["id"]
+    conversation = _read(identifier)
+    _not_running(identifier)
+    try:
+        title = _m.titre_propose(conversation, _m.reglages())
+    except ValueError as failed:
+        raise ApiError(502, "engine_failed", str(failed)) from None
+    except (OSError, urllib.error.URLError) as failed:
+        raise ApiError(503, "engine_unreachable", str(failed)) from None
+    if not title or identifier in _m.TOURS_ACTIFS:          # a mission keeps its name; an answer started meanwhile writes the conversation, it is not renamed under it
+        return {"title": conversation.get("titre", ""), "applied": False}
+    _m.conv_renommer(identifier, title)
+    return {"title": title, "applied": True}
+
+
 @route("POST", "/conversations/{id}/handover", SESSION)
 def conversation_handover(request):
     """A handover document written by the model in use (objective, what is done, state, next steps, constraints, key files, notes), to continue the

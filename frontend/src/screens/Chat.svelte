@@ -183,6 +183,14 @@
     void readLoaded();
   }
 
+  /** The title the model gives a new conversation after its first answer (as the old page did); the first words of the message stay if it cannot. */
+  async function nameConversation(id: string): Promise<void> {
+    const named = await api<{ title: string; applied: boolean }>("POST", `/conversations/${encodeURIComponent(id)}/ai-title`, {}).catch(() => null);
+    if (!named?.applied) return;
+    if (conversation?.id === id && !where) conversation = { ...conversation, title: named.title };
+    await loadList().catch(() => undefined);
+  }
+
   /** Is the model in use in memory? Asked again every few seconds with the marks of the list, and after a turn or a change of model. `known` false: the engine cannot say, nothing is shown. */
   async function readLoaded(): Promise<void> {
     inMemory = await api<InMemory>("GET", "/models/loaded").catch(() => inMemory);
@@ -356,7 +364,9 @@
     const message = draft.trim();
     if (!message || busy || uploading(attachments)) return;
     await guarded(async () => {
+      let fresh = false; // this message makes the conversation: once answered, it is named from what it says
       if (conversation === null) {
+        fresh = true;
         conversation = await api<Conversation>("POST", "/conversations", {});
         history.replaceState(null, "", "#/chat/" + conversation.id); // the first message makes the conversation: its address too
         if (Object.keys(optionsToSend).length) {
@@ -395,6 +405,7 @@
         const stored = await api<Conversation>("GET", conversationPath(at, id)).catch(() => null);
         if (stored && where === at && conversation?.id === id) conversation = stored;          // the person may be reading another conversation now
         if (stored && !at) seen = markSeen(id, stored.updated_at);
+        if (fresh && stored && !at && !failure) void nameConversation(id);
         cut = null;
         pending = null;
         live = null;

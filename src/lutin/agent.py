@@ -1364,6 +1364,28 @@ def document_de_reprise(conv, r):
     return sortie
 
 
+def titre_propose(conv, r):
+    """Un titre court (3 à 6 mots) écrit par le modèle des petites tâches, par le moteur en cours (l'ancienne page, `server._titre_ia`, ne passait que par
+    Ollama). '' pour une conversation de mission, qui garde le nom de sa mission. ValueError si le modèle ne répond rien."""
+    if str(conv.get("titre", "")).startswith("🎯"):
+        return ""
+    morceaux = []
+    for m in conv.get("messages", [])[:20]:
+        contenu = (m.get("content") or "").strip()
+        if contenu and m.get("role") in ("user", "assistant"):
+            morceaux.append(("[U] " if m.get("role") == "user" else "[A] ") + contenu[:500])
+    consigne = (_t("Donne un TITRE de 3 à 6 mots (en français) qui résume l'objet principal de cette conversation. "
+                   "Pas de ponctuation finale, pas de guillemets, pas de préambule. Réponds UNIQUEMENT avec le titre.\n\n"
+                   "CONVERSATION :\n") + "\n".join(morceaux)[:6000])
+    rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "messages": [{"role": "user", "content": consigne}],
+                                 "options": _m.options_modele(r, 0.4)}, 120)
+    sortie = re.sub(r"(?s)<think>.*?</think>", "", rep.get("message", {}).get("content") or "")          # un modèle qui réfléchit à voix haute malgré think=false
+    titre = " ".join(sortie.strip().strip('"«»').strip().split())[:60]
+    if not titre:
+        raise ValueError(_t("Le modèle n'a pas répondu."))
+    return titre
+
+
 DEPART_MAX = 800          # caractères de la demande de départ gardés mot pour mot en tête de la requête (bloc_du_debut)
 
 

@@ -44,6 +44,8 @@ shutil.copyfile(ICI.parent / "src" / "lutin" / "data" / "CONTEXTE.md", MEMOIRE /
 
 # --------------------------------------------------------------------- faux Ollama
 SCENARIO, RECUES, INSTALLES = [], [], ["qwen3.8:27b"]
+TITRE = [""]                 # ce que le faux modèle répond à la demande de titre d'une nouvelle conversation (agent.titre_propose) : rien par défaut, le titre reste
+                             # les premiers mots ; cette demande ne prend ni une réponse de SCENARIO ni une place dans RECUES (les tests qui les comptent n'en voient rien)
 REPONDEUR = []               # une fonction corps -> réponse (liste de morceaux) prend la place de SCENARIO : le faux modèle répond d'après la requête (tests/test_evaluation.py)
 PS = []                      # modèles « en mémoire » vus par /api/ps
 CAPACITES_FAUX = {}          # modèle -> capacités annoncées par /api/show (par défaut : completion, tools, thinking)
@@ -97,6 +99,9 @@ class FauxOllama(BaseHTTPRequestHandler):
                 self.wfile.write(ligne(status=t, completed=f, total=100)); self.wfile.flush(); time.sleep(0.05)
             INSTALLES.append(corps["model"])
             return
+        premier = str(((corps.get("messages") or [{}])[0]).get("content") or "")
+        if not corps.get("stream", True) and premier.startswith(("Donne un TITRE de 3 à 6 mots", "Give a TITLE of 3 to 6 words")):
+            self.wfile.write(json.dumps({"message": {"role": "assistant", "content": TITRE[0]}, "done": True}).encode("utf-8")); return
         RECUES.append(corps)
         taille = sum(len(json.dumps(m, ensure_ascii=False)) for m in corps.get("messages", [])) // 3 + len(json.dumps(corps.get("tools", []))) // 3
         if corps.get("options", {}).get("num_ctx") and taille > corps["options"]["num_ctx"] and not corps.get("_tolerant"):
