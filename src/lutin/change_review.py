@@ -363,13 +363,13 @@ def _call_tool(nom, args, ctx):
         from . import addons, addons_comfyui
         if not addons.actif("comfyui"):
             raise _m.ErreurOutil("L'addon ComfyUI n'est pas activé.")
-        return addons_comfyui.text_models() if nom == "comfy_modeles" else addons_comfyui.outil_generer(args, ctx)
+        return addons_comfyui.text_models() if nom == "comfy_modeles" else addons_comfyui.generate_tool(args, ctx)
     if nom.startswith("voix_"):
         from . import addons_voicestudio
-        return addons_voicestudio.outil_voix(nom, args, ctx)
+        return addons_voicestudio.voice_tool(nom, args, ctx)
     if nom == "musique_generer":
         from . import addons_acestep
-        return addons_acestep.outil_acestep(nom, args, ctx)
+        return addons_acestep.acestep_tool(nom, args, ctx)
     if nom == "etat_outil":
         return _m.outil_etat()
     if nom == "installer_module":

@@ -103,7 +103,7 @@ class Telegram(unittest.TestCase):
         v = addons.check("telegram")
         self.assertTrue(v["ok"])
         self.assertIn("lutin_test_bot", v["etapes"][0]["message"])
-        self.assertNotIn("TOKEN-SECRET", json.dumps(addons.decrire("telegram")))
+        self.assertNotIn("TOKEN-SECRET", json.dumps(addons.describe("telegram")))
         SERVICE["panne"] = True
         v = addons.check("telegram")
         self.assertFalse(v["ok"])
@@ -146,29 +146,29 @@ class Telegram(unittest.TestCase):
         self.assertEqual(self.appels[-1]["proprietaire"], False)
         self.assertEqual(self.appels[-1]["consigne"], "Sois bref.")
         self.assertEqual(SERVICE["envoyes"], [], "brouillon : rien n'est envoyé sans toi")
-        b = tg.etat()["brouillons"]
+        b = tg.state()["brouillons"]
         self.assertEqual((len(b), b[0]["de"], b[0]["chat_id"]), (1, "Bob", 99))
         addons.action("telegram", "envoyer", {"brouillon": b[0]["id"], "texte": "Oui, je te rappelle à 18 h."})
         self.assertEqual(SERVICE["envoyes"][-1], {"chat_id": "99", "text": "Oui, je te rappelle à 18 h."}, "le texte modifié est celui qui part")
-        self.assertEqual(tg.etat()["brouillons"], [])
+        self.assertEqual(tg.state()["brouillons"], [])
         SERVICE["updates"].append(msg(3, 99, "Et demain ?", nom="Bob"))
         self.lire_tout()
-        addons.action("telegram", "rejeter", {"brouillon": tg.etat()["brouillons"][0]["id"]})
-        self.assertEqual((len(SERVICE["envoyes"]), tg.etat()["brouillons"]), (1, []), "rejeté : rien ne part")
-        with self.assertRaises(addons.ErreurAddon):
+        addons.action("telegram", "rejeter", {"brouillon": tg.state()["brouillons"][0]["id"]})
+        self.assertEqual((len(SERVICE["envoyes"]), tg.state()["brouillons"]), (1, []), "rejeté : rien ne part")
+        with self.assertRaises(addons.AddonError):
             addons.action("telegram", "envoyer", {"brouillon": "zzzz"})
         addons.save_settings("telegram", {"tiers": "auto"})
         SERVICE["updates"].append(msg(4, 99, "Coucou", nom="Bob"))
         self.lire_tout()
         self.assertEqual(SERVICE["envoyes"][-1]["text"], "Réponse à : " + self.appels[-1]["demande"], "mode seul : la réponse part tout de suite")
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             addons.save_settings("telegram", {"tiers": "n'importe quoi"})
 
     def test_un_tiers_ne_declenche_pas_plus_de_vingt_reponses_par_heure(self):
         addons.save_settings("telegram", {"tiers": "auto"})
         SERVICE["updates"] = [msg(i, 55, "spam %d" % i) for i in range(1, 31)]
         self.lire_tout()
-        self.assertEqual(len(SERVICE["envoyes"]), tg.TIERS_PAR_HEURE)
+        self.assertEqual(len(SERVICE["envoyes"]), tg.STRANGERS_PER_HOUR)
 
     def test_seuls_les_messages_texte_prives_sont_lus(self):
         e = tg.read()
@@ -183,11 +183,11 @@ class Telegram(unittest.TestCase):
     def test_panne_du_service_attendue_et_signalee(self):
         SERVICE["panne"] = True
         self.assertEqual(self.lire_tout(), -1)
-        self.assertIn("502", tg.etat()["erreur"])
-        self.assertNotIn("TOKEN-SECRET", tg.etat()["erreur"])
+        self.assertIn("502", tg.state()["erreur"])
+        self.assertNotIn("TOKEN-SECRET", tg.state()["erreur"])
         SERVICE["panne"] = False
         self.assertEqual(self.lire_tout(), 0)
-        self.assertEqual(tg.etat()["erreur"], "")
+        self.assertEqual(tg.state()["erreur"], "")
 
     def test_la_boucle_d_ecoute_tourne_repond_et_s_arrete(self):
         """Le fil d'écoute lui-même (pas seulement une lecture) : il lit, répond au propriétaire, survit à une panne, et s'arrête proprement."""
@@ -196,20 +196,20 @@ class Telegram(unittest.TestCase):
         e["autorises"] = [{"id": 42, "nom": "Moi"}]
         tg.write(e)
         SERVICE["updates"] = [msg(1, 42, "Salut Lutin")]
-        tg.demarrer()
+        tg.start()
         try:
             for _ in range(100):
                 if SERVICE["envoyes"]:
                     break
                 time.sleep(0.05)
             self.assertEqual(SERVICE["envoyes"][-1]["text"], "Réponse à : Salut Lutin")
-            self.assertTrue(tg.etat()["ecoute"])
+            self.assertTrue(tg.state()["ecoute"])
             SERVICE["panne"] = True                                                      # une panne : la boucle attend et ne plante pas
             time.sleep(0.4)
             self.assertTrue(tg.ALIVE["fil"].is_alive())
         finally:
             SERVICE["panne"] = False
-            tg.arreter()
+            tg.stop()
         tg.ALIVE["fil"].join(5)
         self.assertFalse(tg.ALIVE["fil"].is_alive(), "le fil s'arrête quand on le demande")
         self.assertEqual(len(SERVICE["envoyes"]), 1, "le message n'a été traité qu'une fois")

@@ -94,7 +94,7 @@ class AceStep(unittest.TestCase):
             if f.is_file():
                 f.unlink()
         addons.save_settings(ace.IDENT, {"port": str(self.port), "cle": "", "format": "mp3"})
-        addons.activer(ace.IDENT, True)
+        addons.activate(ace.IDENT, True)
         self.addCleanup(lambda: setattr(ace, "POLL_S", 2.0))
         ace.POLL_S = 0.01
 
@@ -110,29 +110,29 @@ class AceStep(unittest.TestCase):
         v = addons.check(ace.IDENT)
         self.assertTrue(v["ok"], v)
         self.assertIn("répond", v["etapes"][0]["message"])
-        addons.activer(ace.IDENT, False)
+        addons.activate(ace.IDENT, False)
         addons.save_settings(ace.IDENT, {"port": "1"})
-        with self.assertRaises(addons.ErreurAddon) as e:
-            addons.activer(ace.IDENT, True)
+        with self.assertRaises(addons.AddonError) as e:
+            addons.activate(ace.IDENT, True)
         self.assertIn("ne répond pas", str(e.exception))
         self.assertFalse(addons.actif(ace.IDENT))
 
     def test_port_invalide(self):
         addons.save_settings(ace.IDENT, {"port": "abc"})
         with self.assertRaises(_m.ErreurOutil):
-            ace.outil_musique({"description": "jazz"}, self.ctx())
+            ace.music_tool({"description": "jazz"}, self.ctx())
 
     def test_l_outil_est_inutilisable_si_l_addon_est_coupe(self):
-        addons.activer(ace.IDENT, False)
+        addons.activate(ace.IDENT, False)
         with self.assertRaises(_m.ErreurOutil):
             change_review._call_tool("musique_generer", {"description": "jazz"}, self.ctx())
 
     def test_le_modele_ne_voit_l_outil_que_si_l_addon_est_actif(self):
         from lutin import agent
         reglages = dict(_m.reglages(), web=True)
-        addons.activer(ace.IDENT, False)
+        addons.activate(ace.IDENT, False)
         self.assertNotIn("musique_generer", {t["function"]["name"] for t in agent.outils_du_mode(reglages)})
-        addons.activer(ace.IDENT, True)
+        addons.activate(ace.IDENT, True)
         self.assertIn("musique_generer", {t["function"]["name"] for t in agent.outils_du_mode(reglages)})
 
     # --- composer
@@ -155,23 +155,23 @@ class AceStep(unittest.TestCase):
     def test_sans_paroles_le_morceau_est_instrumental_et_la_duree_reste_dans_les_bornes(self):
         for demande, attendu in ((5, 10), (9999, 600), ("abc", 60), (None, 60), (120, 120)):
             SERVICE["appels"].clear()
-            ace.outil_musique({"description": "lofi", "duree": demande}, self.ctx())
+            ace.music_tool({"description": "lofi", "duree": demande}, self.ctx())
             corps = json.loads(self.envoyes("/release_task")[0]["corps"])
             self.assertEqual((corps["lyrics"], corps["audio_duration"], corps["audio_format"]), ("[Instrumental]", attendu, "mp3"), repr(demande))
 
     def test_un_refus_n_envoie_rien(self):
-        res = ace.outil_musique({"description": "lofi"}, self.ctx(accord=False))
+        res = ace.music_tool({"description": "lofi"}, self.ctx(accord=False))
         self.assertIn("Refusé", res)
         self.assertEqual(self.envoyes("/release_task"), [])
 
     def test_la_case_commandes_automatiques_vaut_accord(self):
-        ace.outil_musique({"description": "lofi"}, self.ctx(auto_commandes=True))
+        ace.music_tool({"description": "lofi"}, self.ctx(auto_commandes=True))
         self.assertTrue(self.accords[0][2])
 
     def test_garde_fous_avant_tout_envoi(self):
         for args in ({"description": ""}, {"description": "x" * 5000}, {"description": "ok", "paroles": "y" * 5000}, {"description": "ok", "format": "exe"}):
             with self.assertRaises(_m.ErreurOutil, msg=str(args)[:30]):
-                ace.outil_musique(args, self.ctx())
+                ace.music_tool(args, self.ctx())
         self.assertEqual(self.accords, [])
         self.assertEqual(self.envoyes("/release_task"), [])
 
@@ -179,13 +179,13 @@ class AceStep(unittest.TestCase):
     def test_une_tache_qui_echoue_dit_pourquoi(self):
         SERVICE["echec"] = True
         with self.assertRaises(_m.ErreurOutil) as e:
-            ace.outil_musique({"description": "lofi"}, self.ctx())
+            ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("CUDA out of memory", str(e.exception))
 
     def test_une_demande_refusee_par_le_serveur_dit_pourquoi(self):
         SERVICE["refus"] = True
         with self.assertRaises(_m.ErreurOutil) as e:
-            ace.outil_musique({"description": "lofi"}, self.ctx())
+            ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("prompt vide", str(e.exception))
 
     def test_une_tache_trop_longue_est_abandonnee_avec_un_message(self):
@@ -193,13 +193,13 @@ class AceStep(unittest.TestCase):
         self.addCleanup(lambda: setattr(ace, "WAIT_MAX_S", 1800))
         ace.WAIT_MAX_S = 0.1
         with self.assertRaises(_m.ErreurOutil) as e:
-            ace.outil_musique({"description": "lofi"}, self.ctx())
+            ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("n'a pas fini", str(e.exception))
 
     def test_un_fichier_a_une_autre_adresse_est_refuse_et_rien_n_est_telecharge(self):
         SERVICE["fichier"] = "http://example.org/evil.mp3"
         with self.assertRaises(_m.ErreurOutil) as e:
-            ace.outil_musique({"description": "lofi"}, self.ctx())
+            ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("inattendu", str(e.exception))
         self.assertEqual([a for a in SERVICE["appels"] if a["methode"] == "GET" and "evil" in a["chemin"]], [])
 
@@ -207,7 +207,7 @@ class AceStep(unittest.TestCase):
         SERVICE["erreur_deguisee"] = True
         ctx = self.ctx()
         with self.assertRaises(_m.ErreurOutil) as e:
-            ace.outil_musique({"description": "lofi"}, ctx)
+            ace.music_tool({"description": "lofi"}, ctx)
         self.assertIn("fichier effacé", str(e.exception))
         self.assertNotIn("fichiers_joints", ctx)
 
@@ -215,12 +215,12 @@ class AceStep(unittest.TestCase):
     def test_la_cle_est_envoyee_et_jamais_affichee(self):
         SERVICE["cle"] = "secret-tres-long-1234"
         with self.assertRaises(_m.ErreurOutil) as e:
-            ace.outil_musique({"description": "lofi"}, self.ctx())
+            ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("clé API", str(e.exception))
         self.assertNotIn("secret-tres-long-1234", str(e.exception))
         addons.save_settings(ace.IDENT, {"port": str(self.port), "cle": "secret-tres-long-1234", "format": "mp3"})
         SERVICE["appels"].clear()
-        ace.outil_musique({"description": "lofi"}, self.ctx())
+        ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertTrue(all(a["auth"] == "Bearer secret-tres-long-1234" for a in SERVICE["appels"]))
 
 

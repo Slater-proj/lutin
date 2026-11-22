@@ -2417,7 +2417,7 @@ def test_notification_channel(request):
 # this is all a page needs to draw it. The value of a secret is never given back, only whether it is set. Not in v1 yet: the live panel of an add-on (the pairing code of
 # Telegram, the drafts), its actions, and the editor of its calls.
 def _addon_view(identifier):
-    entry = _addons.decrire(identifier)
+    entry = _addons.describe(identifier)
     settings = []
     for entry_field in entry["reglages"]:
         item = {"key": entry_field["cle"], "secret": bool(entry_field.get("secret")), "multiline": bool(entry_field.get("texte")), "label": entry_field.get("libelle") or "", "help": entry_field.get("aide") or "",
@@ -2435,7 +2435,7 @@ def _addon_view(identifier):
 
 
 def _addons_view():
-    return {"addons": [_addon_view(identifier) for identifier in _addons.ids()], "alerts": [{"id": alert["id"], "name": alert["nom"]} for alert in _addons.alertes()]}
+    return {"addons": [_addon_view(identifier) for identifier in _addons.ids()], "alerts": [{"id": alert["id"], "name": alert["nom"]} for alert in _addons.alerts()]}
 
 
 def _addon_one(identifier):
@@ -2460,8 +2460,8 @@ def change_addon(request):
         if "settings" in body:
             _addons.save_settings(identifier, body["settings"])
         if "active" in body:
-            _addons.activer(identifier, body["active"])
-    except _addons.ErreurAddon as refused:
+            _addons.activate(identifier, body["active"])
+    except _addons.AddonError as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
     return _addons_view()
 
@@ -2536,7 +2536,7 @@ def _panel_view(identifier):
     translate = ADDON_PANELS.get(identifier)
     try:
         return {"panel": translate(_addons.alive_state(identifier)) if translate else None}
-    except _addons.ErreurAddon as refused:
+    except _addons.AddonError as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
 
 
@@ -2568,7 +2568,7 @@ def addon_panel_action(request):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(fields) or "-"))
     try:
         _addons.action(identifier, french_name, {fields[key]: value for key, value in body.items()})
-    except _addons.ErreurAddon as refused:
+    except _addons.AddonError as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
     return _panel_view(identifier)
 
@@ -2578,7 +2578,7 @@ def addon_panel_action(request):
 def _flow_view(identifier):
     try:
         return {"flow": _addons.stream(identifier), "shipped": _addons.shipped_stream(identifier), "modified": bool(_addons.modified_stream(identifier))}
-    except _addons.ErreurAddon as refused:
+    except _addons.AddonError as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
 
 
@@ -2598,7 +2598,7 @@ def change_addon_flow(request):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("flow"))
     try:
         _addons.apply_stream(identifier, request.body["flow"])
-    except _addons.ErreurAddon as refused:
+    except _addons.AddonError as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
     return _flow_view(identifier)
 
@@ -2618,8 +2618,8 @@ def propose_addon_correction(request):
     _addon_one(request.params["id"])
     _require_online(_t("chercher une correction de flux"))
     try:
-        proposal = _addons.proposer_correction(request.params["id"])
-    except _addons.ErreurAddon as refused:
+        proposal = _addons.propose_fix(request.params["id"])
+    except _addons.AddonError as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
     return {"flow": proposal["flux"], "diff": proposal["diff"], "explanation": proposal["explication"]}
 

@@ -25,7 +25,7 @@ MAX_LENGTH = 4000                  # un message Telegram fait 4096 caractères a
 WAIT_POLLING = 20                 # secondes de « long polling »
 WAIT_SEAT_S = 180                 # secondes d'attente d'une place libre (Lutin répond peut-être à quelqu'un d'autre, ou dans cette conversation)
 POLL_SEAT_S = 2
-TIERS_PAR_HEURE = 20
+STRANGERS_PER_HOUR = 20
 FAILURES_PAIRING = 5
 ALIVE = {"fil": None, "stop": threading.Event(), "erreur": "", "bot": ""}
 RECENTS = collections.defaultdict(collections.deque)      # chat -> dates des réponses aux tiers (heure glissante)
@@ -49,7 +49,7 @@ def write(e):
     _m.ecrire_atomique(path(), json.dumps(e, ensure_ascii=False, indent=1))
 
 
-def nouveau_code():
+def new_code():
     return "%06d" % secrets.randbelow(10 ** 6)
 
 
@@ -71,7 +71,7 @@ def split(texte, taille=MAX_LENGTH):
 def send(chat_id, texte):
     """Envoie un message (découpé si besoin). Renvoie (ok, erreur)."""
     for morceau in split(texte):
-        r = addons.appeler(IDENT, "envoyer", {"chat_id": chat_id, "texte": morceau})
+        r = addons.call(IDENT, "envoyer", {"chat_id": chat_id, "texte": morceau})
         if not r["ok"]:
             return False, r["erreur"]
     return True, ""
@@ -140,13 +140,13 @@ def handle(update):
             if e["code"] and hmac.compare_digest(arg, e["code"]):
                 if not any(a["id"] == cid for a in e["autorises"]):
                     e["autorises"].append({"id": cid, "nom": nom})
-                e.update(code=nouveau_code(), echecs=0)
+                e.update(code=new_code(), echecs=0)
                 write(e)
                 send(cid, _t("✔ Appairé. Écris-moi ce que tu veux demander : je lis et je cherche, mais je ne modifie rien depuis Telegram."))
             else:
                 e["echecs"] += 1
                 if e["echecs"] >= FAILURES_PAIRING:
-                    e.update(code=nouveau_code(), echecs=0)                      # trop d'essais ratés : on change le code
+                    e.update(code=new_code(), echecs=0)                      # trop d'essais ratés : on change le code
                 write(e)
             return
     proprietaire = any(a["id"] == cid for a in e["autorises"])
@@ -169,7 +169,7 @@ def handle(update):
     recents = RECENTS[cid]
     while recents and maintenant - recents[0] > 3600:
         recents.popleft()
-    if len(recents) >= TIERS_PAR_HEURE:
+    if len(recents) >= STRANGERS_PER_HOUR:
         return
     recents.append(maintenant)
     reponse = reply_model("tiers-" + str(cid), nom, texte, False, reglages.get("consigne", ""))
@@ -189,7 +189,7 @@ def handle(update):
 def one_read(attente=WAIT_POLLING):
     """Lit les messages en attente et les traite un par un. Renvoie le nombre de messages traités, ou -1 si le service ne répond pas."""
     e = read()
-    r = addons.appeler(IDENT, "recevoir", {"offset": e["offset"], "attente": attente}, delai=attente + 15)
+    r = addons.call(IDENT, "recevoir", {"offset": e["offset"], "attente": attente}, delai=attente + 15)
     if not r["ok"]:
         ALIVE["erreur"] = r["erreur"]
         return -1
@@ -223,24 +223,24 @@ def loop():
             echecs = 0
 
 
-def demarrer():
+def start():
     if ALIVE["fil"] and ALIVE["fil"].is_alive():
         return
     e = read()
     if not e["code"]:
-        e["code"] = nouveau_code()
+        e["code"] = new_code()
         write(e)
     ALIVE["stop"].clear()
     ALIVE["fil"] = threading.Thread(target=loop, daemon=True, name="telegram")
     ALIVE["fil"].start()
 
 
-def arreter():
+def stop():
     ALIVE["stop"].set()
 
 
 # --------------------------------------------------------------------------- le panneau de la page
-def etat():
+def state():
     e = read()
     return {"code": e["code"], "autorises": e["autorises"], "brouillons": e["brouillons"], "erreur": ALIVE["erreur"], "ecoute": bool(ALIVE["fil"] and ALIVE["fil"].is_alive()),
             "tiers": addons.settings(IDENT).get("tiers") or "non"}
@@ -251,26 +251,26 @@ def action(nom, donnees):
         e = read()
         if nom == "oublier":                                                       # retirer un appareil appairé
             e["autorises"] = [a for a in e["autorises"] if str(a["id"]) != str(donnees.get("chat_id"))]
-            e["code"] = nouveau_code()
+            e["code"] = new_code()
             write(e)
-            return etat()
+            return state()
         if nom == "nouveau_code":
-            e.update(code=nouveau_code(), echecs=0)
+            e.update(code=new_code(), echecs=0)
             write(e)
-            return etat()
+            return state()
         if nom in ("envoyer", "rejeter"):
             b = next((x for x in e["brouillons"] if x["id"] == str(donnees.get("brouillon"))), None)
             if b is None:
-                raise addons.ErreurAddon(_t("Ce brouillon n'existe plus."))
+                raise addons.AddonError(_t("Ce brouillon n'existe plus."))
             if nom == "envoyer":
                 texte = str(donnees.get("texte") or b["texte"]).strip()
                 if not texte:
-                    raise addons.ErreurAddon(_t("Le message est vide."))
+                    raise addons.AddonError(_t("Le message est vide."))
                 ok, erreur = send(b["chat_id"], texte)
                 if not ok:
-                    raise addons.ErreurAddon(_t("Envoi impossible : {}").format(erreur))
+                    raise addons.AddonError(_t("Envoi impossible : {}").format(erreur))
             e["brouillons"] = [x for x in e["brouillons"] if x["id"] != b["id"]]
             write(e)
-            return etat()
-    raise addons.ErreurAddon(_t("Action inconnue."))
+            return state()
+    raise addons.AddonError(_t("Action inconnue."))
 

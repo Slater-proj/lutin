@@ -143,12 +143,12 @@ class Courriel(unittest.TestCase):
         v = addons.check("mail")
         self.assertFalse(v["ok"])
         self.assertNotIn("autre-mdp-secret", str(v), "le mot de passe n'est pas répété dans le message")
-        self.assertNotIn("autre-mdp-secret", str(addons.decrire("mail")))
+        self.assertNotIn("autre-mdp-secret", str(addons.describe("mail")))
         addons.save_settings("mail", {"motdepasse": BOITE["mot_de_passe"], "regles": "bof"})
         self.assertIn("ligne 1", addons.check("mail")["etapes"][0]["message"])
         addons.save_settings("mail", {"regles": "* -> brouillon", "dossier": "Absent"})
         self.assertFalse(addons.check("mail")["ok"])
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             addons.save_settings("mail", {"reseau_local": "peut-etre"})
 
     def test_l_arriere_est_ignore_et_la_boite_n_est_pas_modifiee(self):
@@ -160,7 +160,7 @@ class Courriel(unittest.TestCase):
         self.assertIn("Nouveau", self.demandes[0]["message"])
         self.assertTrue(all(lecture_seule for _, lecture_seule in BOITE["ouvertures"]), "boîte ouverte en lecture seule")
         self.assertEqual(mail.one_read(), 0, "rien de nouveau : rien n'est retraité")
-        b = mail.etat()["brouillons"]
+        b = mail.state()["brouillons"]
         self.assertEqual((len(b), b[0]["adresse"], b[0]["sujet"]), (1, "alice@exemple.fr", "Nouveau"))
         self.assertEqual(ENVOYES, [], "brouillon : rien n'est envoyé sans toi")
 
@@ -186,14 +186,14 @@ class Courriel(unittest.TestCase):
 
     def test_reponse_seule_plafonnee_et_envoi_de_brouillon(self):
         addons.save_settings("mail", {"regles": "sujet:*urgent* -> auto: Accuse réception.\n* -> brouillon"})
-        self.demarrer_boite(*[courriel(sujet="Urgent %d" % i, message_id="<u%d@x>" % i) for i in range(mail.AUTO_PAR_JOUR + 3)], courriel(sujet="Normal", de="Bob <bob@exemple.fr>", message_id="<n@x>",
+        self.demarrer_boite(*[courriel(sujet="Urgent %d" % i, message_id="<u%d@x>" % i) for i in range(mail.AUTO_PER_DAY + 3)], courriel(sujet="Normal", de="Bob <bob@exemple.fr>", message_id="<n@x>",
                                                                                                                                           References="<ancien@x>"))
         mail.one_read()
-        self.assertEqual(len(ENVOYES), mail.AUTO_PAR_JOUR, "au plus 20 réponses seules par jour")
+        self.assertEqual(len(ENVOYES), mail.AUTO_PER_DAY, "au plus 20 réponses seules par jour")
         premier = ENVOYES[0]
         self.assertEqual((premier["To"], premier["Subject"], premier["Auto-Submitted"]), ("alice@exemple.fr", "Re: Urgent 0", "auto-replied"))
         self.assertEqual(premier["In-Reply-To"], "<u0@x>")
-        brouillons = mail.etat()["brouillons"]
+        brouillons = mail.state()["brouillons"]
         self.assertEqual(len(brouillons), 4, "les 3 « auto » au-delà du plafond et le courriel normal deviennent des brouillons")
         bob = next(b for b in brouillons if b["adresse"] == "bob@exemple.fr")
         mail.action("envoyer", {"brouillon": bob["id"], "texte": "Bonjour Bob, je te rappelle."})
@@ -202,8 +202,8 @@ class Courriel(unittest.TestCase):
         self.assertIn("je te rappelle", envoye.get_content())
         self.assertEqual(envoye["Auto-Submitted"], "no")
         mail.action("rejeter", {"brouillon": brouillons[0]["id"]})
-        self.assertEqual(len(mail.etat()["brouillons"]), 2, "4 brouillons, un envoyé, un rejeté")
-        with self.assertRaises(addons.ErreurAddon):
+        self.assertEqual(len(mail.state()["brouillons"]), 2, "4 brouillons, un envoyé, un rejeté")
+        with self.assertRaises(addons.AddonError):
             mail.action("envoyer", {"brouillon": "zzzz"})
 
     def test_serveur_local_refuse_sauf_permission_et_panne_attendue(self):
@@ -216,22 +216,22 @@ class Courriel(unittest.TestCase):
             os.environ["LUTIN_WEB_LOCAL"] = vrai
         addons.save_settings("mail", {"motdepasse": "mauvais-mdp-secret"})
         self.assertEqual(mail.one_read(), -1)
-        self.assertNotIn("mauvais-mdp-secret", mail.etat()["erreur"])
-        self.assertTrue(mail.etat()["erreur"])
+        self.assertNotIn("mauvais-mdp-secret", mail.state()["erreur"])
+        self.assertTrue(mail.state()["erreur"])
 
     def test_la_boucle_de_lecture_tourne_et_s_arrete(self):
         import time
         BOITE["messages"] = {1: courriel(sujet="Vieux")}
-        mail.demarrer()
+        mail.start()
         try:
             for _ in range(100):
                 if mail.read()["uid"]:
                     break
                 time.sleep(0.05)
             self.assertTrue(mail.read()["uid"], "la première lecture a enregistré où en est la boîte")
-            self.assertTrue(mail.etat()["ecoute"])
+            self.assertTrue(mail.state()["ecoute"])
         finally:
-            mail.arreter()
+            mail.stop()
         mail.ALIVE["fil"].join(5)
         self.assertFalse(mail.ALIVE["fil"].is_alive())
 
@@ -239,7 +239,7 @@ class Courriel(unittest.TestCase):
         from unittest import mock
         with mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": "1"}):
             self.assertEqual(mail.one_read(), -1)
-            self.assertIn("hors ligne", mail.etat()["erreur"])
+            self.assertIn("hors ligne", mail.state()["erreur"])
             self.assertFalse(addons.check("mail")["ok"])
         BOITE["messages"] = {1: courriel()}
         self.assertEqual(mail.one_read(), 0, "en ligne, la lecture reprend")

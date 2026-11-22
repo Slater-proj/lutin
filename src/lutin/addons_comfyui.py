@@ -31,13 +31,13 @@ from .i18n import t as _t
 IDENT = "comfyui"
 EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".gguf", ".bin", ".sft")
 FOLDERS_MODELS = ("checkpoints", "loras", "vae", "diffusion_models", "unet", "text_encoders", "clip", "controlnet", "upscale_models")
-NOEUDS = {"checkpoints": "objets_checkpoints", "loras": "objets_loras", "vae": "objets_vae", "diffusion_models": "objets_unet", "text_encoders": "objets_clip"}
+NODES = {"checkpoints": "objets_checkpoints", "loras": "objets_loras", "vae": "objets_vae", "diffusion_models": "objets_unet", "text_encoders": "objets_clip"}
 ALIAS = {"unet": "diffusion_models", "clip": "text_encoders"}          # anciens noms de dossiers : mêmes modèles
-FAMILLES = (("image_zimage", ("z_image", "zimage", "z-image")), ("image_qwen", ("qwen",)), ("image_flux", ("flux",)))          # le nom du fichier dit quelle famille de modèle (donc quels nœuds) il faut
-RE_MARQUE = re.compile(r"\{([a-z_][a-z_0-9]*)\}")
-RE_MARQUE_ENTIERE = re.compile(r"^\{([a-z_][a-z_0-9]*)\}$")
+FAMILIES = (("image_zimage", ("z_image", "zimage", "z-image")), ("image_qwen", ("qwen",)), ("image_flux", ("flux",)))          # le nom du fichier dit quelle famille de modèle (donc quels nœuds) il faut
+RE_MARKER = re.compile(r"\{([a-z_][a-z_0-9]*)\}")
+RE_WHOLE_MARKER = re.compile(r"^\{([a-z_][a-z_0-9]*)\}$")
 TYPES = ("image", "video", "son")
-DELAI_PAR_DEFAUT = {"image": 600, "video": 3600, "son": 900}
+DEFAULT_TIMEOUT = {"image": 600, "video": 3600, "son": 900}
 HOSTS_DOWNLOAD = ("huggingface.co", "hf.co", "civitai.com")          # et leurs sous-domaines (les fichiers sont servis par des réseaux de diffusion de ces sites)
 KINDS_DOWNLOAD = ("checkpoints", "loras", "vae", "diffusion_models", "text_encoders", "controlnet", "upscale_models")
 MAX_SIZE_MODEL = 60 * 1024 ** 3
@@ -49,16 +49,16 @@ CACHE = {"modeles": (0, None)}
 DETECTION = {"dossier": ""}               # le dernier dossier d'installation trouvé : le chercher dans les processus coûte (PowerShell), donc seulement à la demande
 
 
-def demarrer():
+def start():
     pass                                   # rien à faire tourner en arrière-plan : ComfyUI est piloté à la demande
 
 
-def arreter():
+def stop():                 # never called inside this module: the `stop` arguments below (an Event) do not hide it
     pass
 
 
 # --------------------------------------------------------------------------- détection
-def _argv_absolu(r):
+def _absolute_argv(r):
     """Le chemin de main.py annoncé par ComfyUI lui-même (system_stats), s'il est absolu."""
     argv = ((r.get("donnees") or {}).get("system") or {}).get("argv") or []
     for a in argv:
@@ -84,7 +84,7 @@ def _from_process():
     return ""
 
 
-def _usuels():
+def _usual():
     base = Path.home()
     for c in (base / "ComfyUI", base / "Documents" / "ComfyUI", base / "Desktop" / "ComfyUI", base / "Downloads" / "ComfyUI", Path("C:/ComfyUI"), Path("D:/ComfyUI"), Path("/opt/ComfyUI")):
         yield c
@@ -102,7 +102,7 @@ def find_folder(argv="", profond=True):
             c = Path(source).parent
             if valid_folder(c):
                 return str(c)
-    for c in _usuels():
+    for c in _usual():
         if valid_folder(c):
             return str(c)
     return ""
@@ -117,7 +117,7 @@ def normalize_folder(chemin):
     return str(p)
 
 
-def diagnostic_dossier(dossier):
+def folder_diagnosis(dossier):
     """(valide, raison) : ce dossier est-il bien celui de ComfyUI, et sinon pourquoi."""
     if not dossier:
         return False, _t("Dossier de ComfyUI non défini.")
@@ -139,7 +139,7 @@ def folder_comfy():
     return find_folder("", profond=False) or ""
 
 
-def pythons_possibles(dossier):
+def candidate_pythons(dossier):
     d = Path(dossier)
     racine = d.parent
     candidats = [racine / "python_embeded" / "python.exe", d / "python_embeded" / "python.exe"]
@@ -149,9 +149,9 @@ def pythons_possibles(dossier):
     return candidats
 
 
-def commande_lancement(dossier, port):
+def launch_command(dossier, port):
     """La commande qui démarre ComfyUI avec SON Python (celui de la version portable ou de son environnement virtuel), sans ouvrir de navigateur. [] si on ne trouve pas ce Python."""
-    for py in pythons_possibles(dossier):
+    for py in candidate_pythons(dossier):
         if py.is_file():
             commande = [str(py), "-s", "main.py", "--port", str(port), "--disable-auto-launch"]
             if "python_embeded" in str(py):
@@ -160,20 +160,20 @@ def commande_lancement(dossier, port):
     return []
 
 
-def en_marche():
-    return addons.appeler(IDENT, "etat", delai=2)["ok"]
+def running():
+    return addons.call(IDENT, "etat", delai=2)["ok"]
 
 
-def assurer_comfyui(stop=None):
+def ensure_comfyui(stop=None):
     """Fait en sorte que ComfyUI tourne. S'il ne tourne pas, Lutin le lance : il rend d'abord la mémoire au modèle de langage (ils ne tiennent pas ensemble), démarre ComfyUI et attend qu'il réponde.
     Renvoie True si c'est Lutin qui l'a lancé (il le refermera ensuite)."""
-    if en_marche():
+    if running():
         return False
     dossier = folder_comfy()
     if not dossier:
         raise _m.ErreurOutil(_t("Je ne trouve pas ComfyUI : l'utilisateur doit choisir son dossier (Automatisation > Extensions > ComfyUI)."))
     port = addons.settings(IDENT).get("port") or "8188"
-    commande = commande_lancement(dossier, port)
+    commande = launch_command(dossier, port)
     if not commande:
         raise _m.ErreurOutil(_t("ComfyUI ne tourne pas et je ne trouve pas son Python pour le lancer : l'utilisateur doit le lancer lui-même."))
     try:
@@ -198,7 +198,7 @@ def assurer_comfyui(stop=None):
         if processus.poll() is not None:
             PROCESS["popen"] = None
             raise _m.ErreurOutil(_t("ComfyUI s'est arrêté au démarrage (voir donnees/comfyui.log)."))
-        if en_marche():
+        if running():
             return True
         time.sleep(2)
     stop_comfyui()
@@ -221,20 +221,20 @@ def stop_comfyui():
 atexit.register(stop_comfyui)
 
 
-def verifier():
+def check():
     """La vérification de l'addon : trouve (ou valide) le dossier de ComfyUI et regarde si Lutin saura le lancer. ComfyUI n'a PAS besoin de tourner."""
     etapes = []
     regle = addons.settings(IDENT).get("dossier") or ""
     dossier = regle or find_folder("", profond=True)                         # un dossier choisi est jugé tel quel ; sinon on le cherche
-    valide, raison = diagnostic_dossier(dossier)
+    valide, raison = folder_diagnosis(dossier)
     if not valide:
         return [{"appel": "dossier", "ok": False, "message": raison if regle else _t("Je ne trouve pas ComfyUI tout seul : choisis son dossier (celui qui contient main.py).")}]
     if dossier != regle:
         addons.save_settings(IDENT, {"dossier": dossier})                  # trouvé tout seul : retenu
     n = sum(len(v) for v in _scan_folder(dossier).values())
     etapes.append({"appel": "dossier", "ok": True, "message": _t("ComfyUI trouvé dans {} ({} modèle(s))").format(dossier, n)})
-    tourne = en_marche()
-    lanceur = commande_lancement(dossier, addons.settings(IDENT).get("port") or "8188")
+    tourne = running()
+    lanceur = launch_command(dossier, addons.settings(IDENT).get("port") or "8188")
     if lanceur or tourne:
         etapes.append({"appel": "lancement", "ok": True, "message": _t("il tourne en ce moment") if tourne else _t("Lutin saura le lancer quand tu demanderas une image")})
     else:
@@ -242,10 +242,10 @@ def verifier():
     return etapes
 
 
-def detecter(profond=True):
+def detect(profond=True):
     """Cherche ComfyUI : tourne-t-il (réponse sur son port), quelle version, sur quelle carte, et où est-il installé ? Ne modifie rien. profond=False : sonde légère (le panneau se rafraîchit toutes les 4 secondes)."""
-    r = addons.appeler(IDENT, "etat", delai=4 if profond else 1.5)
-    trouve = find_folder(_argv_absolu(r), profond)
+    r = addons.call(IDENT, "etat", delai=4 if profond else 1.5)
+    trouve = find_folder(_absolute_argv(r), profond)
     if profond or trouve:
         DETECTION["dossier"] = trouve
     resultat = {"tourne": r["ok"], "erreur": "" if r["ok"] else r["erreur"], "version": (r["extrait"] or {}).get("version") or "", "gpu": (r["extrait"] or {}).get("gpu") or "",
@@ -287,8 +287,8 @@ def list_models(forcer=False):
     if not forcer and valeur is not None and time.time() - quand < 10:
         return valeur
     modeles, source = {}, "aucune"
-    for genre, appel in NOEUDS.items():
-        r = addons.appeler(IDENT, appel, delai=6)
+    for genre, appel in NODES.items():
+        r = addons.call(IDENT, appel, delai=6)
         if r["ok"]:
             source = "api"
             noms = _options((r["extrait"] or {}).get("liste"))
@@ -313,7 +313,7 @@ def usable_models():
     for n in r.get("diffusion_models", []):
         cle = family_of(n)
         if cle:
-            sortie.append({"nom": n, "genre": "diffusion", "famille": libelle_famille(cle)})
+            sortie.append({"nom": n, "genre": "diffusion", "famille": family_label(cle)})
     return sortie
 
 
@@ -325,13 +325,13 @@ def unusable_models():
 def engines():
     """Ce que Lutin peut produire : {type: [moteurs]}. L'image a toujours des moteurs livrés ; la vidéo et le son n'en ont que si l'utilisateur a collé un workflow (clés « video… » et « son… »)."""
     ws = addons.stream(IDENT).get("workflows") or {}
-    sortie = {"image": sorted({"Checkpoint"} | {libelle_famille(c) for c, _ in familles_connues() if c in ws})}
+    sortie = {"image": sorted({"Checkpoint"} | {family_label(c) for c, _ in known_families() if c in ws})}
     for type_ in ("video", "son"):
         sortie[type_] = sorted(k for k in ws if k == type_ or k.startswith(type_ + "_"))
     return sortie
 
 
-def choix(cle):
+def choices(cle):
     """Les valeurs d'un réglage à liste déroulante dynamique (addons.decrire) : le modèle à utiliser = « automatique » ou l'un des modèles que Lutin sait faire tourner."""
     if cle != "modele":
         return None
@@ -368,30 +368,30 @@ def text_models():
 
 
 # --------------------------------------------------------------------------- générer
-def remplir_workflow(wf, valeurs):
+def fill_workflow(wf, valeurs):
     """Remplace les marques {nom} d'un workflow par leurs valeurs. Une marque qui occupe toute la valeur garde son type (nombre)."""
     if isinstance(wf, dict):
-        return {k: remplir_workflow(v, valeurs) for k, v in wf.items()}
+        return {k: fill_workflow(v, valeurs) for k, v in wf.items()}
     if isinstance(wf, list):
-        return [remplir_workflow(v, valeurs) for v in wf]
+        return [fill_workflow(v, valeurs) for v in wf]
     if isinstance(wf, str):
-        m = RE_MARQUE_ENTIERE.match(wf)
+        m = RE_WHOLE_MARKER.match(wf)
         if m and m.group(1) in valeurs:
             return valeurs[m.group(1)]
-        return RE_MARQUE.sub(lambda mo: str(valeurs[mo.group(1)]) if mo.group(1) in valeurs else mo.group(0), wf)
+        return RE_MARKER.sub(lambda mo: str(valeurs[mo.group(1)]) if mo.group(1) in valeurs else mo.group(0), wf)
     return wf
 
 
-def marques_restantes(wf):
+def remaining_markers(wf):
     trouvees = set()
     if isinstance(wf, dict):
         for v in wf.values():
-            trouvees |= marques_restantes(v)
+            trouvees |= remaining_markers(v)
     elif isinstance(wf, list):
         for v in wf:
-            trouvees |= marques_restantes(v)
+            trouvees |= remaining_markers(v)
     elif isinstance(wf, str):
-        trouvees |= set(RE_MARQUE.findall(wf))
+        trouvees |= set(RE_MARKER.findall(wf))
     return trouvees
 
 
@@ -405,10 +405,10 @@ def _integer(valeur, nom, mini, maxi, defaut):
     return max(mini, min(maxi, n))
 
 
-LIBELLES_FAMILLE = {"image_flux": "Flux", "image_qwen": "Qwen-Image", "image_zimage": "Z-Image"}
+FAMILY_LABELS = {"image_flux": "Flux", "image_qwen": "Qwen-Image", "image_zimage": "Z-Image"}
 
 
-def familles_connues():
+def known_families():
     """Les familles de modèles que Lutin sait faire tourner : celles qui sont livrées (Flux, Qwen-Image, Z-Image) et celles que l'utilisateur ajoute dans le flux, SI le workflow du même nom existe :
     {"familles": {"image_hidream": ["hidream"]}, "workflows": {"image_hidream": {…}}, "ressources": {"image_hidream": {…}}}."""
     f = addons.stream(IDENT)
@@ -417,17 +417,17 @@ def familles_connues():
     for cle, mots in (f.get("familles") or {}).items():
         if isinstance(mots, list) and str(cle) in workflows:
             ajoutees.append((str(cle), tuple(str(m).lower() for m in mots if str(m).strip())))
-    return tuple(ajoutees) + FAMILLES                  # les siennes d'abord : il peut remplacer une famille livrée
+    return tuple(ajoutees) + FAMILIES                  # les siennes d'abord : il peut remplacer une famille livrée
 
 
-def libelle_famille(cle):
-    return LIBELLES_FAMILLE.get(cle) or str(cle).replace("image_", "").replace("_", " ").strip().title()
+def family_label(cle):
+    return FAMILY_LABELS.get(cle) or str(cle).replace("image_", "").replace("_", " ").strip().title()
 
 
 def family_of(nom):
     """La famille d'un modèle de diffusion d'après son nom de fichier (« image_flux », « image_qwen », « image_zimage », ou une famille ajoutée par l'utilisateur), ou ''."""
     n = str(nom).lower()
-    for cle, mots in familles_connues():
+    for cle, mots in known_families():
         if any(m in n for m in mots):
             return cle
     return ""
@@ -437,7 +437,7 @@ def _installed(genre):
     return list(list_models().get("modeles", {}).get(genre, []))
 
 
-def _correspond(liste, voulu):
+def _matches(liste, voulu):
     """Le fichier installé qui correspond à ce que demande le modèle : le même nom, ou à la casse près, ou un seul fichier qui contient ces mots."""
     voulu = str(voulu).strip().lower()
     for n in liste:
@@ -450,7 +450,7 @@ def _correspond(liste, voulu):
 TRIVIAL_WORDS = {"safetensors", "ckpt", "base", "fp8", "fp16", "fp32", "bf16", "dev", "pruned", "emaonly", "ema", "final", "model", "models", "checkpoint", "diffusion", "scaled", "lora", "vae"}
 
 
-def _nomme(nom, demande, message):
+def _named(nom, demande, message):
     """L'utilisateur a-t-il nommé ce modèle dans ses messages ? Par le nom que propose le modèle de langage, par le nom du fichier, ou par un mot distinctif du fichier (« sdxl », « flux »…)."""
     msg = str(message or "").lower()
     if not msg:
@@ -469,8 +469,8 @@ def choose_model(demande="", message="", detail=False):
         raise _m.ErreurOutil(_t("Je ne vois aucun modèle d'image dans ComfyUI (ni dans checkpoints ni dans diffusion_models) : l'utilisateur doit en installer un."))
     ecarte = ""
     if reglage and demande:
-        proposee = _correspond(checkpoints, demande) or _correspond(diffusion, demande) or demande
-        if not _nomme(proposee, demande, message):
+        proposee = _matches(checkpoints, demande) or _matches(diffusion, demande) or demande
+        if not _named(proposee, demande, message):
             ecarte, demande = demande, ""                  # le modèle de langage propose un modèle que l'utilisateur n'a pas nommé : le réglage de l'utilisateur l'emporte
 
     def fin(r):
@@ -478,10 +478,10 @@ def choose_model(demande="", message="", detail=False):
     source_reglage = bool(reglage) and not demande
     demande = demande or reglage
     if demande:
-        trouve = _correspond(checkpoints, demande)
+        trouve = _matches(checkpoints, demande)
         if trouve:
             return fin(("image", trouve))
-        trouve = _correspond(diffusion, demande)
+        trouve = _matches(diffusion, demande)
         if trouve:
             cle = family_of(trouve)
             if not cle:
@@ -496,7 +496,7 @@ def choose_model(demande="", message="", detail=False):
     raise _m.ErreurOutil(_t("Aucun de tes modèles de diffusion n'est d'une famille que je connais (Flux, Qwen-Image, Z-Image) : {}").format(", ".join(diffusion[:15])))
 
 
-def ressources_pour(cle, flux_actuel):
+def resources_for(cle, flux_actuel):
     """Les fichiers dont le workflow a besoin en plus du modèle (encodeur de texte, VAE) : choisis parmi ceux qui sont installés, d'après les mots du flux (« ressources »)."""
     voulues = (flux_actuel.get("ressources") or {}).get(cle) or {}
     trouvees = {}
@@ -504,10 +504,10 @@ def ressources_pour(cle, flux_actuel):
         if not mots:
             continue
         installes = _installed(genre)
-        choix = next((n for mot in mots for n in installes if mot.lower() in n.lower().rsplit("/", 1)[-1]), "")
-        if not choix:
+        found = next((n for mot in mots for n in installes if mot.lower() in n.lower().rsplit("/", 1)[-1]), "")
+        if not found:
             raise _m.ErreurOutil(_t("Il me manque un fichier pour ce modèle : {} (dossier {}, nom contenant {}). L'utilisateur doit l'installer.").format({"clip": _t("encodeur de texte"), "clip2": _t("second encodeur de texte"), "vae": "VAE"}[nom], genre, " / ".join(mots)))
-        trouvees[nom] = choix
+        trouvees[nom] = found
     return trouvees
 
 
@@ -531,7 +531,7 @@ def parameters(args, flux_actuel, type_):
     return v
 
 
-def outil_generer(args, ctx):
+def generate_tool(args, ctx):
     """L'outil « comfy_generer » : image, vidéo ou son. Demande ton accord, libère la carte graphique, envoie le workflow et attend le résultat."""
     type_ = str(args.get("type") or "image").lower()
     if type_ not in TYPES:
@@ -549,9 +549,9 @@ def outil_generer(args, ctx):
     v = parameters(args, f, cle)
     if modele:
         v["modele"] = modele
-        v.update(ressources_pour(cle, f))
-    complet = remplir_workflow(wf, v)
-    restantes = marques_restantes(complet)
+        v.update(resources_for(cle, f))
+    complet = fill_workflow(wf, v)
+    restantes = remaining_markers(complet)
     if restantes:
         raise _m.ErreurOutil(_t("Le workflow contient des marques que Lutin ne sait pas remplir : {}.").format(", ".join(sorted("{" + x + "}" for x in restantes))))
     detail = _t("Description : {}\nTaille : {}×{} · modèle : {}").format(v["prompt"][:300], v["largeur"], v["hauteur"], v["modele"] or _t("(celui du workflow)"))
@@ -559,9 +559,9 @@ def outil_generer(args, ctx):
     if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, "", auto=auto):
         from . import tools
         return tools.refus(ctx, _t("Refusé par l'utilisateur."))
-    lance = assurer_comfyui(ctx.get("stop"))
+    lance = ensure_comfyui(ctx.get("stop"))
     try:
-        res = _soumettre_et_attendre(f, v, complet, type_, ctx)
+        res = _submit_and_wait(f, v, complet, type_, ctx)
         if ignore:
             res += _t("\nModèle utilisé : {} (réglage de l'utilisateur) ; le modèle « {} » que tu demandais n'a pas été retenu car l'utilisateur ne l'a pas nommé.").format(modele, ignore)
         return res
@@ -570,7 +570,7 @@ def outil_generer(args, ctx):
             stop_comfyui()                                                      # ComfyUI rend la mémoire : le modèle de langage la retrouve à la prochaine question
 
 
-def _joindre(fichiers, ctx):
+def _join(fichiers, ctx):
     """Les fichiers qui ne sont pas des images (vidéo, son) : une carte sous le message pour les ouvrir, les télécharger ou les supprimer."""
     dossier = addons.settings(IDENT).get("dossier") or ""
     if not dossier:
@@ -616,7 +616,7 @@ def detail_execution(messages):
     return ""
 
 
-def _afficher(fichiers, ctx):
+def _show(fichiers, ctx):
     """Copie les images produites (PNG, JPEG, WebP, GIF animé) dans les images de Lutin et les attache au résultat de l'outil : la page les affiche dans la conversation. Renvoie les identifiants."""
     from . import images
     dossier = addons.settings(IDENT).get("dossier") or ""
@@ -638,26 +638,26 @@ def _afficher(fichiers, ctx):
     return ids
 
 
-def _soumettre_et_attendre(f, v, complet, type_, ctx):
+def _submit_and_wait(f, v, complet, type_, ctx):
     try:
         if _m.reglages().get("liberer_si_comfy", True):
             _m.liberer_vram()                                                      # le modèle de langage cède la carte graphique à ComfyUI
     except Exception as erreur:  # noqa: BLE001  (ne pas échouer pour ça)
         _m.journaliser("ComfyUI : libération de la carte impossible ({!r}).".format(erreur))
-    r = addons.appeler(IDENT, "soumettre", {"workflow": complet}, delai=30)
+    r = addons.call(IDENT, "soumettre", {"workflow": complet}, delai=30)
     if not r["ok"]:
         return _t("ComfyUI a refusé le travail :\n{}").format(detail_error(r.get("corps")) if r.get("corps") else r["erreur"])
     ident = (r["extrait"] or {}).get("id")
     if not ident:
         return _t("ComfyUI n'a pas donné d'identifiant de travail.")
-    delai = int((f.get("parametres") or {}).get(type_, {}).get("delai", DELAI_PAR_DEFAUT[type_]))
+    delai = int((f.get("parametres") or {}).get(type_, {}).get("delai", DEFAULT_TIMEOUT[type_]))
     fin = time.time() + delai
     stop = ctx.get("stop")
     while time.time() < fin:
         if stop is not None and stop.is_set():
-            addons.appeler(IDENT, "interrompre", {}, delai=5)
+            addons.call(IDENT, "interrompre", {}, delai=5)
             raise _m.Arret()
-        h = addons.appeler(IDENT, "historique", {"id": ident}, delai=15)
+        h = addons.call(IDENT, "historique", {"id": ident}, delai=15)
         entree = ((h["donnees"] or {}).get(ident) or {}) if h["ok"] else {}
         if entree:
             statut = (entree.get("status") or {}).get("status_str")
@@ -673,8 +673,8 @@ def _soumettre_et_attendre(f, v, complet, type_, ctx):
             if fichiers or statut == "success":
                 dossier = addons.settings(IDENT).get("dossier") or ""
                 chemins = [str(Path(dossier) / "output" / f_) if dossier else "output/" + f_ for f_ in fichiers]
-                montrees = _afficher(fichiers, ctx)
-                _joindre(fichiers, ctx)
+                montrees = _show(fichiers, ctx)
+                _join(fichiers, ctx)
                 return _t("Terminé ({} fichier(s)) :\n{}\nGraine : {}.").format(len(fichiers), "\n".join(chemins) or _t("(ComfyUI n'a rien enregistré)"), v["graine"]) + (
                     _t("\nL'image est affichée à l'utilisateur dans la conversation : ne la montre pas toi-même et ne répète pas son chemin.") if montrees else "")
         time.sleep(2)
@@ -682,7 +682,7 @@ def _soumettre_et_attendre(f, v, complet, type_, ctx):
 
 
 # --------------------------------------------------------------------------- télécharger un modèle
-def hote_telechargement_permis(hote):
+def download_host_allowed(hote):
     hote = (hote or "").lower()
     if _net_guard.local_test_mode() and hote in ("127.0.0.1", "localhost"):          # pour les tests seulement
         return True
@@ -699,18 +699,18 @@ def name_of_file(url, entete=""):
         nom = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
     nom = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(nom.replace(chr(92), "/")).name).strip(" .")
     if not nom.lower().endswith(EXTENSIONS):
-        raise addons.ErreurAddon(_t("Ce n'est pas un fichier de modèle ({}).").format(", ".join(EXTENSIONS[:3]) + "…"))
+        raise addons.AddonError(_t("Ce n'est pas un fichier de modèle ({}).").format(", ".join(EXTENSIONS[:3]) + "…"))
     return nom[:150]
 
 
-class _RedirectionControlee(urllib.request.HTTPRedirectHandler):
+class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
     """Une redirection n'est suivie que vers un site permis, en https : la vérification a lieu AVANT de contacter le nouveau site."""
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         p = urllib.parse.urlsplit(newurl)
         local = _net_guard.local_test_mode() and p.hostname in ("127.0.0.1", "localhost")
-        if (p.scheme != "https" and not local) or not hote_telechargement_permis(p.hostname):
-            raise addons.ErreurAddon(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(p.hostname or "?"))
+        if (p.scheme != "https" and not local) or not download_host_allowed(p.hostname):
+            raise addons.AddonError(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(p.hostname or "?"))
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
@@ -718,27 +718,27 @@ def _download(url, destination_dossier):
     t = DOWNLOAD
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Lutin"})
-        with urllib.request.build_opener(_RedirectionControlee).open(req, timeout=60) as r:
+        with urllib.request.build_opener(_CheckedRedirect).open(req, timeout=60) as r:
             final = urllib.parse.urlsplit(r.geturl())
             if final.scheme != "https" and not (_net_guard.local_test_mode() and final.hostname in ("127.0.0.1", "localhost")):
-                raise addons.ErreurAddon(_t("Le site redirige vers une adresse non chiffrée : refusé."))
-            if not hote_telechargement_permis(final.hostname):
-                raise addons.ErreurAddon(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(final.hostname))
+                raise addons.AddonError(_t("Le site redirige vers une adresse non chiffrée : refusé."))
+            if not download_host_allowed(final.hostname):
+                raise addons.AddonError(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(final.hostname))
             if not _net_guard.local_test_mode():
                 from . import web
                 web.check_host_web(r.geturl())
             nom = name_of_file(r.geturl(), r.headers.get("Content-Disposition", "")) if not t["nom"] else t["nom"]
             if r.headers.get_content_type() == "text/html":
-                raise addons.ErreurAddon(_t("Le site a renvoyé une page web, pas un fichier (le modèle demande peut-être une connexion à ton compte)."))
+                raise addons.AddonError(_t("Le site a renvoyé une page web, pas un fichier (le modèle demande peut-être une connexion à ton compte)."))
             t["total"] = int(r.headers.get("Content-Length") or 0)
             if t["total"] > MAX_SIZE_MODEL:
-                raise addons.ErreurAddon(_t("Fichier trop gros ({} Go au plus).").format(MAX_SIZE_MODEL // 1024 ** 3))
+                raise addons.AddonError(_t("Fichier trop gros ({} Go au plus).").format(MAX_SIZE_MODEL // 1024 ** 3))
             Path(destination_dossier).mkdir(parents=True, exist_ok=True)
             if shutil.disk_usage(str(destination_dossier)).free < t["total"] + 2 * 1024 ** 3:
-                raise addons.ErreurAddon(_t("Pas assez de place sur le disque pour ce fichier ({} Go).").format(round(t["total"] / 1e9, 1)))
+                raise addons.AddonError(_t("Pas assez de place sur le disque pour ce fichier ({} Go).").format(round(t["total"] / 1e9, 1)))
             cible = Path(destination_dossier) / nom
             if cible.exists():
-                raise addons.ErreurAddon(_t("Un fichier « {} » existe déjà : rien n'est écrasé.").format(nom))
+                raise addons.AddonError(_t("Un fichier « {} » existe déjà : rien n'est écrasé.").format(nom))
             t["nom"] = nom
             partiel = cible.with_name(nom + ".part")
             try:
@@ -748,19 +748,19 @@ def _download(url, destination_dossier):
                         if not bloc:
                             break
                         if t["arret"].is_set():
-                            raise addons.ErreurAddon(_t("Téléchargement annulé."))
+                            raise addons.AddonError(_t("Téléchargement annulé."))
                         sortie.write(bloc)
                         t["fait"] += len(bloc)
                         if t["fait"] > MAX_SIZE_MODEL:
-                            raise addons.ErreurAddon(_t("Fichier trop gros ({} Go au plus).").format(MAX_SIZE_MODEL // 1024 ** 3))
+                            raise addons.AddonError(_t("Fichier trop gros ({} Go au plus).").format(MAX_SIZE_MODEL // 1024 ** 3))
                 if t["total"] and t["fait"] != t["total"]:
-                    raise addons.ErreurAddon(_t("Téléchargement incomplet ({} sur {} octets).").format(t["fait"], t["total"]))
+                    raise addons.AddonError(_t("Téléchargement incomplet ({} sur {} octets).").format(t["fait"], t["total"]))
                 partiel.replace(cible)
             finally:
                 partiel.unlink(missing_ok=True)
         t["etat"] = "fini"
         CACHE["modeles"] = (0, None)
-    except addons.ErreurAddon as erreur:
+    except addons.AddonError as erreur:
         t.update(etat="erreur", erreur=str(erreur))
     except (urllib.error.URLError, OSError, ValueError) as erreur:
         t.update(etat="erreur", erreur=_t("Téléchargement impossible : {}").format(erreur))
@@ -771,33 +771,33 @@ def start_download(url, genre):
     url = str(url or "").strip()
     p = urllib.parse.urlsplit(url)
     if p.scheme != "https" and not (_net_guard.local_test_mode() and p.scheme == "http"):
-        raise addons.ErreurAddon(_t("Colle l'adresse complète du fichier (https://…)."))
-    if not hote_telechargement_permis(p.hostname):
-        raise addons.ErreurAddon(_t("Seuls les téléchargements depuis Hugging Face et Civitai sont permis."))
+        raise addons.AddonError(_t("Colle l'adresse complète du fichier (https://…)."))
+    if not download_host_allowed(p.hostname):
+        raise addons.AddonError(_t("Seuls les téléchargements depuis Hugging Face et Civitai sont permis."))
     if genre not in KINDS_DOWNLOAD:
-        raise addons.ErreurAddon(_t("Type de modèle inconnu."))
+        raise addons.AddonError(_t("Type de modèle inconnu."))
     dossier = addons.settings(IDENT).get("dossier") or ""
     if not dossier or not valid_folder(dossier):
-        raise addons.ErreurAddon(_t("Choisis d'abord le dossier d'installation de ComfyUI."))
+        raise addons.AddonError(_t("Choisis d'abord le dossier d'installation de ComfyUI."))
     nom = name_of_file(url)
     with LOCK_DOWNLOAD:
         if DOWNLOAD["etat"] == "en cours":
-            raise addons.ErreurAddon(_t("Un téléchargement est déjà en cours."))
+            raise addons.AddonError(_t("Un téléchargement est déjà en cours."))
         DOWNLOAD.update(etat="en cours", nom=nom, fait=0, total=0, erreur="")
         DOWNLOAD["arret"].clear()
     threading.Thread(target=_download, args=(url, Path(dossier) / "models" / genre), daemon=True, name="comfy-telechargement").start()
 
 
 # --------------------------------------------------------------------------- panneau de la page
-def etat():
-    r = detecter(profond=False)
+def state():
+    r = detect(profond=False)
     regle = addons.settings(IDENT).get("dossier") or ""
     r["dossier"] = regle or r["dossier"]
-    r["valide"], r["raison"] = diagnostic_dossier(r["dossier"])
-    r["lancement"] = bool(r["valide"] and commande_lancement(r["dossier"], addons.settings(IDENT).get("port") or "8188"))
+    r["valide"], r["raison"] = folder_diagnosis(r["dossier"])
+    r["lancement"] = bool(r["valide"] and launch_command(r["dossier"], addons.settings(IDENT).get("port") or "8188"))
     r["modeles"] = list_models()
     r["familles"] = {n: family_of(n) for n in r["modeles"].get("modeles", {}).get("diffusion_models", [])}
-    r["libelles_familles"] = {c: libelle_famille(c) for c, _ in familles_connues()}
+    r["libelles_familles"] = {c: family_label(c) for c, _ in known_families()}
     r["workflows"] = sorted((addons.stream(IDENT).get("workflows") or {}).keys())
     r["moteurs"] = engines()
     r["inutilisables"] = unusable_models()
@@ -813,21 +813,21 @@ def action(nom, donnees):
             addons.save_settings(IDENT, {"dossier": dossier})
             CACHE["modeles"] = (0, None)
         DETECTION["dossier"] = dossier
-        return dict(etat(), introuvable=not dossier)
+        return dict(state(), introuvable=not dossier)
     if nom == "modeles":
         return list_models(forcer=True)
     if nom == "telecharger":
         start_download(donnees.get("url"), str(donnees.get("genre") or ""))
-        return etat()
+        return state()
     if nom == "annuler_telechargement":
         DOWNLOAD["arret"].set()
-        return etat()
+        return state()
     if nom == "utiliser_dossier":
         dossier = normalize_folder(donnees.get("dossier"))
-        valide, raison = diagnostic_dossier(dossier)
+        valide, raison = folder_diagnosis(dossier)
         if not valide:
-            raise addons.ErreurAddon(raison)
+            raise addons.AddonError(raison)
         addons.save_settings(IDENT, {"dossier": dossier})
         CACHE["modeles"] = (0, None)
-        return etat()
-    raise addons.ErreurAddon(_t("Action inconnue."))
+        return state()
+    raise addons.AddonError(_t("Action inconnue."))

@@ -2611,7 +2611,7 @@ class Chat(unittest.TestCase):
         nowhere = mock.patch.object(addons_comfyui, "find_folder", return_value="")
         nowhere.start()
         self.addCleanup(nowhere.stop)
-        secret_of = next((identifier, field["cle"]) for identifier in addons.ids() for field in addons.manifeste(identifier)["reglages"] if field.get("secret"))
+        secret_of = next((identifier, field["cle"]) for identifier in addons.ids() for field in addons.manifest(identifier)["reglages"] if field.get("secret"))
         other = next(identifier for identifier in addons.ids() if identifier != secret_of[0])
         p.evaluer("location.hash = '#/agents/addons'")
         p.attendre("document.querySelectorAll('.addons .card').length === %d" % len(addons.ids()))
@@ -2619,7 +2619,7 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("document.querySelectorAll('.addons .card .toggle[aria-expanded=\"false\"]').length"), len(addons.ids()), "every add-on folded")
         self.assertFalse(p.evaluer("!!document.querySelector('.addons .card .actions')"), "folded: only the name, the state and the description")
         for identifier in (secret_of[0], other):
-            p.evaluer("[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText === %s).querySelector('.toggle').click()" % js(addons.decrire(identifier)["nom"]))
+            p.evaluer("[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText === %s).querySelector('.toggle').click()" % js(addons.describe(identifier)["nom"]))
         box = "#addon-%s-%s" % secret_of
         p.attendre("!!document.querySelector(%s)" % js(box))
         p.evaluer("(() => { const box = document.querySelector(%s); box.value = 'zzz-secret-value'; box.dispatchEvent(new Event('input', {bubbles: true})); })()" % js(box))
@@ -2628,7 +2628,7 @@ class Chat(unittest.TestCase):
         p.attendre("document.querySelector(%s).placeholder.length > 0" % js(box))
         self.assertEqual(p.evaluer("document.querySelector(%s).value" % js(box)), "", "a secret is never shown again")
         self.assertNotIn("zzz-secret-value", p.evaluer("document.querySelector('.addons').innerText"))
-        name = addons.decrire(other)["nom"]
+        name = addons.describe(other)["nom"]
         card = "[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText === %s)" % js(name)
         p.evaluer("[..." + card + ".querySelectorAll('.button')].find(b => b.innerText === 'Vérifier maintenant').click()")
         p.attendre("!!(" + card + ".querySelector('.check .warn'))")
@@ -2735,7 +2735,7 @@ class Chat(unittest.TestCase):
                "workflows": ["flux"], "moteurs": {"image": ["Checkpoint", "Flux"], "video": [], "son": []}, "inutilisables": [],
                "telechargement": {"etat": "", "nom": "", "fait": 0, "total": 0, "erreur": ""}, "genres": ["checkpoints", "loras"]}
         taken = []
-        for patch in (mock.patch.object(addons_comfyui, "etat", side_effect=lambda: dict(raw)), mock.patch.object(addons_comfyui, "action", side_effect=lambda name, data: taken.append((name, data)) or {})):
+        for patch in (mock.patch.object(addons_comfyui, "state", side_effect=lambda: dict(raw)), mock.patch.object(addons_comfyui, "action", side_effect=lambda name, data: taken.append((name, data)) or {})):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/agents/addons'")

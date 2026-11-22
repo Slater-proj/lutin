@@ -37,29 +37,29 @@ SHIPPED_FOLDER = Path(__file__).parent / "addons_livres"      # addons livrés (
 RE_ID = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 RE_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 RE_VARIABLE = re.compile(r"\{([a-z][a-z0-9_]{0,31})\}")
-RE_VARIABLE_ENTIERE = re.compile(r"^\{([a-z][a-z0-9_]{0,31})\}$")
-METHODES = ("GET", "POST")
+RE_WHOLE_VARIABLE = re.compile(r"^\{([a-z][a-z0-9_]{0,31})\}$")
+METHODS = ("GET", "POST")
 MAX_CALLS = 20
 MAX_REPLY = 1_000_000
 TIMEOUT_CALL = 30
 HISTORY_STREAM = 5                 # anciennes versions du flux gardées
-VERIFICATION_TOUS_LES = 24 * 3600   # secondes entre deux vérifications automatiques d'un addon actif
+CHECK_EVERY = 24 * 3600   # secondes entre deux vérifications automatiques d'un addon actif
 LOCK_STATE = threading.RLock()        # lire-modifier-écrire de addons.json et secrets.json : la page, la vérification quotidienne et les fils d'écoute ne s'écrasent pas
 STATE = {}                           # identifiant -> état d'exécution en mémoire (fil d'un addon qui tourne…)
 
 
-class ErreurAddon(Exception):
+class AddonError(Exception):
     pass
 
 
-class _SansRedirection(urllib.request.HTTPRedirectHandler):
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Un addon ne suit jamais une redirection : elle pourrait mener vers un site que son manifeste n'autorise pas (et lui faire envoyer ses identifiants)."""
 
     def redirect_request(self, *args, **kwargs):
         return None
 
 
-OUVREUR = urllib.request.build_opener(_SansRedirection)
+OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 # --------------------------------------------------------------------------- manifestes et flux
@@ -75,14 +75,14 @@ def ids():
         return []
 
 
-def manifeste(ident):
+def manifest(ident):
     if not RE_ID.match(str(ident or "")):
-        raise ErreurAddon(_t("Addon inconnu."))
+        raise AddonError(_t("Addon inconnu."))
     f = SHIPPED_FOLDER / ident / "addon.json"
     try:
         m = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        raise ErreurAddon(_t("Addon inconnu."))
+        raise AddonError(_t("Addon inconnu."))
     m["id"] = ident
     m.setdefault("hotes", [])
     m.setdefault("reglages", [])
@@ -104,14 +104,14 @@ def path_stream(ident):
 
 def stream(ident):
     """Le flux en vigueur : la version corrigée par l'utilisateur si elle existe et reste valide, sinon la version livrée."""
-    m = manifeste(ident)
+    m = manifest(ident)
     f = path_stream(ident)
     if f.is_file():
         try:
             propre = json.loads(f.read_text(encoding="utf-8"))
             validate_stream(propre, m)
             return propre
-        except (OSError, ValueError, ErreurAddon):
+        except (OSError, ValueError, AddonError):
             _m.journaliser("Flux de l'addon {} illisible ou invalide : version livrée utilisée.".format(ident))
     return shipped_stream(ident)
 
@@ -132,7 +132,7 @@ def signature_oauth1(methode, url, params, secret_consommateur, secret_jeton):
     return base64.b64encode(hmac.new(cle.encode("utf-8"), base.encode("utf-8"), hashlib.sha1).digest()).decode("ascii")
 
 
-def entete_oauth1(methode, url, cles, nonce=None, horodatage=None):
+def oauth1_header(methode, url, cles, nonce=None, horodatage=None):
     """L'en-tête « Authorization: OAuth … » d'une requête. `cles` : consumer_key, consumer_secret, token, token_secret. Les paramètres de l'adresse sont signés ; un corps JSON ne l'est pas."""
     p = urllib.parse.urlsplit(url)
     sans_requete = urllib.parse.urlunsplit((p.scheme, p.netloc, p.path, "", ""))
@@ -154,20 +154,20 @@ def allowed_host(url, m):
 def validate_stream(f, m):
     """Refuse un flux mal formé ou qui viserait un site hors manifeste. Lève ErreurAddon."""
     if not isinstance(f, dict) or not isinstance(f.get("appels"), dict):
-        raise ErreurAddon(_t("Flux invalide : il faut un objet avec « appels »."))
+        raise AddonError(_t("Flux invalide : il faut un objet avec « appels »."))
     if len(f["appels"]) > MAX_CALLS:
-        raise ErreurAddon(_t("Flux invalide : {} appels au plus.").format(MAX_CALLS))
+        raise AddonError(_t("Flux invalide : {} appels au plus.").format(MAX_CALLS))
     for nom, a in f["appels"].items():
         if not RE_KEY.match(str(nom)) or not isinstance(a, dict):
-            raise ErreurAddon(_t("Flux invalide : appel « {} » mal formé.").format(nom))
-        if str(a.get("methode", "GET")).upper() not in METHODES:
-            raise ErreurAddon(_t("Flux invalide : méthode de « {} » (GET ou POST).").format(nom))
+            raise AddonError(_t("Flux invalide : appel « {} » mal formé.").format(nom))
+        if str(a.get("methode", "GET")).upper() not in METHODS:
+            raise AddonError(_t("Flux invalide : méthode de « {} » (GET ou POST).").format(nom))
         url = str(a.get("url", ""))
         if not allowed_host(RE_VARIABLE.sub("x", url), m):
-            raise ErreurAddon(_t("Flux invalide : l'adresse de « {} » vise un site que cet addon n'a pas le droit de joindre.").format(nom))
+            raise AddonError(_t("Flux invalide : l'adresse de « {} » vise un site que cet addon n'a pas le droit de joindre.").format(nom))
         for cle in ("params", "corps", "attendu", "extraire"):
             if cle in a and not isinstance(a[cle], dict):
-                raise ErreurAddon(_t("Flux invalide : « {} » de « {} » doit être un objet.").format(cle, nom))
+                raise AddonError(_t("Flux invalide : « {} » de « {} » doit être un objet.").format(cle, nom))
     return True
 
 
@@ -195,7 +195,7 @@ def secrets_write(secrets):
 
 def settings(ident):
     """Les valeurs saisies : réglages simples et secrets réunis (pour l'usage interne seulement)."""
-    m = manifeste(ident)
+    m = manifest(ident)
     valeurs = dict(read_state().get(ident, {}).get("reglages", {}))
     sec = secrets_read().get(ident, {})
     for r in m["reglages"]:
@@ -208,7 +208,7 @@ def settings(ident):
 
 def save_settings(ident, nouveaux):
     """Enregistre les réglages saisis. Un secret vide garde l'ancienne valeur ; une clé inconnue est refusée."""
-    m = manifeste(ident)
+    m = manifest(ident)
     connus = {r["cle"]: r for r in m["reglages"]}
     with LOCK_STATE:
         etat, sec = read_state(), secrets_read()
@@ -216,12 +216,12 @@ def save_settings(ident, nouveaux):
         secret_courant = sec.setdefault(ident, {})
         for cle, valeur in (nouveaux or {}).items():
             if cle not in connus:
-                raise ErreurAddon(_t("Réglage inconnu : {}.").format(cle))
+                raise AddonError(_t("Réglage inconnu : {}.").format(cle))
             valeur = str(valeur).strip()
             if len(valeur) > 2000:
-                raise ErreurAddon(_t("Valeur trop longue pour « {} ».").format(cle))
+                raise AddonError(_t("Valeur trop longue pour « {} ».").format(cle))
             if connus[cle].get("choix") and valeur not in [c[0] for c in connus[cle]["choix"]]:
-                raise ErreurAddon(_t("Valeur inconnue pour « {} ».").format(cle))
+                raise AddonError(_t("Valeur inconnue pour « {} ».").format(cle))
             if connus[cle].get("secret"):
                 if valeur:
                     secret_courant[cle] = valeur
@@ -229,7 +229,7 @@ def save_settings(ident, nouveaux):
                 courant[cle] = valeur
         secrets_write(sec)
         write_state(etat)
-    return decrire(ident)
+    return describe(ident)
 
 
 def visible_texts(m):
@@ -242,9 +242,9 @@ def visible_texts(m):
     return [t for t in textes if t]
 
 
-def decrire(ident):
+def describe(ident):
     """Ce que la page voit : le manifeste (traduit), l'état, les réglages (jamais la valeur d'un secret : seulement s'il est défini)."""
-    m = manifeste(ident)
+    m = manifest(ident)
     etat = read_state().get(ident, {})
     valeurs = settings(ident)
     champs = []
@@ -255,7 +255,7 @@ def decrire(ident):
         if r.get("dynamique"):                                                          # valeurs fournies par la partie vivante de l'addon (ex. les modèles installés), jamais un champ libre
             module = module_code(ident)
             try:
-                dyn = module.choix(r["cle"]) if module is not None and hasattr(module, "choix") else None
+                dyn = module.choices(r["cle"]) if module is not None and hasattr(module, "choices") else None
             except Exception as erreur:  # noqa: BLE001  (une liste introuvable ne casse pas la page)
                 _m.journaliser("Addon {} : liste « {} » indisponible ({!r}).".format(ident, r["cle"], erreur))
                 dyn = None
@@ -276,7 +276,7 @@ def decrire(ident):
 
 
 def entries():
-    return [decrire(i) for i in ids()]
+    return [describe(i) for i in ids()]
 
 
 # --------------------------------------------------------------------------- les appels
@@ -296,24 +296,24 @@ def _path(donnees, chemin):
     return cur
 
 
-def _remplir(valeur, variables, url=False):
+def _fill(valeur, variables, url=False):
     """Remplace {nom} par la valeur ; dans une adresse, la valeur est encodée. Une variable manquante est une erreur claire (pas un appel avec « {jeton} » dedans)."""
     if isinstance(valeur, dict):
-        return {k: _remplir(v, variables) for k, v in valeur.items()}
+        return {k: _fill(v, variables) for k, v in valeur.items()}
     if isinstance(valeur, list):
-        return [_remplir(v, variables) for v in valeur]
+        return [_fill(v, variables) for v in valeur]
     if not isinstance(valeur, str):
         return valeur
-    entiere = RE_VARIABLE_ENTIERE.match(valeur)
+    entiere = RE_WHOLE_VARIABLE.match(valeur)
     if entiere and isinstance(variables.get(entiere.group(1)), (dict, list)):
         return variables[entiere.group(1)]                                  # une marque seule garde son type : un objet (workflow) reste un objet
     manquantes = [n for n in RE_VARIABLE.findall(valeur) if n not in variables or variables[n] in (None, "")]
     if manquantes:
-        raise ErreurAddon(_t("Il manque : {}.").format(", ".join(manquantes)))
+        raise AddonError(_t("Il manque : {}.").format(", ".join(manquantes)))
     return RE_VARIABLE.sub(lambda mo: urllib.parse.quote(str(variables[mo.group(1)]), safe="") if url else str(variables[mo.group(1)]), valeur)
 
 
-def masquer(texte, variables):
+def mask(texte, variables):
     """Retire les secrets d'un texte avant de l'afficher ou de l'écrire dans le journal."""
     for v in variables.values():
         if isinstance(v, str) and len(v) >= 6:
@@ -321,35 +321,35 @@ def masquer(texte, variables):
     return texte
 
 
-FERMES = {}                  # (hôte, port) -> instant jusqu'auquel on le sait fermé
+CLOSED = {}                  # (hôte, port) -> instant jusqu'auquel on le sait fermé
 
 
-def _port_ouvert(hote, port):
+def _port_open(hote, port):
     """Quelqu'un écoute-t-il sur ce port de cette machine ? Sous Windows, une connexion refusée met ~2 secondes à échouer (et la page en enchaîne plusieurs) : on vérifie d'abord, en 0,3 s, et on retient « fermé » 2 secondes."""
-    if FERMES.get((hote, port), 0) > time.time():
+    if CLOSED.get((hote, port), 0) > time.time():
         return False
     try:
         socket.create_connection((hote, port), timeout=0.3).close()
         return True
     except OSError:
-        FERMES[(hote, port)] = time.time() + 2
+        CLOSED[(hote, port)] = time.time() + 2
         return False
 
 
-def appeler(ident, nom, variables=None, delai=TIMEOUT_CALL):
+def call(ident, nom, variables=None, delai=TIMEOUT_CALL):
     """Fait un appel du flux. Renvoie {ok, donnees, extrait, erreur}. Ne lève pas pour une panne du service (ok=False + erreur lisible) ; lève ErreurAddon pour un appel inconnu ou une variable manquante."""
-    m = manifeste(ident)
+    m = manifest(ident)
     f = stream(ident)
     a = f["appels"].get(nom)
     if not a:
-        raise ErreurAddon(_t("Appel inconnu dans le flux : {}.").format(nom))
+        raise AddonError(_t("Appel inconnu dans le flux : {}.").format(nom))
     valeurs = dict(settings(ident))
     valeurs.update(variables or {})
-    url = _remplir(a["url"], valeurs, url=True)
+    url = _fill(a["url"], valeurs, url=True)
     if not allowed_host(url, m):
-        raise ErreurAddon(_t("Adresse refusée : cet addon ne peut pas joindre ce site."))
-    params = _remplir(a.get("params", {}), valeurs)
-    corps = _remplir(a.get("corps", {}), valeurs)
+        raise AddonError(_t("Adresse refusée : cet addon ne peut pas joindre ce site."))
+    params = _fill(a.get("params", {}), valeurs)
+    corps = _fill(a.get("corps", {}), valeurs)
     methode = str(a.get("methode", "GET")).upper()
     donnees_envoi, en_tetes = None, {"User-Agent": "Lutin", "Accept": "application/json"}
     if methode == "GET" and params:
@@ -373,25 +373,25 @@ def appeler(ident, nom, variables=None, delai=TIMEOUT_CALL):
         cles = {k: valeurs.get(nom, "") for k, nom in auth["cles"].items()}
         manquantes = [nom for k, nom in auth["cles"].items() if not valeurs.get(nom)]
         if manquantes:
-            raise ErreurAddon(_t("Il manque : {}.").format(", ".join(manquantes)))
-        en_tetes["Authorization"] = entete_oauth1(methode, url, cles)
-    if hote in ("127.0.0.1", "localhost") and not _port_ouvert(hote, urllib.parse.urlparse(url).port or 80):
+            raise AddonError(_t("Il manque : {}.").format(", ".join(manquantes)))
+        en_tetes["Authorization"] = oauth1_header(methode, url, cles)
+    if hote in ("127.0.0.1", "localhost") and not _port_open(hote, urllib.parse.urlparse(url).port or 80):
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": _t("Le service ne répond pas : {}").format(_t("rien n'écoute sur ce port."))}
     req = urllib.request.Request(url, data=donnees_envoi, headers=en_tetes, method=methode)
     try:
-        with OUVREUR.open(req, timeout=delai) as r:
+        with OPENER.open(req, timeout=delai) as r:
             brut = r.read(MAX_REPLY + 1)
     except urllib.error.HTTPError as e:
         corps_err = e.read(4000).decode("utf-8", "replace")
-        return {"ok": False, "donnees": None, "extrait": {}, "erreur": masquer("HTTP {} : {}".format(e.code, corps_err.strip()[:300]), valeurs), "corps": masquer(corps_err, valeurs)}
+        return {"ok": False, "donnees": None, "extrait": {}, "erreur": mask("HTTP {} : {}".format(e.code, corps_err.strip()[:300]), valeurs), "corps": mask(corps_err, valeurs)}
     except (urllib.error.URLError, OSError, ValueError) as e:
-        return {"ok": False, "donnees": None, "extrait": {}, "erreur": masquer(_t("Le service ne répond pas : {}").format(e), valeurs)}
+        return {"ok": False, "donnees": None, "extrait": {}, "erreur": mask(_t("Le service ne répond pas : {}").format(e), valeurs)}
     if len(brut) > MAX_REPLY:
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": _t("Réponse trop grosse (plus de 1 Mo).")}
     try:
         donnees = json.loads(brut.decode("utf-8", "replace"))
     except ValueError:
-        return {"ok": False, "donnees": None, "extrait": {}, "erreur": _t("Le service n'a pas répondu en JSON (a-t-il changé ?) : {}").format(masquer(brut.decode("utf-8", "replace")[:200], valeurs))}
+        return {"ok": False, "donnees": None, "extrait": {}, "erreur": _t("Le service n'a pas répondu en JSON (a-t-il changé ?) : {}").format(mask(brut.decode("utf-8", "replace")[:200], valeurs))}
     for chemin, attendu in (a.get("attendu") or {}).items():
         if _path(donnees, chemin) != attendu:
             return {"ok": False, "donnees": donnees, "extrait": {}, "erreur": _t("Réponse inattendue : « {} » devrait valoir {} (le service a-t-il changé ?).").format(chemin, json.dumps(attendu))}
@@ -402,23 +402,23 @@ def appeler(ident, nom, variables=None, delai=TIMEOUT_CALL):
 # --------------------------------------------------------------------------- vérification, activation
 def check(ident):
     """Vérifie l'addon : réglages présents puis chaque appel de vérification du manifeste. Enregistre et renvoie {ok, date, etapes: [{appel, ok, message}]}."""
-    m = manifeste(ident)
+    m = manifest(ident)
     valeurs = settings(ident)
     etapes = []
     manquants = [r.get("libelle", r["cle"]) for r in m["reglages"] if r.get("obligatoire", True) and not valeurs.get(r["cle"])]
     if manquants:
         etapes.append({"appel": "", "ok": False, "message": _t("À remplir d'abord : {}.").format(", ".join(manquants))})
-    elif module_code(ident) is not None and hasattr(module_code(ident), "verifier"):
+    elif module_code(ident) is not None and hasattr(module_code(ident), "check"):
         try:
-            etapes = module_code(ident).verifier()
+            etapes = module_code(ident).check()
         except Exception as e:  # noqa: BLE001  (une vérification qui plante est un échec lisible, pas une erreur de Lutin)
-            etapes = [{"appel": "", "ok": False, "message": masquer(str(e), valeurs)}]
+            etapes = [{"appel": "", "ok": False, "message": mask(str(e), valeurs)}]
     else:
         for nom in m["verification"]:
             try:
-                r = appeler(ident, nom)
+                r = call(ident, nom)
                 etapes.append({"appel": nom, "ok": r["ok"], "message": r["erreur"] if not r["ok"] else (", ".join("{} = {}".format(k, v) for k, v in r["extrait"].items()) or "ok")})
-            except ErreurAddon as e:
+            except AddonError as e:
                 etapes.append({"appel": nom, "ok": False, "message": str(e)})
             if not etapes[-1]["ok"]:
                 break
@@ -430,13 +430,13 @@ def check(ident):
     return resultat
 
 
-def activer(ident, actif):
+def activate(ident, actif):
     """Active ou désactive. Activer demande une vérification réussie ; le démarrage de la partie vivante (fil d'écoute…) est confié au module de l'addon s'il en a un."""
-    manifeste(ident)
+    manifest(ident)
     if actif:
         v = check(ident)
         if not v["ok"]:
-            raise ErreurAddon(_t("Vérification échouée : {}").format(" ; ".join(e["message"] for e in v["etapes"] if not e["ok"])))
+            raise AddonError(_t("Vérification échouée : {}").format(" ; ".join(e["message"] for e in v["etapes"] if not e["ok"])))
     with LOCK_STATE:
         etat = read_state()
         etat.setdefault(ident, {})["actif"] = bool(actif)
@@ -444,7 +444,7 @@ def activer(ident, actif):
     module = module_code(ident)
     if module:
         try:
-            (module.demarrer if actif else module.arreter)()
+            (module.start if actif else module.stop)()
         except Exception as e:  # noqa: BLE001  (un addon qui plante ne doit pas faire tomber Lutin)
             _m.journaliser("Addon {} : {} impossible ({!r}).".format(ident, "démarrage" if actif else "arrêt", e))
             if actif:
@@ -452,12 +452,12 @@ def activer(ident, actif):
                     etat = read_state()
                     etat.setdefault(ident, {})["actif"] = False
                     write_state(etat)
-                raise ErreurAddon(_t("Démarrage impossible : {}").format(e))
-    return decrire(ident)
+                raise AddonError(_t("Démarrage impossible : {}").format(e))
+    return describe(ident)
 
 
 def module_code(ident):
-    """Le code de l'addon s'il en a un (lutin.addons_<id> : demarrer(), arreter()), sinon None. Le code est livré avec Lutin, jamais lu depuis les données."""
+    """Le code de l'addon s'il en a un (lutin.addons_<id> : start(), stop()), sinon None. Le code est livré avec Lutin, jamais lu depuis les données."""
     import importlib
     try:
         return importlib.import_module("lutin.addons_" + ident.replace("-", "_"))
@@ -469,7 +469,7 @@ def loop_verification():
     while True:
         time.sleep(3600)
         try:
-            verifier_si_besoin()
+            check_if_due()
         except Exception as erreur:  # noqa: BLE001
             _m.journaliser("Vérification des addons : {!r}".format(erreur))
 
@@ -483,12 +483,12 @@ def start_active():
             module = module_code(ident)
             if module:
                 try:
-                    module.demarrer()
+                    module.start()
                 except Exception as erreur:  # noqa: BLE001
                     _m.journaliser("Addon {} : démarrage impossible ({!r}).".format(ident, erreur))
 
 
-def verifier_si_besoin(maintenant=None):
+def check_if_due(maintenant=None):
     """Appelé régulièrement : vérifie les addons actifs dont la dernière vérification date de plus d'un jour. Renvoie les identifiants vérifiés."""
     maintenant = maintenant or time.time()
     faits = []
@@ -496,18 +496,18 @@ def verifier_si_besoin(maintenant=None):
         if not e.get("actif") or ident not in ids():
             continue
         derniere = (e.get("verification") or {}).get("date", 0)
-        if maintenant - derniere >= VERIFICATION_TOUS_LES:
+        if maintenant - derniere >= CHECK_EVERY:
             try:
                 check(ident)
                 faits.append(ident)
-            except ErreurAddon:
+            except AddonError:
                 continue
     return faits
 
 
-def alertes():
+def alerts():
     """Les addons actifs dont la dernière vérification a échoué (la page affiche un avertissement)."""
-    return [{"id": i, "nom": _t(manifeste(i).get("nom", i))} for i, e in read_state().items() if e.get("actif") and i in ids() and e.get("verification") and not e["verification"].get("ok")]
+    return [{"id": i, "nom": _t(manifest(i).get("nom", i))} for i, e in read_state().items() if e.get("actif") and i in ids() and e.get("verification") and not e["verification"].get("ok")]
 
 
 def actif(ident):
@@ -516,25 +516,25 @@ def actif(ident):
 
 
 def alive_state(ident):
-    """Ce que la partie vivante de l'addon montre dans son panneau (module.etat()), ou {} s'il n'en a pas."""
+    """Ce que la partie vivante de l'addon montre dans son panneau (module.state()), ou {} s'il n'en a pas."""
     module = module_code(ident)
-    manifeste(ident)
-    return module.etat() if module and hasattr(module, "etat") else {}
+    manifest(ident)
+    return module.state() if module and hasattr(module, "state") else {}
 
 
 def action(ident, nom, donnees):
     """Une action demandée par le panneau d'un addon (module.action(nom, donnees)) : envoyer un brouillon, oublier un appareil…"""
     module = module_code(ident)
-    manifeste(ident)
+    manifest(ident)
     if not module or not hasattr(module, "action"):
-        raise ErreurAddon(_t("Cet addon n'a pas d'action « {} ».").format(nom))
+        raise AddonError(_t("Cet addon n'a pas d'action « {} ».").format(nom))
     return module.action(str(nom), donnees if isinstance(donnees, dict) else {})
 
 
 # --------------------------------------------------------------------------- corriger le flux
 def apply_stream(ident, nouveau):
     """Enregistre un flux corrigé (validé), après avoir gardé l'ancien. Renvoie l'état de l'addon."""
-    m = manifeste(ident)
+    m = manifest(ident)
     validate_stream(nouveau, m)
     f = path_stream(ident)
     if f.is_file():
@@ -544,14 +544,14 @@ def apply_stream(ident, nouveau):
         for ancien in sorted(histo.glob("flux-*.json"))[:-HISTORY_STREAM]:
             ancien.unlink(missing_ok=True)
     _m.ecrire_atomique(f, json.dumps(nouveau, ensure_ascii=False, indent=1))
-    return decrire(ident)
+    return describe(ident)
 
 
 def restore_stream(ident):
     """Revient au flux livré avec Lutin."""
-    manifeste(ident)
+    manifest(ident)
     path_stream(ident).unlink(missing_ok=True)
-    return decrire(ident)
+    return describe(ident)
 
 
 def difference(ancien, nouveau):
@@ -561,14 +561,14 @@ def difference(ancien, nouveau):
     return "\n".join(difflib.unified_diff(a, b, "flux actuel", "flux proposé", lineterm="", n=2))
 
 
-def proposer_correction(ident, demander_au_modele=None, lire_doc=None):
+def propose_fix(ident, demander_au_modele=None, lire_doc=None):
     """Après une vérification échouée : demande au modèle de proposer un flux corrigé d'après la documentation du service. Rien n'est appliqué : renvoie {flux, diff, explication}.
     demander_au_modele(consigne, flux_actuel) -> dict et lire_doc(url) -> texte sont injectables (tests) ; par défaut le modèle local et la lecture web (adresses locales refusées)."""
-    m = manifeste(ident)
+    m = manifest(ident)
     actuel = stream(ident)
     verif = (read_state().get(ident) or {}).get("verification")
     if not verif or verif.get("ok"):
-        raise ErreurAddon(_t("Rien à réparer : la dernière vérification a réussi (lance d'abord « Vérifier »)."))
+        raise AddonError(_t("Rien à réparer : la dernière vérification a réussi (lance d'abord « Vérifier »)."))
     erreurs = " ; ".join(e["message"] for e in verif["etapes"] if not e["ok"])
     doc = ""
     if m.get("doc"):
@@ -587,13 +587,13 @@ def proposer_correction(ident, demander_au_modele=None, lire_doc=None):
     if demander_au_modele:
         reponse = demander_au_modele(consigne, copy.deepcopy(actuel))
     else:
-        reponse = _demander_json(consigne)
+        reponse = _ask_json(consigne)
     nouveau = reponse.get("flux") if isinstance(reponse, dict) and "flux" in reponse else reponse
     validate_stream(nouveau, m)                                              # un flux qui vise un autre site ou est mal formé est refusé AVANT d'être montré
     return {"flux": nouveau, "diff": difference(actuel, nouveau), "explication": str(reponse.get("explication", ""))[:600] if isinstance(reponse, dict) else ""}
 
 
-def _demander_json(consigne):
+def _ask_json(consigne):
     from . import agent
     r = _m.reglages()
     try:
@@ -601,4 +601,4 @@ def _demander_json(consigne):
                                                  "messages": [{"role": "system", "content": "Réponds uniquement en JSON : {\"flux\": {...}, \"explication\": \"...\"}."}, {"role": "user", "content": consigne}]}, 300)
         return json.loads(rep.get("message", {}).get("content") or "{}")
     except (urllib.error.URLError, OSError, ValueError) as e:
-        raise ErreurAddon(_t("Le modèle n'a pas pu proposer de correction : {}").format(e))
+        raise AddonError(_t("Le modèle n'a pas pu proposer de correction : {}").format(e))

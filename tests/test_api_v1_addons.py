@@ -17,7 +17,7 @@ def call(method, path, body=None, who=None):
 def with_a_secret():
     """The first shipped add-on that asks for a secret, and the key of that secret."""
     for identifier in addons.ids():
-        for field in addons.manifeste(identifier)["reglages"]:
+        for field in addons.manifest(identifier)["reglages"]:
             if field.get("secret"):
                 return identifier, field["cle"]
     raise AssertionError("no shipped add-on asks for a secret")

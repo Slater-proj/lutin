@@ -84,7 +84,7 @@ class Correction(unittest.TestCase):
             seen["prompt"] = prompt
             return {"flux": better, "explication": "New version."}
 
-        with mock.patch.object(web, "tool_web_read", return_value="Documentation text."), mock.patch.object(addons, "_demander_json", side_effect=model):
+        with mock.patch.object(web, "tool_web_read", return_value="Documentation text."), mock.patch.object(addons, "_ask_json", side_effect=model):
             status, answer = call("POST", BASE + "/correction", {})
         self.assertEqual((status, sorted(answer), answer["flow"]["version"], answer["explanation"]), (200, ["diff", "explanation", "flow"], 7, "New version."))
         self.assertIn("version", answer["diff"])
@@ -96,7 +96,7 @@ class Correction(unittest.TestCase):
         evil = copy.deepcopy(addons.shipped_stream("telegram"))
         name = next(iter(evil["appels"]))
         evil["appels"][name] = dict(evil["appels"][name], url="https://evil.example.invalid/steal")
-        with mock.patch.object(web, "tool_web_read", return_value="x"), mock.patch.object(addons, "_demander_json", return_value={"flux": evil}):
+        with mock.patch.object(web, "tool_web_read", return_value="x"), mock.patch.object(addons, "_ask_json", return_value={"flux": evil}):
             status, answer = call("POST", BASE + "/correction", {})
         self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
 
@@ -106,7 +106,7 @@ class Correction(unittest.TestCase):
         addons.write_state(state)
         status, answer = call("POST", BASE + "/correction", {})
         self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
-        with mock.patch.object(api_v1._offline, "is_active", return_value=True), mock.patch.object(addons, "_demander_json", side_effect=AssertionError("the model was asked")):
+        with mock.patch.object(api_v1._offline, "is_active", return_value=True), mock.patch.object(addons, "_ask_json", side_effect=AssertionError("the model was asked")):
             status, answer = call("POST", BASE + "/correction", {})
         self.assertEqual((status, answer["error"]["code"]), (409, "offline"))
 

@@ -17,8 +17,8 @@ from .i18n import t as _t
 
 IDENT = "x"
 MAX_LENGTH = 280
-PUBLICATIONS_PAR_JOUR = 25
-AUTO_PAR_JOUR = 10
+POSTS_PER_DAY = 25
+AUTO_PER_DAY = 10
 PERIOD_MENTIONS = 120                       # secondes entre deux lectures des mentions
 ALIVE = {"fil": None, "stop": threading.Event(), "erreur": "", "moi": {}}
 LOCK = threading.Lock()
@@ -68,7 +68,7 @@ def count(e, nom):
 
 # --------------------------------------------------------------------------- appels
 def me():
-    r = addons.appeler(IDENT, "moi", delai=15)
+    r = addons.call(IDENT, "moi", delai=15)
     if r["ok"]:
         ALIVE["moi"] = r["extrait"]
     return r
@@ -78,14 +78,14 @@ def publish(texte, a=None):
     """Publie (ou répond au message `a`). Respecte le plafond du jour. Renvoie l'identifiant du message publié."""
     texte = truncate(texte)
     if not texte:
-        raise addons.ErreurAddon(_t("Le message est vide."))
+        raise addons.AddonError(_t("Le message est vide."))
     with LOCK:
         e = read()
-        if counter(e, "publies") >= PUBLICATIONS_PAR_JOUR:
-            raise addons.ErreurAddon(_t("Plafond atteint : {} publications par jour au plus.").format(PUBLICATIONS_PAR_JOUR))
-    r = addons.appeler(IDENT, "repondre" if a else "publier", {"texte": texte, "a": a} if a else {"texte": texte}, delai=20)
+        if counter(e, "publies") >= POSTS_PER_DAY:
+            raise addons.AddonError(_t("Plafond atteint : {} publications par jour au plus.").format(POSTS_PER_DAY))
+    r = addons.call(IDENT, "repondre" if a else "publier", {"texte": texte, "a": a} if a else {"texte": texte}, delai=20)
     if not r["ok"]:
-        raise addons.ErreurAddon(_t("X a refusé : {}").format(r["erreur"]))
+        raise addons.AddonError(_t("X a refusé : {}").format(r["erreur"]))
     with LOCK:
         e = read()
         count(e, "publies")
@@ -120,7 +120,7 @@ def handle_mention(m, auteurs, mon_id, regles_liste):
     if regle["action"] == "auto":
         with LOCK:
             e = read()
-            permis = counter(e, "auto") < AUTO_PAR_JOUR
+            permis = counter(e, "auto") < AUTO_PER_DAY
             if permis:
                 count(e, "auto")
                 write(e)
@@ -128,7 +128,7 @@ def handle_mention(m, auteurs, mon_id, regles_liste):
             try:
                 publish(reponse, ident)
                 return
-            except addons.ErreurAddon as erreur:
+            except addons.AddonError as erreur:
                 _m.journaliser("X : réponse seule impossible ({}).".format(erreur))
     with LOCK:
         e = read()
@@ -154,7 +154,7 @@ def read_mentions():
         return -1
     e = read()
     if not e["depuis"]:                                                           # première fois : l'arriéré est ignoré
-        r = addons.appeler(IDENT, "mentions_derniers", {"id": mon_id}, delai=20)
+        r = addons.call(IDENT, "mentions_derniers", {"id": mon_id}, delai=20)
         if not r["ok"]:
             ALIVE["erreur"] = r["erreur"]
             return -1
@@ -164,7 +164,7 @@ def read_mentions():
             write(e)
         ALIVE["erreur"] = ""
         return 0
-    r = addons.appeler(IDENT, "mentions", {"id": mon_id, "depuis": e["depuis"]}, delai=20)
+    r = addons.call(IDENT, "mentions", {"id": mon_id, "depuis": e["depuis"]}, delai=20)
     if not r["ok"]:
         ALIVE["erreur"] = r["erreur"]
         return -1
@@ -195,16 +195,16 @@ def publish_due(maintenant=None):
     for p in dues:
         try:
             ident = publish(p["texte"])
-            etat, detail = "publie", ident
-        except addons.ErreurAddon as erreur:
-            etat, detail = "erreur", str(erreur)
+            status, detail = "publie", ident
+        except addons.AddonError as erreur:
+            status, detail = "erreur", str(erreur)
         with LOCK:
             e = read()
             for x in e["publications"]:
                 if x["id"] == p["id"]:
-                    x.update(etat=etat, detail=detail)
+                    x.update(etat=status, detail=detail)
             write(e)
-        n += etat == "publie"
+        n += status == "publie"
     return n
 
 
@@ -218,9 +218,9 @@ def drafting(brief):
                                                  "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": str(brief)[:1500]}]}, 300)
         texte = (rep.get("message", {}).get("content") or "").strip().strip('"«» ')
     except Exception as erreur:  # noqa: BLE001
-        raise addons.ErreurAddon(_t("Le modèle n'a pas pu rédiger : {}").format(erreur))
+        raise addons.AddonError(_t("Le modèle n'a pas pu rédiger : {}").format(erreur))
     if not texte:
-        raise addons.ErreurAddon(_t("Le modèle n'a rien écrit."))
+        raise addons.AddonError(_t("Le modèle n'a rien écrit."))
     return truncate(texte)
 
 
@@ -240,7 +240,7 @@ def loop():
         ALIVE["stop"].wait(30)
 
 
-def demarrer():
+def start():
     if ALIVE["fil"] and ALIVE["fil"].is_alive():
         return
     ALIVE["stop"].clear()
@@ -248,22 +248,22 @@ def demarrer():
     ALIVE["fil"].start()
 
 
-def arreter():
+def stop():
     ALIVE["stop"].set()
 
 
 # --------------------------------------------------------------------------- panneau
-def etat():
+def state():
     e = read()
     return {"reponses": e["reponses"], "publications": e["publications"], "erreur": ALIVE["erreur"], "ecoute": bool(ALIVE["fil"] and ALIVE["fil"].is_alive()), "pseudo": ALIVE["moi"].get("pseudo", ""),
-            "mentions": addons.settings(IDENT).get("mentions") == "oui", "publies": e["jours"].get("publies", 0) if e["jours"].get("jour") == time.strftime("%Y-%m-%d") else 0, "plafond": PUBLICATIONS_PAR_JOUR}
+            "mentions": addons.settings(IDENT).get("mentions") == "oui", "publies": e["jours"].get("publies", 0) if e["jours"].get("jour") == time.strftime("%Y-%m-%d") else 0, "plafond": POSTS_PER_DAY}
 
 
 def action(nom, donnees):
     if nom == "rediger":
         brief = str(donnees.get("brief") or "").strip()
         if not brief:
-            raise addons.ErreurAddon(_t("Donne un sujet."))
+            raise addons.AddonError(_t("Donne un sujet."))
         try:
             nombre = max(1, min(5, int(donnees.get("nombre") or 1)))
         except (TypeError, ValueError):
@@ -274,17 +274,17 @@ def action(nom, donnees):
                 e = read()
                 e["publications"] = (e["publications"] + [{"id": secrets.token_hex(4), "texte": texte, "etat": "brouillon", "date": int(time.time())}])[-50:]
                 write(e)
-        return etat()
+        return state()
     with LOCK:
         e = read()
         cible = next((x for x in e["publications"] if x["id"] == str(donnees.get("publication"))), None) if nom in ("modifier", "publier", "programmer", "supprimer") else None
         reponse = next((x for x in e["reponses"] if x["id"] == str(donnees.get("brouillon"))), None) if nom in ("envoyer", "rejeter") else None
     if nom in ("modifier", "publier", "programmer", "supprimer") and cible is None:
-        raise addons.ErreurAddon(_t("Cette publication n'existe plus."))
+        raise addons.AddonError(_t("Cette publication n'existe plus."))
     if nom in ("envoyer", "rejeter") and reponse is None:
-        raise addons.ErreurAddon(_t("Ce brouillon n'existe plus."))
+        raise addons.AddonError(_t("Ce brouillon n'existe plus."))
     if nom in ("publier", "programmer") and cible.get("etat") == "publie":
-        raise addons.ErreurAddon(_t("Cette publication est déjà publiée."))
+        raise addons.AddonError(_t("Cette publication est déjà publiée."))
     if nom == "publier":
         ident = publish(str(donnees.get("texte") or cible["texte"]))
         mise_a_jour = {"etat": "publie", "detail": ident, "texte": truncate(donnees.get("texte") or cible["texte"])}
@@ -292,10 +292,10 @@ def action(nom, donnees):
         try:
             quand = float(donnees.get("quand"))
         except (TypeError, ValueError):
-            raise addons.ErreurAddon(_t("Choisis une date et une heure."))
+            raise addons.AddonError(_t("Choisis une date et une heure."))
         texte = truncate(donnees.get("texte") or cible["texte"])
         if not texte:
-            raise addons.ErreurAddon(_t("Le message est vide."))
+            raise addons.AddonError(_t("Le message est vide."))
         mise_a_jour = {"etat": "programme", "quand": quand, "texte": texte}
     elif nom == "modifier":
         mise_a_jour = {"texte": truncate(donnees.get("texte") or cible["texte"])}
@@ -315,5 +315,5 @@ def action(nom, donnees):
                 if x["id"] == str(donnees.get("publication")):
                     x.update(mise_a_jour)
         write(e)
-    return etat()
+    return state()
 

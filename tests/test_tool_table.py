@@ -18,10 +18,10 @@ from lutin import addons_acestep, addons_comfyui, addons_voicestudio, modes, pag
 HISTORICAL_RESEARCH = {"lister", "lire", "chercher", "trouver", "calculer", "voix_liste", "voix_transcrire", "symboles", "lire_plusieurs", "rappeler", "web_chercher", "web_lire", "taches",
                        "memoriser", "suivi", "comfy_modeles"}          # the list written by hand in modes.py before the table
 FUNCTIONS = {"ecrire": tools.outil_ecrire, "modifier_plusieurs": tools.outil_modifier_plusieurs, "creer_document": tools.outil_document, "executer": tools.outil_executer,
-             "installer_module": tools.outil_installer_module, "apercu_page": page_preview.tool_preview, "voix_parler": addons_voicestudio.outil_parler,
-             "voix_cloner": addons_voicestudio.outil_cloner, "comfy_generer": addons_comfyui.outil_generer, "musique_generer": addons_acestep.outil_musique,
+             "installer_module": tools.outil_installer_module, "apercu_page": page_preview.tool_preview, "voix_parler": addons_voicestudio.speak_tool,
+             "voix_cloner": addons_voicestudio.clone_tool, "comfy_generer": addons_comfyui.generate_tool, "musique_generer": addons_acestep.music_tool,
              "lister": tools.outil_lister, "lire": tools.outil_lire, "chercher": tools.outil_chercher, "symboles": tools.outil_symboles, "lire_plusieurs": tools.outil_lire_plusieurs,
-             "voix_transcrire": addons_voicestudio.outil_transcrire}
+             "voix_transcrire": addons_voicestudio.transcribe_tool}
 
 
 class ToolTable(unittest.TestCase):

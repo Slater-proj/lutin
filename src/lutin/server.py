@@ -535,7 +535,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.par_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.state(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.par_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
@@ -646,14 +646,14 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/addons":                              # les addons : état, réglages (jamais les secrets), dernière vérification
-            return self._envoyer(200, {"liste": _addons.entries(), "alertes": _addons.alertes()})
+            return self._envoyer(200, {"liste": _addons.entries(), "alertes": _addons.alerts()})
         if chemin == "/api/addon-etat":                          # le panneau d'un addon actif (ex. Telegram : code d'appairage, brouillons) : seulement depuis cette machine
             if not self._configurateur():
                 return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
                 return self._envoyer(200, _addons.alive_state((q.get("id") or [""])[0]))
-            except _addons.ErreurAddon as e:
+            except _addons.AddonError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/addon-flux":                          # le flux en vigueur et celui qui est livré (éditeur de flux)
             if not self._configurateur():
@@ -661,9 +661,9 @@ class Handler(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             ident = (q.get("id") or [""])[0]
             try:
-                _addons.manifeste(ident)
+                _addons.manifest(ident)
                 return self._envoyer(200, {"flux": _addons.stream(ident), "livre": _addons.shipped_stream(ident), "modifie": _addons.modified_stream(ident)})
-            except _addons.ErreurAddon as e:
+            except _addons.AddonError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/missions":                            # les missions longues : état et avancement
             return self._envoyer(200, _mission.state())
@@ -1051,13 +1051,13 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
                 try:
                     if self.path == "/api/addon-activer":
-                        return self._envoyer(200, _addons.activer(str(donnees.get("id", "")), bool(donnees.get("actif"))))
+                        return self._envoyer(200, _addons.activate(str(donnees.get("id", "")), bool(donnees.get("actif"))))
                     if self.path == "/api/addon-reglages":
                         return self._envoyer(200, _addons.save_settings(str(donnees.get("id", "")), donnees.get("reglages") if isinstance(donnees.get("reglages"), dict) else {}))
                     if self.path == "/api/addon-verifier":
                         return self._envoyer(200, _addons.check(str(donnees.get("id", ""))))
                     if self.path == "/api/addon-correction":
-                        return self._envoyer(200, _addons.proposer_correction(str(donnees.get("id", ""))))
+                        return self._envoyer(200, _addons.propose_fix(str(donnees.get("id", ""))))
                     if self.path == "/api/addon-flux":
                         return self._envoyer(200, _addons.apply_stream(str(donnees.get("id", "")), donnees.get("flux")))
                     if self.path == "/api/addon-flux-restaurer":
@@ -1067,7 +1067,7 @@ class Handler(BaseHTTPRequestHandler):
                     if self.path == "/api/fond-creer":
                         return self._envoyer(200, _fond.create(donnees.get("nom"), donnees.get("dossier"), donnees.get("motifs"), donnees.get("consigne"), bool(donnees.get("regulier")), donnees.get("intervalle_h", 24), bool(donnees.get("essai"))))
                     return self._envoyer(200, _fond.action(str(donnees.get("id", "")), str(donnees.get("action", ""))))
-                except (_addons.ErreurAddon, ValueError) as e:
+                except (_addons.AddonError, ValueError) as e:
                     return self._envoyer(400, {"erreur": str(e)})
             if self.path == "/api/travaux-apercu":
                 return self._envoyer(200, _m.work_preview(str(donnees.get("id", ""))))

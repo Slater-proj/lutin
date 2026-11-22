@@ -106,7 +106,7 @@ class SignatureOAuth(unittest.TestCase):
                          "hCtSmYh+iHYCEqBWrE7C7hYmtUk=")
 
     def test_entete(self):
-        e = addons.entete_oauth1("GET", "https://api.x.com/2/users/1/mentions?since_id=5&max_results=20", {"consumer_key": "a", "consumer_secret": "b", "token": "c", "token_secret": "d"}, nonce="n", horodatage=1)
+        e = addons.oauth1_header("GET", "https://api.x.com/2/users/1/mentions?since_id=5&max_results=20", {"consumer_key": "a", "consumer_secret": "b", "token": "c", "token_secret": "d"}, nonce="n", horodatage=1)
         self.assertTrue(e.startswith("OAuth "))
         self.assertIn('oauth_consumer_key="a"', e)
         self.assertIn('oauth_signature="', e)
@@ -159,12 +159,12 @@ class X(unittest.TestCase):
         self.assertIn("lutin_compte", v["etapes"][0]["message"])
         self.assertTrue(SERVICE["signatures_ok"] and all(SERVICE["signatures_ok"]), "le service a pu recalculer la signature")
         for secret in CLES.values():
-            self.assertNotIn(secret, json.dumps(addons.decrire("x")), "la page ne voit jamais les clés")
+            self.assertNotIn(secret, json.dumps(addons.describe("x")), "la page ne voit jamais les clés")
         SERVICE["refus"] = True
         v = addons.check("x")
         self.assertFalse(v["ok"])
         self.assertNotIn(CLES["jeton"], json.dumps(v), "le service répète le jeton : il est masqué")
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             addons.save_settings("x", {"mentions": "peut-etre"})
 
     def test_rien_n_est_publie_sans_clic_puis_publier_et_plafond(self):
@@ -175,25 +175,25 @@ class X(unittest.TestCase):
             x.action("rediger", {"brief": "le lancement", "nombre": 2})
         finally:
             x.drafting = vrai
-        p = x.etat()["publications"]
+        p = x.state()["publications"]
         self.assertEqual((len(p), p[0]["etat"]), (2, "brouillon"))
         self.assertEqual(SERVICE["publies"], [], "rédigé n'est pas publié")
         x.action("modifier", {"publication": p[0]["id"], "texte": "Texte corrigé"})
         x.action("publier", {"publication": p[0]["id"]})
         self.assertEqual(SERVICE["publies"], [{"text": "Texte corrigé"}])
         self.assertTrue(all(SERVICE["signatures_ok"]))
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             x.action("publier", {"publication": p[0]["id"]})                        # déjà publiée : jamais deux fois
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             x.action("publier", {"publication": "zzzz"})
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             x.action("rediger", {"brief": ""})
         x.action("supprimer", {"publication": p[1]["id"]})
-        self.assertEqual(len(x.etat()["publications"]), 1)
+        self.assertEqual(len(x.state()["publications"]), 1)
         e = x.read()
-        e["jours"] = {"jour": time.strftime("%Y-%m-%d"), "publies": x.PUBLICATIONS_PAR_JOUR}
+        e["jours"] = {"jour": time.strftime("%Y-%m-%d"), "publies": x.POSTS_PER_DAY}
         x.write(e)
-        with self.assertRaises(addons.ErreurAddon) as err:
+        with self.assertRaises(addons.AddonError) as err:
             x.publish("encore un")
         self.assertIn("Plafond", str(err.exception))
 
@@ -206,7 +206,7 @@ class X(unittest.TestCase):
         self.assertEqual(x.publish_due(time.time() + 7200), 1)
         self.assertEqual(x.publish_due(time.time() + 9000), 0, "déjà publiée")
         self.assertEqual([p["text"] for p in SERVICE["publies"]], ["Pour plus tard"], "le brouillon non programmé n'est jamais publié")
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             x.action("programmer", {"publication": "bbbb", "quand": "pas une date"})
         SERVICE["refus"] = True
         x.action("programmer", {"publication": "bbbb", "quand": time.time() - 5})
@@ -223,7 +223,7 @@ class X(unittest.TestCase):
         self.assertEqual([d["message"] for d in self.demandes], ["Message de @alice : Salut, tu fais quoi ?", "Message de @alice : Quel est le prix ?"], "le troll est ignoré, ma propre mention aussi")
         self.assertIn("Donne le lien des tarifs.", self.demandes[1]["consigne"])
         self.assertIn("280", self.demandes[0]["consigne"])
-        r = x.etat()["reponses"]
+        r = x.state()["reponses"]
         self.assertEqual((len(r), r[0]["de"], r[0]["a"]), (2, "@alice", "11"))
         self.assertLessEqual(len(r[0]["texte"]), 280, "coupé à 280 caractères")
         self.assertEqual(SERVICE["publies"], [], "brouillon : rien n'est publié sans toi")
@@ -231,13 +231,13 @@ class X(unittest.TestCase):
         x.action("envoyer", {"brouillon": r[0]["id"], "texte": "Je regarde ça !"})
         self.assertEqual(SERVICE["publies"], [{"text": "Je regarde ça !", "reply": {"in_reply_to_tweet_id": "11"}}])
         x.action("rejeter", {"brouillon": r[1]["id"]})
-        self.assertEqual(x.etat()["reponses"], [])
+        self.assertEqual(x.state()["reponses"], [])
         addons.save_settings("x", {"regles": "* -> auto: Sois bref."})
-        SERVICE["mentions"] += [mention(20 + i, 7, "question %d" % i) for i in range(x.AUTO_PAR_JOUR + 2)]
+        SERVICE["mentions"] += [mention(20 + i, 7, "question %d" % i) for i in range(x.AUTO_PER_DAY + 2)]
         SERVICE["publies"].clear()
         x.read_mentions()
-        self.assertEqual(len(SERVICE["publies"]), x.AUTO_PAR_JOUR, "au plus 10 réponses seules par jour")
-        self.assertEqual(len(x.etat()["reponses"]), 2, "le reste attend ta validation")
+        self.assertEqual(len(SERVICE["publies"]), x.AUTO_PER_DAY, "au plus 10 réponses seules par jour")
+        self.assertEqual(len(x.state()["reponses"]), 2, "le reste attend ta validation")
 
     def test_lecture_desactivee_ou_refusee_par_la_formule_de_l_api(self):
         addons.save_settings("x", {"mentions": "non"})
@@ -248,7 +248,7 @@ class X(unittest.TestCase):
         SERVICE["plan_gratuit"] = True
         x.read_mentions()
         self.assertEqual(x.read_mentions(), -1)
-        self.assertIn("403", x.etat()["erreur"], "la formule gratuite ne lit pas les mentions : l'erreur de X est montrée")
+        self.assertIn("403", x.state()["erreur"], "la formule gratuite ne lit pas les mentions : l'erreur de X est montrée")
 
     def test_la_boucle_publie_ce_qui_est_programme_et_s_arrete(self):
         import time
@@ -256,16 +256,16 @@ class X(unittest.TestCase):
         e = x.read()
         e["publications"] = [{"id": "boucle01", "texte": "Programmé et dû", "etat": "programme", "quand": time.time() - 1}]
         x.write(e)
-        x.demarrer()
+        x.start()
         try:
             for _ in range(100):
                 if SERVICE["publies"]:
                     break
                 time.sleep(0.05)
             self.assertEqual([p["text"] for p in SERVICE["publies"]], ["Programmé et dû"])
-            self.assertTrue(x.etat()["ecoute"])
+            self.assertTrue(x.state()["ecoute"])
         finally:
-            x.arreter()
+            x.stop()
         x.ALIVE["fil"].join(5)
         self.assertFalse(x.ALIVE["fil"].is_alive())
         self.assertEqual(x.read()["publications"][0]["etat"], "publie")

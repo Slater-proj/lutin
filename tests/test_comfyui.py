@@ -174,11 +174,11 @@ class ComfyUI(unittest.TestCase):
         self.assertTrue(v["ok"], v)
         self.assertEqual([e["appel"] for e in v["etapes"]], ["dossier", "lancement"])
         self.assertIn(str(COMFY), v["etapes"][0]["message"])
-        d = cu.detecter()
+        d = cu.detect()
         self.assertEqual((d["tourne"], d["version"], d["gpu"]), (True, "0.3.9", "GPU de test"))
         self.assertEqual(Path(d["dossier"]), COMFY, "le chemin de main.py est annoncé par ComfyUI : le dossier est prérempli")
         SERVICE["panne"] = True
-        d = cu.detecter()
+        d = cu.detect()
         self.assertFalse(d["tourne"])
         self.assertTrue(addons.check(cu.IDENT)["ok"], "ComfyUI éteint : ce n'est pas un problème, Lutin le lancera")
         addons.save_settings(cu.IDENT, {"dossier": str(_TEMP / "projet")})
@@ -195,7 +195,7 @@ class ComfyUI(unittest.TestCase):
         cu.CACHE["modeles"] = (0, None)
         self.assertEqual(cu.list_models()["source"], "aucune", "ComfyUI éteint et pas de dossier réglé : rien à lister")
         self.assertIn("impossible", cu.text_models())
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             cu.action("utiliser_dossier", {"dossier": str(_TEMP / "projet")})
         cu.action("utiliser_dossier", {"dossier": str(COMFY)})
         SERVICE["panne"] = True
@@ -207,7 +207,7 @@ class ComfyUI(unittest.TestCase):
 
     def test_generer_une_image_avec_accord_et_valeurs_typees(self):
         ctx = self.ctx()
-        res = cu.outil_generer({"prompt": "un chat astronaute", "largeur": 1000, "hauteur": 99999, "graine": 7}, ctx)
+        res = cu.generate_tool({"prompt": "un chat astronaute", "largeur": 1000, "hauteur": 99999, "graine": 7}, ctx)
         self.assertIn("lutin_00001_.png", res)
         self.assertIn("Graine : 7", res)
         self.assertEqual(len(self.accords), 1, "un accord est demandé")
@@ -220,19 +220,19 @@ class ComfyUI(unittest.TestCase):
         self.assertEqual(wf["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "sans modèle demandé : le premier installé")
         addons.save_settings(cu.IDENT, {"modele": "sd15.safetensors"})
         SERVICE["histoire"] = 0
-        res = cu.outil_generer({"prompt": "x", "modele": "SDXL"}, self.ctx())
+        res = cu.generate_tool({"prompt": "x", "modele": "SDXL"}, self.ctx())
         self.assertEqual(SERVICE["soumis"][1]["prompt"]["4"]["inputs"]["ckpt_name"], "sd15.safetensors", "le modèle choisi dans les réglages l'emporte sur celui que le modèle de langage propose")
         self.assertIn("réglage de l'utilisateur", res, "et le modèle de langage est prévenu qu'on ne l'a pas suivi")
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x", "modele": "SDXL"}, self.ctx(conv={"messages": [{"role": "user", "content": "Fais-le avec sdxl s'il te plaît"}]}))
+        cu.generate_tool({"prompt": "x", "modele": "SDXL"}, self.ctx(conv={"messages": [{"role": "user", "content": "Fais-le avec sdxl s'il te plaît"}]}))
         self.assertEqual(SERVICE["soumis"][2]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "un modèle que l'utilisateur nomme dans sa demande est respecté (à la casse près)")
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x", "modele": "perso.safetensors"}, self.ctx(conv={"messages": [{"role": "user", "content": "avec perso.safetensors"}]}))
+            cu.generate_tool({"prompt": "x", "modele": "perso.safetensors"}, self.ctx(conv={"messages": [{"role": "user", "content": "avec perso.safetensors"}]}))
         self.assertIn("n'est pas installé", str(e.exception))
         self.assertIn("sdxl.safetensors", str(e.exception), "le message dit quels modèles existent")
         for faux in ({"prompt": ""}, {"prompt": "x", "type": "hologramme"}, {"prompt": "x", "largeur": "beaucoup"}, {"prompt": "x", "type": "video"}):
             with self.assertRaises(_m.ErreurOutil):
-                cu.outil_generer(faux, self.ctx())
+                cu.generate_tool(faux, self.ctx())
 
     def test_l_image_creee_est_attachee_au_resultat_pour_etre_affichee_dans_la_conversation(self):
         from lutin import images
@@ -241,13 +241,13 @@ class ComfyUI(unittest.TestCase):
         (sortie / "lutin_00001_.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"pixels")
         addons.save_settings(cu.IDENT, {"dossier": str(COMFY)})
         ctx = self.ctx()
-        res = cu.outil_generer({"prompt": "un phare"}, ctx)
+        res = cu.generate_tool({"prompt": "un phare"}, ctx)
         self.assertEqual(len(ctx.get("medias", [])), 1, res)
         octets, mime = images.read_image(ctx["medias"][0])
         self.assertEqual((mime, octets[8:]), ("image/png", b"pixels"))
         self.assertIn("affichée", res)
         # un chemin qui sort du dossier de sortie n'est jamais copié
-        self.assertEqual(cu._afficher(["../main.py", "../../secret.png"], self.ctx()), [])
+        self.assertEqual(cu._show(["../main.py", "../../secret.png"], self.ctx()), [])
 
     def test_supprimer_une_image_creee_efface_le_fichier_et_la_copie_mais_jamais_hors_de_la_sortie(self):
         from lutin import images, change_review
@@ -257,7 +257,7 @@ class ComfyUI(unittest.TestCase):
         (COMFY / "main_intact.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"deux")
         addons.save_settings(cu.IDENT, {"dossier": str(COMFY)})
         ctx = self.ctx()
-        cu._afficher(["a_supprimer.png"], ctx)
+        cu._show(["a_supprimer.png"], ctx)
         ident_image = ctx["medias"][0]
         self.assertEqual(ctx["medias_fichiers"][ident_image], str((sortie / "a_supprimer.png").resolve()))
         autre = images.save(b"\x89PNG\r\n\x1a\n" + b"deux")
@@ -277,13 +277,13 @@ class ComfyUI(unittest.TestCase):
             change_review.delete_media(c["id"], autre)
 
     def test_les_cases_d_accord_automatique_valent_aussi_pour_generer(self):
-        cu.outil_generer({"prompt": "x"}, self.ctx())
+        cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertFalse(self.accords[0][2], "sans case cochée : l'accord est demandé")
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x"}, self.ctx(auto_commandes=True))
+        cu.generate_tool({"prompt": "x"}, self.ctx(auto_commandes=True))
         self.assertTrue(self.accords[0][2], "commandes automatiques cochées : pas de question")
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x"}, self.ctx(auto_ecriture=True))
+        cu.generate_tool({"prompt": "x"}, self.ctx(auto_ecriture=True))
         self.assertFalse(self.accords[0][2], "l'accord automatique des écritures ne vaut pas pour lancer ComfyUI : c'est la case des commandes")
 
     def test_un_modele_nomme_a_peu_pres_par_l_utilisateur_est_respecte(self):
@@ -307,26 +307,26 @@ class ComfyUI(unittest.TestCase):
         _m.config_lue = lambda: {"emplacements": {"travail": str(_TEMP)}}
         m = mission.create("Visuels", "Génère les illustrations avec le modèle sdxl.", "principal", 1, True)
         try:
-            cu.outil_generer({"prompt": "x", "modele": "sdxl.safetensors"}, self.ctx(mission=m["id"], conv={"messages": [{"role": "user", "content": "Continue la mission"}]}))
+            cu.generate_tool({"prompt": "x", "modele": "sdxl.safetensors"}, self.ctx(mission=m["id"], conv={"messages": [{"role": "user", "content": "Continue la mission"}]}))
             self.assertEqual(SERVICE["soumis"][-1]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "le cahier des charges nomme sdxl")
         finally:
             mission.action("supprimer", {"id": m["id"]})
             _m.config_lue = vrai_config
 
     def test_refus_essai_a_blanc_erreurs_et_arret(self):
-        res = cu.outil_generer({"prompt": "x"}, self.ctx(accord=False))
+        res = cu.generate_tool({"prompt": "x"}, self.ctx(accord=False))
         self.assertIn("Refusé", res)
         self.assertEqual(SERVICE["soumis"], [], "refusé : rien n'est envoyé")
-        res = cu.outil_generer({"prompt": "x"}, self.ctx(accord=False, essai=True))
+        res = cu.generate_tool({"prompt": "x"}, self.ctx(accord=False, essai=True))
         self.assertIn("Essai à blanc", res)
         self.assertEqual(SERVICE["soumis"], [])
         SERVICE["refus"] = True
-        res = cu.outil_generer({"prompt": "x"}, self.ctx())
+        res = cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("refusé le travail", res)
         self.assertIn("Nœud 4 (CheckpointLoaderSimple)", res, "le nœud fautif est nommé")
         self.assertIn("ckpt_name: 'x.safetensors' not in ['sdxl.safetensors']", res, "avec le détail que ComfyUI donne")
         SERVICE.update(refus=False, histoire=0, erreur_historique=True)
-        res = cu.outil_generer({"prompt": "x"}, self.ctx())
+        res = cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("out of memory", res)
         self.assertIn("Nœud 3 (KSampler)", res)
         SERVICE.update(histoire=-10 ** 6, erreur_historique=False)
@@ -334,21 +334,21 @@ class ComfyUI(unittest.TestCase):
         fil = threading.Thread(target=lambda: ctx["stop"].set() if time.sleep(0.2) is None else None)
         fil.start()
         with self.assertRaises(_m.Arret):
-            cu.outil_generer({"prompt": "x"}, ctx)
+            cu.generate_tool({"prompt": "x"}, ctx)
         fil.join()
         self.assertEqual(SERVICE["interrompu"], 1, "le bouton Arrêter interrompt aussi le travail dans ComfyUI")
 
     def test_workflow_personnalise_et_marques_inconnues(self):
         wf = {"1": {"class_type": "X", "inputs": {"texte": "{prompt} en {largeur}px", "n": "{pas}", "fixe": "{rien}"}}}
         v = {"prompt": "chat", "largeur": 512, "pas": 20}
-        r = cu.remplir_workflow(wf, v)
+        r = cu.fill_workflow(wf, v)
         self.assertEqual(r["1"]["inputs"], {"texte": "chat en 512px", "n": 20, "fixe": "{rien}"}, "une marque entière garde son type, une marque dans une phrase est écrite")
-        self.assertEqual(cu.marques_restantes(r), {"rien"})
+        self.assertEqual(cu.remaining_markers(r), {"rien"})
         f = json.loads(json.dumps(addons.shipped_stream(cu.IDENT)))
         f["workflows"]["video"] = wf
         addons.apply_stream(cu.IDENT, f)
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x", "type": "video"}, self.ctx())
+            cu.generate_tool({"prompt": "x", "type": "video"}, self.ctx())
         self.assertIn("{rien}", str(e.exception), "le workflow demande une valeur que Lutin ne sait pas donner : message clair, rien n'est envoyé")
         self.assertEqual(SERVICE["soumis"], [])
         addons.restore_stream(cu.IDENT)
@@ -371,16 +371,16 @@ class ComfyUI(unittest.TestCase):
         # les noms et les sites
         self.assertEqual(cu.name_of_file("https://x.org/a/b/mon%20modele.safetensors"), "mon modele.safetensors")
         self.assertEqual(cu.name_of_file("https://x.org/dl", 'attachment; filename="../../evil.safetensors"'), "evil.safetensors", "jamais un chemin")
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             cu.name_of_file("https://x.org/script.exe")
         for hote, permis in (("huggingface.co", True), ("cdn-lfs.hf.co", True), ("civitai.com", True), ("evilhuggingface.co", False), ("huggingface.co.evil.com", False), ("example.com", False)):
-            self.assertEqual(cu.hote_telechargement_permis(hote), permis, hote)
+            self.assertEqual(cu.download_host_allowed(hote), permis, hote)
         # rien sans dossier d'installation
-        with self.assertRaises(addons.ErreurAddon):
+        with self.assertRaises(addons.AddonError):
             cu.start_download(base + "/modele.safetensors", "checkpoints")
         cu.action("utiliser_dossier", {"dossier": str(COMFY)})
         for url, genre in (("ftp://huggingface.co/x.safetensors", "checkpoints"), ("https://example.com/x.safetensors", "checkpoints"), (base + "/modele.safetensors", "../etc"), ("", "checkpoints")):
-            with self.assertRaises(addons.ErreurAddon):
+            with self.assertRaises(addons.AddonError):
                 cu.start_download(url, genre)
         # un vrai téléchargement, sur un disque fictif assez grand : le test ne dépend pas de la place libre de la machine qui le lance
         from collections import namedtuple
@@ -420,13 +420,13 @@ class ComfyUI(unittest.TestCase):
         addons.save_settings(cu.IDENT, {"dossier": ""})
 
     def test_diagnostic_du_dossier_et_choix_du_dossier_parent(self):
-        self.assertEqual(cu.diagnostic_dossier(str(COMFY)), (True, ""))
-        self.assertIn("non défini", cu.diagnostic_dossier("")[1])
-        self.assertIn("n'existe pas", cu.diagnostic_dossier(str(_TEMP / "absent"))[1])
-        self.assertIn("main.py", cu.diagnostic_dossier(str(_TEMP / "projet"))[1], "pas de main.py : on dit quoi chercher")
+        self.assertEqual(cu.folder_diagnosis(str(COMFY)), (True, ""))
+        self.assertIn("non défini", cu.folder_diagnosis("")[1])
+        self.assertIn("n'existe pas", cu.folder_diagnosis(str(_TEMP / "absent"))[1])
+        self.assertIn("main.py", cu.folder_diagnosis(str(_TEMP / "projet"))[1], "pas de main.py : on dit quoi chercher")
         (_TEMP / "sans-models").mkdir(exist_ok=True)
         (_TEMP / "sans-models" / "main.py").write_text("#", encoding="utf-8")
-        self.assertIn("models", cu.diagnostic_dossier(str(_TEMP / "sans-models"))[1])
+        self.assertIn("models", cu.folder_diagnosis(str(_TEMP / "sans-models"))[1])
         self.assertEqual(Path(cu.normalize_folder(str(_TEMP))), COMFY, "le dossier parent de la version portable mène à ComfyUI/")
         self.assertEqual(Path(cu.normalize_folder(str(COMFY))), COMFY)
         r = cu.action("utiliser_dossier", {"dossier": str(_TEMP)})
@@ -478,7 +478,7 @@ class ComfyUI(unittest.TestCase):
         self.addCleanup(setattr, cu.subprocess, "Popen", vrai_popen)
         # éteint : Lutin le lance (après avoir rendu la mémoire au modèle de langage), génère, puis le referme
         SERVICE["panne"] = True
-        res = cu.outil_generer({"prompt": "un phare"}, self.ctx())
+        res = cu.generate_tool({"prompt": "un phare"}, self.ctx())
         self.assertIn("lutin_00001_.png", res)
         commande, cwd = lancements[0]
         self.assertTrue(commande[0].endswith("python.exe") and "main.py" in commande and "--disable-auto-launch" in commande and "--windows-standalone-build" in commande, commande)
@@ -489,13 +489,13 @@ class ComfyUI(unittest.TestCase):
         # réglage « ne pas refermer »
         addons.save_settings(cu.IDENT, {"fermer_apres": "non"})
         SERVICE.update(panne=True, histoire=0)
-        cu.outil_generer({"prompt": "x"}, self.ctx())
+        cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertEqual((len(lancements), len(arrets)), (2, 1), "lancé, mais laissé ouvert")
         cu.stop_comfyui()
         addons.save_settings(cu.IDENT, {"fermer_apres": "oui"})
         # déjà ouvert par l'utilisateur : ni lancé, ni refermé
         SERVICE.update(panne=False, histoire=0)
-        cu.outil_generer({"prompt": "x"}, self.ctx())
+        cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertEqual((len(lancements), len(arrets)), (2, 2), "le ComfyUI de l'utilisateur n'est jamais fermé par Lutin")
 
     def test_lancement_impossible_ou_trop_long_donne_un_message_clair(self):
@@ -509,7 +509,7 @@ class ComfyUI(unittest.TestCase):
             raise OSError("introuvable")
         cu.subprocess.Popen = impossible
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x"}, self.ctx())
+            cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("Impossible de lancer", str(e.exception))
 
         class Mort:
@@ -520,7 +520,7 @@ class ComfyUI(unittest.TestCase):
                 return 1
         cu.subprocess.Popen = Mort
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x"}, self.ctx())
+            cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("s'est arrêté au démarrage", str(e.exception))
 
         arrets = []
@@ -540,7 +540,7 @@ class ComfyUI(unittest.TestCase):
         cu.subprocess.Popen = Muet
         cu.TIMEOUT_STARTUP = 0.3
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x"}, self.ctx())
+            cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("n'a pas répondu", str(e.exception))
         self.assertEqual(arrets, [1], "un ComfyUI qui ne répond pas est refermé")
         # pas de dossier, pas de Python : on le dit
@@ -549,7 +549,7 @@ class ComfyUI(unittest.TestCase):
         cu.find_folder = lambda *a, **k: ""
         self.addCleanup(setattr, cu, "find_folder", vrai_trouver)
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x"}, self.ctx())
+            cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("ne trouve pas ComfyUI", str(e.exception))
 
     def test_modeles_de_diffusion_sans_checkpoint_flux_qwen_et_zimage(self):
@@ -558,7 +558,7 @@ class ComfyUI(unittest.TestCase):
         cu.CACHE["modeles"] = (0, None)
         self.assertIn("flux1-dev-fp8.safetensors → image_flux", cu.text_models(), "le modèle voit à quelle famille appartient chaque fichier")
         # Flux : UNETLoader + deux encodeurs de texte + VAE, pas de CheckpointLoader
-        cu.outil_generer({"prompt": "un phare", "modele": "flux1-dev"}, self.ctx())
+        cu.generate_tool({"prompt": "un phare", "modele": "flux1-dev"}, self.ctx())
         wf = SERVICE["soumis"][-1]["prompt"]
         types = {n["class_type"] for n in wf.values()}
         self.assertTrue({"UNETLoader", "DualCLIPLoader", "VAELoader", "FluxGuidance", "KSampler"} <= types)
@@ -568,30 +568,30 @@ class ComfyUI(unittest.TestCase):
         self.assertEqual((wf["3"]["inputs"]["steps"], wf["3"]["inputs"]["cfg"], wf["13"]["inputs"]["guidance"]), (20, 1.0, 3.5), "les réglages propres à Flux")
         # Qwen-Image
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x", "modele": "qwen_image"}, self.ctx())
+        cu.generate_tool({"prompt": "x", "modele": "qwen_image"}, self.ctx())
         wf = SERVICE["soumis"][-1]["prompt"]
         self.assertEqual((wf["11"]["inputs"]["type"], wf["11"]["inputs"]["clip_name"], wf["12"]["inputs"]["vae_name"], wf["14"]["inputs"]["shift"]),
                          ("qwen_image", "qwen_2.5_vl_7b_fp8_scaled.safetensors", "qwen_image_vae.safetensors", 3.1))
         self.assertEqual(wf["5"]["inputs"]["width"], 1328)
         # Z-Image
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x", "modele": "z_image"}, self.ctx())
+        cu.generate_tool({"prompt": "x", "modele": "z_image"}, self.ctx())
         wf = SERVICE["soumis"][-1]["prompt"]
         self.assertEqual((wf["11"]["inputs"]["type"], wf["11"]["inputs"]["clip_name"], wf["3"]["inputs"]["steps"]), ("lumina2", "qwen_3_4b.safetensors", 9))
         # sans modèle demandé : le premier modèle de diffusion reconnu
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x"}, self.ctx())
+        cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertEqual(SERVICE["soumis"][-1]["prompt"]["10"]["inputs"]["unet_name"], "flux1-dev-fp8.safetensors")
         # famille inconnue : message clair, rien n'est envoyé
         avant = len(SERVICE["soumis"])
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x", "modele": "mystere_xl"}, self.ctx())
+            cu.generate_tool({"prompt": "x", "modele": "mystere_xl"}, self.ctx())
         self.assertIn("famille", str(e.exception))
         # un fichier manque (aucun encodeur de texte installé) : on dit lequel et où
         SERVICE["sans_clip"] = True
         cu.CACHE["modeles"] = (0, None)
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x", "modele": "flux1-dev"}, self.ctx())
+            cu.generate_tool({"prompt": "x", "modele": "flux1-dev"}, self.ctx())
         self.assertIn("encodeur de texte", str(e.exception))
         self.assertIn("text_encoders", str(e.exception))
         self.assertEqual(len(SERVICE["soumis"]), avant, "rien n'est envoyé à ComfyUI quand il manque un fichier")
@@ -606,13 +606,13 @@ class ComfyUI(unittest.TestCase):
         self.assertTrue(any("qwen_image" in n for n in noms) and any("z_image" in n for n in noms))
         self.assertTrue(any("mystere_xl" in n for n in cu.unusable_models()), "une famille inconnue n'est pas proposée")
         self.assertFalse(any("mystere_xl" in n for n in noms))
-        choix = cu.choix("modele")
+        choix = cu.choices("modele")
         self.assertEqual(choix[0][0], "", "la première entrée est « Automatique »")
         self.assertTrue(any("Z-Image" in libelle for _, libelle in choix))
-        self.assertIsNone(cu.choix("port"), "les autres réglages gardent leur forme")
+        self.assertIsNone(cu.choices("port"), "les autres réglages gardent leur forme")
         # la fiche de l'addon porte cette liste, et garde visible un modèle enregistré qui a disparu
         addons.save_settings(cu.IDENT, {"modele": "ancien_modele.safetensors"})
-        champ = next(c for c in addons.decrire(cu.IDENT)["reglages"] if c["cle"] == "modele")
+        champ = next(c for c in addons.describe(cu.IDENT)["reglages"] if c["cle"] == "modele")
         valeurs = [v for v, _ in champ["choix"]]
         self.assertIn("flux1-dev-fp8.safetensors", valeurs)
         self.assertIn("ancien_modele.safetensors", valeurs, "un modèle enregistré mais introuvable reste affiché")
@@ -636,7 +636,7 @@ class ComfyUI(unittest.TestCase):
         try:
             self.assertEqual(cu.family_of("hidream_i1_fast.safetensors"), "image_hidream")
             self.assertEqual(cu.family_of("autre_modele.safetensors"), "", "une famille déclarée sans workflow n'est pas connue")
-            self.assertEqual(cu.libelle_famille("image_hidream"), "Hidream")
+            self.assertEqual(cu.family_label("image_hidream"), "Hidream")
             self.assertEqual(cu.adapt_tool(outil)["function"]["parameters"]["properties"]["type"]["enum"], ["image", "video"])
             self.assertIn("Hidream", cu.engines()["image"])
             self.assertEqual(cu.engines()["video"], ["video"])
@@ -648,7 +648,7 @@ class ComfyUI(unittest.TestCase):
         cu.CACHE["modeles"] = (0, None)
         try:
             self.assertIn("flux1-dev-fp8.safetensors", cu.list_models(forcer=True)["modeles"]["diffusion_models"])
-            cu.outil_generer({"prompt": "x", "modele": "flux1-dev"}, self.ctx())
+            cu.generate_tool({"prompt": "x", "modele": "flux1-dev"}, self.ctx())
             self.assertEqual(SERVICE["soumis"][-1]["prompt"]["11"]["inputs"]["clip_name1"], "t5xxl_fp16.safetensors")
         finally:
             SERVICE["combo"] = False
@@ -660,7 +660,7 @@ class ComfyUI(unittest.TestCase):
         cu.CACHE["modeles"] = (0, None)
         try:
             with self.assertRaises(_m.ErreurOutil) as e:
-                cu.outil_generer({"prompt": "x"}, self.ctx())
+                cu.generate_tool({"prompt": "x"}, self.ctx())
             self.assertIn("aucun modèle d'image", str(e.exception))
         finally:
             DIFFUSION["UNETLoader"] = ("unet_name", ["flux1-dev-fp8.safetensors", "qwen_image_fp8_e4m3fn.safetensors", "z_image_turbo_bf16.safetensors", "mystere_xl.safetensors"])

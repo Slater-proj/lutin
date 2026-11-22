@@ -29,11 +29,11 @@ POLL_S = 2.0
 INSTRUMENTAL = "[Instrumental]"          # le repère d'ACE-Step pour un morceau sans voix
 
 
-def demarrer():
+def start():
     """Rien à lancer : ACE-Step est une application à part, que l'utilisateur démarre."""
 
 
-def arreter():
+def stop():
     """Rien à arrêter."""
 
 
@@ -62,16 +62,16 @@ def _request(methode, chemin, json_corps=None, delai=60, max_octets=2_000_000):
         en_tetes["Authorization"] = "Bearer " + cle
     req = urllib.request.Request(url, data=donnees, headers=en_tetes, method=methode)
     try:
-        with addons.OUVREUR.open(req, timeout=delai) as r:
+        with addons.OPENER.open(req, timeout=delai) as r:
             brut = r.read(max_octets + 1)
             type_ = r.headers.get("Content-Type", "")
     except urllib.error.HTTPError as e:
         corps = e.read(3000).decode("utf-8", "replace")
         if e.code == 401:
             raise _m.ErreurOutil(_t("ACE-Step demande une clé API : renseigne-la dans les réglages de l'addon."))
-        raise _m.ErreurOutil(addons.masquer(_t("ACE-Step a refusé (HTTP {}) : {}").format(e.code, _summary_error(corps)), valeurs))
+        raise _m.ErreurOutil(addons.mask(_t("ACE-Step a refusé (HTTP {}) : {}").format(e.code, _summary_error(corps)), valeurs))
     except (urllib.error.URLError, OSError, ValueError) as e:
-        raise _m.ErreurOutil(addons.masquer(_t("ACE-Step ne répond pas sur le port {} ({}). Il doit être lancé sur cette machine (uv run acestep-api).").format(_port(), e), valeurs))
+        raise _m.ErreurOutil(addons.mask(_t("ACE-Step ne répond pas sur le port {} ({}). Il doit être lancé sur cette machine (uv run acestep-api).").format(_port(), e), valeurs))
     if len(brut) > max_octets:
         raise _m.ErreurOutil(_t("La réponse d'ACE-Step est trop grosse."))
     return type_, brut
@@ -103,7 +103,7 @@ def _answer(brut):
     return d["data"]
 
 
-def verifier():
+def check():
     """La vérification de l'addon (à l'activation et chaque jour) : ACE-Step répond-il ?"""
     try:
         _, brut = _request("GET", "/health", delai=15, max_octets=100_000)
@@ -177,7 +177,7 @@ def _failure_reason(entree):
     return "?"
 
 
-def outil_musique(args, ctx):
+def music_tool(args, ctx):
     style = str(args.get("description") or "").strip()
     if not style:
         raise _m.ErreurOutil(_t("Il faut décrire le style du morceau (genre, instruments, ambiance)."))
@@ -216,10 +216,10 @@ def outil_musique(args, ctx):
     return _t("Morceau créé : {} ({} Ko, {} s, {}). L'utilisateur peut l'écouter et le télécharger depuis la carte sous ton message.").format(sortie, max(1, len(audio) // 1024), duree, format_)
 
 
-def outil_acestep(nom, args, ctx):
+def acestep_tool(nom, args, ctx):
     """Aiguillage de l'outil de l'addon (change_review.py)."""
     if not addons.actif(IDENT):
         raise _m.ErreurOutil(_t("L'addon ACE-Step n'est pas activé."))
     if nom == "musique_generer":
-        return outil_musique(args, ctx)
+        return music_tool(args, ctx)
     raise _m.ErreurOutil(_t("Outil inconnu : {}").format(nom))

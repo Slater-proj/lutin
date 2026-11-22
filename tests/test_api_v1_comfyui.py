@@ -26,7 +26,7 @@ def call(method, path, body=None, who=None):
 class Panel(unittest.TestCase):
     def setUp(self):
         self.taken = []
-        for patch in (mock.patch.object(addons_comfyui, "etat", side_effect=lambda: dict(RAW)),
+        for patch in (mock.patch.object(addons_comfyui, "state", side_effect=lambda: dict(RAW)),
                       mock.patch.object(addons_comfyui, "action", side_effect=lambda name, data: self.taken.append((name, data)) or {})):
             patch.start()
             self.addCleanup(patch.stop)
@@ -46,7 +46,7 @@ class Panel(unittest.TestCase):
     def test_an_idle_download_and_a_failed_one_have_their_own_state_and_the_models_may_come_from_the_folder(self):
         for stored, expected in (("", "idle"), ("fini", "done"), ("erreur", "failed")):
             raw = dict(RAW, telechargement={"etat": stored, "nom": "", "fait": 0, "total": 0, "erreur": ""}, modeles={"source": "dossier", "modeles": {}})
-            with mock.patch.object(addons_comfyui, "etat", return_value=raw):
+            with mock.patch.object(addons_comfyui, "state", return_value=raw):
                 panel = call("GET", PANEL)[1]["panel"]
             self.assertEqual((panel["download"]["state"], panel["models"]["source"]), (expected, "folder"))
 

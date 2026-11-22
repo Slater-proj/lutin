@@ -31,7 +31,7 @@ IMAP = imaplib.IMAP4_SSL                 # remplaçables dans les tests
 SMTP_SSL = smtplib.SMTP_SSL
 SMTP = smtplib.SMTP
 MAX_SIZE = 800_000                     # octets : un courriel plus gros est ignoré
-AUTO_PAR_JOUR = 20
+AUTO_PER_DAY = 20
 ALIVE = {"fil": None, "stop": threading.Event(), "erreur": "", "derniere": 0}
 LOCK = threading.Lock()
 AUTOMATIC_RE = re.compile(r"(^|[._-])(no-?reply|do-?not-?reply|mailer-daemon|postmaster|bounce|notification|notifications)([._-]|@)", re.I)
@@ -91,8 +91,8 @@ def connection_smtp(v):
     return smtp
 
 
-def verifier():
-    """La vérification de l'addon (appelée par addons.verifier) : règles lisibles, boîte de réception joignable, envoi possible. Renvoie des étapes {appel, ok, message}."""
+def check():
+    """La vérification de l'addon (appelée par addons.check) : règles lisibles, boîte de réception joignable, envoi possible. Renvoie des étapes {appel, ok, message}."""
     v = settings_mail()
     etapes = []
     try:
@@ -113,18 +113,18 @@ def verifier():
                 pass
         etapes.append({"appel": "reception", "ok": True, "message": _t("boîte « {} » lisible").format(v["dossier"])})
     except Exception as e:  # noqa: BLE001
-        return etapes + [{"appel": "reception", "ok": False, "message": addons.masquer(_t("Réception impossible : {}").format(e), v)}]
+        return etapes + [{"appel": "reception", "ok": False, "message": addons.mask(_t("Réception impossible : {}").format(e), v)}]
     try:
         smtp = connection_smtp(v)
         smtp.quit()
         etapes.append({"appel": "envoi", "ok": True, "message": _t("envoi possible")})
     except Exception as e:  # noqa: BLE001
-        etapes.append({"appel": "envoi", "ok": False, "message": addons.masquer(_t("Envoi impossible : {}").format(e), v)})
+        etapes.append({"appel": "envoi", "ok": False, "message": addons.mask(_t("Envoi impossible : {}").format(e), v)})
     return etapes
 
 
 # --------------------------------------------------------------------------- lecture et tri
-def texte_du_message(msg):
+def message_text(msg):
     corps = msg.get_body(preferencelist=("plain", "html"))
     if corps is None:
         return ""
@@ -160,7 +160,7 @@ def handle(msg, v, regles_liste):
         return
     nom, adresse = parseaddr(str(msg.get("From", "")))
     sujet = " ".join(str(msg.get("Subject", "")).split())[:200]
-    message = {"de": str(msg.get("From", "")), "sujet": sujet, "texte": texte_du_message(msg)}
+    message = {"de": str(msg.get("From", "")), "sujet": sujet, "texte": message_text(msg)}
     regle = message_rules.choose(regles_liste, message, auto_reply.judge_tone if message_rules.needs_tone(regles_liste) else None)
     if regle is None or regle["action"] == "ignorer":
         return
@@ -175,7 +175,7 @@ def handle(msg, v, regles_liste):
         with LOCK:
             e = read()
             n = e["auto"].get(jour, 0)
-            if n < AUTO_PAR_JOUR:
+            if n < AUTO_PER_DAY:
                 e["auto"] = {jour: n + 1}
                 write(e)
                 send(brouillon, reponse, v)
@@ -221,7 +221,7 @@ def one_read():
     try:
         imap = connection_imap(v)
     except Exception as e:  # noqa: BLE001
-        ALIVE["erreur"] = addons.masquer(str(e), v)
+        ALIVE["erreur"] = addons.mask(str(e), v)
         return -1
     n = 0
     try:
@@ -258,7 +258,7 @@ def one_read():
             n += 1
         ALIVE["erreur"] = ""
     except Exception as erreur:  # noqa: BLE001
-        ALIVE["erreur"] = addons.masquer(str(erreur), v)
+        ALIVE["erreur"] = addons.mask(str(erreur), v)
         return -1
     finally:
         try:
@@ -289,7 +289,7 @@ def loop():
             ALIVE["stop"].wait(minutes * 60)
 
 
-def demarrer():
+def start():
     if ALIVE["fil"] and ALIVE["fil"].is_alive():
         return
     ALIVE["stop"].clear()
@@ -297,12 +297,12 @@ def demarrer():
     ALIVE["fil"].start()
 
 
-def arreter():
+def stop():
     ALIVE["stop"].set()
 
 
 # --------------------------------------------------------------------------- panneau
-def etat():
+def state():
     e = read()
     return {"brouillons": e["brouillons"], "erreur": ALIVE["erreur"], "ecoute": bool(ALIVE["fil"] and ALIVE["fil"].is_alive()), "derniere": ALIVE["derniere"],
             "adresse": addons.settings(IDENT).get("adresse", "")}
@@ -314,22 +314,22 @@ def action(nom, donnees):
         if nom in ("envoyer", "rejeter"):
             b = next((x for x in e["brouillons"] if x["id"] == str(donnees.get("brouillon"))), None)
             if b is None:
-                raise addons.ErreurAddon(_t("Ce brouillon n'existe plus."))
+                raise addons.AddonError(_t("Ce brouillon n'existe plus."))
             if nom == "envoyer":
                 texte = str(donnees.get("texte") or b["texte"]).strip()
                 if not texte:
-                    raise addons.ErreurAddon(_t("Le message est vide."))
+                    raise addons.AddonError(_t("Le message est vide."))
                 try:
                     send(b, texte)
                 except Exception as erreur:  # noqa: BLE001
-                    raise addons.ErreurAddon(_t("Envoi impossible : {}").format(addons.masquer(str(erreur), settings_mail())))
+                    raise addons.AddonError(_t("Envoi impossible : {}").format(addons.mask(str(erreur), settings_mail())))
             e["brouillons"] = [x for x in e["brouillons"] if x["id"] != b["id"]]
             write(e)
-            return etat()
+            return state()
         if nom == "verifier_regles":
             try:
                 return {"ok": True, "regles": len(message_rules.parse(addons.settings(IDENT).get("regles", "")))}
             except message_rules.RuleError as erreur:
-                raise addons.ErreurAddon(str(erreur))
-    raise addons.ErreurAddon(_t("Action inconnue."))
+                raise addons.AddonError(str(erreur))
+    raise addons.AddonError(_t("Action inconnue."))
 
