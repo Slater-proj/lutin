@@ -41,7 +41,7 @@ class McpError(Exception):
 # --------------------------------------------------------------------------- configuration (mcp.json dans les données)
 
 def config_path():
-    return _m.DONNEES / "mcp.json"
+    return _m.DATA / "mcp.json"
 
 
 def read():
@@ -198,7 +198,7 @@ class Connection:
             env = dict(os.environ, **{str(k): str(v) for k, v in (self.serveur.get("env") or {}).items()})
             if self.serveur.get("path_ajoute"):          # Node.js installé par Lutin : npx y cherche « node » (sous Linux)
                 env["PATH"] = os.pathsep.join([str(d) for d in self.serveur["path_ajoute"]] + [env.get("PATH", "")])
-            self.proc = subprocess.Popen([exe] + commande[1:], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=str(_m.RACINE),
+            self.proc = subprocess.Popen([exe] + commande[1:], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=str(_m.ROOT),
                                          **({} if os.name == "nt" else {"start_new_session": True}))
             threading.Thread(target=self._lire_sortie, daemon=True, name="mcp-" + self.ident).start()
             threading.Thread(target=self._lire_erreurs, daemon=True, name="mcp-err-" + self.ident).start()
@@ -294,7 +294,7 @@ class Connection:
             fin = time.time() + delai
             while True:
                 if stop is not None and stop.is_set():
-                    raise _m.Arret()
+                    raise _m.TurnStopped()
                 try:
                     reponse = q.get(timeout=0.2)
                     break
@@ -402,7 +402,7 @@ def refresh(ident):
             curseur = r.get("nextCursor")
             if not curseur:
                 break
-    except (McpError, _m.ErreurOutil) as e:
+    except (McpError, _m.ToolError) as e:
         cfg = read()
         if ident in cfg["serveurs"]:
             cfg["serveurs"][ident]["erreur"] = str(e)
@@ -483,25 +483,25 @@ def call(nom, args, ctx):
     s = read()["serveurs"].get(ident or "")
     o = (s or {}).get("outils", {}).get(outil or "")
     if not s or not o or not s.get("actif", True):
-        raise _m.ErreurOutil(_t("Outil de connecteur inconnu : {}").format(nom))
+        raise _m.ToolError(_t("Outil de connecteur inconnu : {}").format(nom))
     if not o.get("autorise"):
-        raise _m.ErreurOutil(_t("Cet outil n'est pas autorisé (Réglages > Connecteurs)."))
+        raise _m.ToolError(_t("Cet outil n'est pas autorisé (Réglages > Connecteurs)."))
     if not o.get("lecture"):
         if s.get("lecture_seule", True):
-            raise _m.ErreurOutil(_t("Ce connecteur est en lecture seule : cet outil peut modifier quelque chose."))
+            raise _m.ToolError(_t("Ce connecteur est en lecture seule : cet outil peut modifier quelque chose."))
         ctx.pop("dernier_accord", None)
         if not ctx["accord"](_t("Appeler « {} » du connecteur {}").format(outil, s.get("nom", ident)), json.dumps(args, ensure_ascii=False)[:1500], "", auto=False):
-            _m.noter_action(ctx, nom, args, "refusé")
+            _m.record_action(ctx, nom, args, "refusé")
             return _t("Refusé par l'utilisateur : l'outil du connecteur n'a pas été appelé.")
     try:
         c = connection(ident)
         r = c.requete("tools/call", {"name": outil, "arguments": args}, TIMEOUT_CALL_S, ctx.get("stop"))
     except McpError as e:
         if not o.get("lecture"):
-            _m.noter_action(ctx, nom, args, "erreur : " + str(e))
-        raise _m.ErreurOutil(str(e))
+            _m.record_action(ctx, nom, args, "erreur : " + str(e))
+        raise _m.ToolError(str(e))
     ctx["web_lu"] = True          # un retour externe peut contenir une consigne piégée : plus d'accord automatique pour la suite de cette demande
     if not o.get("lecture"):
-        _m.noter_action(ctx, nom, args, "erreur de l'outil" if r.get("isError") else "ok")
+        _m.record_action(ctx, nom, args, "erreur de l'outil" if r.get("isError") else "ok")
     corps = text_of_result(r)
     return "{}\n{}{}".format(WARNING.format(s.get("nom", ident)), _t("(l'outil signale une erreur)\n") if r.get("isError") else "", corps)

@@ -144,7 +144,7 @@ class ThroughTheTool(unittest.TestCase):
             tools.run_tool("git status --short", self.ctx)
         finally:
             tools.start_process = real
-        self.assertEqual(seen, [(["git", "status", "--short"], False, str(A.RACINE))], "a list of arguments and shell=False")
+        self.assertEqual(seen, [(["git", "status", "--short"], False, str(A.ROOT))], "a list of arguments and shell=False")
         self.assertEqual(self.asked, [])
 
     def test_a_bypass_asks_for_approval_and_does_not_run_when_refused(self):
@@ -165,14 +165,14 @@ class ThroughTheTool(unittest.TestCase):
 
     def test_a_missing_program_is_an_error_the_model_can_read(self):
         A.save_settings({"commandes_sans_accord": ["lutin-no-such-program -q"]})
-        A.reglages()
+        A.settings()
         try:
-            with self.assertRaises(A.ErreurOutil) as caught:
+            with self.assertRaises(A.ToolError) as caught:
                 tools.run_tool("lutin-no-such-program -q", self.ctx)
             self.assertIn("lutin-no-such-program", str(caught.exception))
         finally:
             A.save_settings({"commandes_sans_accord": []})
-            A.reglages()
+            A.settings()
 
 
 if __name__ == "__main__":

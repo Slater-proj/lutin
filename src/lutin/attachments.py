@@ -25,7 +25,7 @@ RE_ID = re.compile(r"^[0-9a-f]{20}\.[a-z0-9]{1,8}$")
 
 
 def folder():
-    return _m.DONNEES / "pieces"
+    return _m.DATA / "pieces"
 
 
 def clean_name(nom):

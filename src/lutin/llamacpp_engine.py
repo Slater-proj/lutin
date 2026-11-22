@@ -1040,7 +1040,7 @@ class LlamaCppEngine(OpenAIEngine):
                 if SERVER.get("cache_8") and not SERVER.get("cache_8_refuse"):
                     SERVER["cache_8_refuse"] = True          # a model or a card that refuses flash attention: started as before, for the rest of the session
                     from . import core as _m
-                    _m.journaliser("llama-server s'est arrêté au démarrage avec le cache en 8 bits ({}) : relancé sans.".format(self._fin_du_journal()))
+                    _m.log_event("llama-server s'est arrêté au démarrage avec le cache en 8 bits ({}) : relancé sans.".format(self._fin_du_journal()))
                     return self.demarrer(modele, ctx, attente, propres)
                 fin = self._fin_du_journal()
                 raise EngineError(_t("llama-server s'est arrêté au démarrage : {}").format(fin) + library_help(fin))
@@ -1456,7 +1456,7 @@ class ExternalEngine(OpenAIEngine):
         """La longueur de conversation des réglages de Lutin (en jetons) : TabbyAPI ne réserve en mémoire vidéo que celle-là, pas la longueur maximale du modèle."""
         try:
             from . import core as _m
-            return int(_m.reglages().get("num_ctx") or 0)
+            return int(_m.settings().get("num_ctx") or 0)
         except Exception:  # noqa: BLE001  (réglages illisibles : la valeur prudente d'exllamav3.py)
             return 0
 

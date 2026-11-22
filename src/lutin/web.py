@@ -42,15 +42,15 @@ def check_host_web(url, hote_autorise=None, resoudre=True):
     qu'un contrôle fait avant : entre les deux, la réponse du DNS peut changer."""
     p = urllib.parse.urlparse(url)
     if p.scheme not in ("http", "https") or not p.hostname:
-        raise _m.ErreurOutil(_t("Adresse invalide : il faut une adresse http:// ou https://."))
+        raise _m.ToolError(_t("Adresse invalide : il faut une adresse http:// ou https://."))
     if _garde_reseau.local_test_mode() or not resoudre:          # le mode local ne sert qu'aux tests (faux services sur 127.0.0.1)
         return
     try:
         _garde_reseau.resolve_checked(p.hostname, None, hote_autorise)
     except _garde_reseau.UnknownHost:
-        raise _m.ErreurOutil("Adresse introuvable : " + p.hostname)
+        raise _m.ToolError("Adresse introuvable : " + p.hostname)
     except _garde_reseau.ForbiddenAddress:
-        raise _m.ErreurOutil(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(p.hostname))
+        raise _m.ToolError(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(p.hostname))
 
 
 PDF_MAX_BYTES = 15_000_000
@@ -77,7 +77,7 @@ def web_download(url, donnees=None, *, hote_autorise=None, entetes=None, octets=
         try:
             _hl.guard(adresse)
         except _hl.OfflineError as e:
-            raise _m.ErreurOutil(str(e))
+            raise _m.ToolError(str(e))
         check_host_web(adresse, hote_autorise, resoudre=not epingle)
 
     tete = {"User-Agent": AGENT_WEB, "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.7", "Accept": "text/html,text/plain,application/json,application/xml,application/pdf;q=0.9,*/*;q=0.5"}
@@ -91,20 +91,20 @@ def web_download(url, donnees=None, *, hote_autorise=None, entetes=None, octets=
                 brut = r.read(limite)
             break
         except _garde_reseau.ForbiddenAddress as e:
-            raise _m.ErreurOutil(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(e.host))
+            raise _m.ToolError(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(e.host))
         except _garde_reseau.UnknownHost as e:
-            raise _m.ErreurOutil("Adresse introuvable : " + str(e.host))
+            raise _m.ToolError("Adresse introuvable : " + str(e.host))
         except _garde_reseau.TooManyRedirections:
-            raise _m.ErreurOutil(_t("Impossible de joindre le site : {}").format(_t("trop de redirections")))
+            raise _m.ToolError(_t("Impossible de joindre le site : {}").format(_t("trop de redirections")))
         except urllib.error.HTTPError as e:
             if e.code in TRANSIENT_CODES and tentative == 1:
                 time.sleep(1)
                 continue
-            raise _m.ErreurOutil(_t("Le site a répondu HTTP {}.").format(e.code))
+            raise _m.ToolError(_t("Le site a répondu HTTP {}.").format(e.code))
         except (urllib.error.URLError, OSError) as e:
             if tentative == 1 and ("timed out" in str(e) or isinstance(e, TimeoutError)):
                 continue
-            raise _m.ErreurOutil(_t("Impossible de joindre le site : {}").format(str(e)[:150]))
+            raise _m.ToolError(_t("Impossible de joindre le site : {}").format(str(e)[:150]))
     if octets:
         return final, type_, brut
     try:
@@ -258,7 +258,7 @@ def page_excerpt(url):
     """Le début lisible d'une page (sans menus ni lignes courtes), ou '' si elle ne se lit pas. Sert à ce que le modèle puisse RÉPONDRE d'après le contenu, pas seulement lister des adresses."""
     try:
         _, type_, brut = web_download(url, max_octets=EXCERPT_BYTES)
-    except _m.ErreurOutil:
+    except _m.ToolError:
         return ""
     if "html" in type_ or brut.lstrip()[:15].lower().startswith(("<!doctype", "<html")):
         analyse = HtmlToText()
@@ -394,7 +394,7 @@ def search_results(requete, nombre, maintenant=time.time, options=None):
             trouves = _recherche.clean(fonction(envoyee), nombre, 0 if o.get("site") else _recherche.PER_SITE_MAX)
             for x in trouves:
                 x["source"] = nom
-        except _m.ErreurOutil as e:
+        except _m.ToolError as e:
             trouves, raison = [], str(e)
         else:
             raison = _t("aucun résultat")
@@ -443,10 +443,10 @@ def check_engines(requete="assistant d'IA local", delai=40):
 
 def tool_web_search(requete, nombre, ctx, lire=None, periode=None, site=None, actualites=False):
     if not ctx.get("web", True):
-        raise _m.ErreurOutil(_t("L'accès web est désactivé (case « Web » dans les options)."))
+        raise _m.ToolError(_t("L'accès web est désactivé (case « Web » dans les options)."))
     requete = " ".join(str(requete or "").split())[:300]
     if not requete:
-        raise _m.ErreurOutil(_t("Requête vide."))
+        raise _m.ToolError(_t("Requête vide."))
     try:
         nombre = max(1, min(10, int(nombre or 6)))
     except (TypeError, ValueError):
@@ -454,7 +454,7 @@ def tool_web_search(requete, nombre, ctx, lire=None, periode=None, site=None, ac
     try:
         options = _recherche.set_options(periode, site, actualites, _i18n_language())
     except ValueError as e:
-        raise _m.ErreurOutil(str(e))
+        raise _m.ToolError(str(e))
     ctx["web_lu"] = True
     trouves, raisons = search_results(requete, nombre, options=options)
     lignes, urls = [], []
@@ -498,14 +498,14 @@ def read_pdf(url):
     from . import text_extraction, attachments
     final, _, octets = web_download(url, octets=True, max_octets=PDF_MAX_BYTES)
     if len(octets) >= PDF_MAX_BYTES:
-        raise _m.ErreurOutil(_t("Ce PDF est trop gros pour être lu ({} Mo au plus).").format(PDF_MAX_BYTES // 1_000_000))
+        raise _m.ToolError(_t("Ce PDF est trop gros pour être lu ({} Mo au plus).").format(PDF_MAX_BYTES // 1_000_000))
     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
         f.write(octets)
         chemin = f.name
     try:
         texte = attachments.file_text(chemin, ".pdf")
     except (text_extraction.ExtractionError, OSError, ValueError) as e:
-        raise _m.ErreurOutil(_t("Ce PDF n'a pas pu être lu : {}").format(str(e)[:150]))
+        raise _m.ToolError(_t("Ce PDF n'a pas pu être lu : {}").format(str(e)[:150]))
     finally:
         try:
             os.unlink(chemin)
@@ -519,7 +519,7 @@ def cached_page(url, maintenant=time.time):
     try:
         _hl.guard(url)          # le mode hors ligne l'emporte toujours, cache ou pas
     except _hl.OfflineError as e:
-        raise _m.ErreurOutil(str(e))
+        raise _m.ToolError(str(e))
     with PAGES_LOCK:
         trouve = CACHE_PAGES.get(url)
     if trouve and maintenant() - trouve[0] < PAGE_CACHE_TTL_S:
@@ -555,7 +555,7 @@ def html_page_text(brut, adresse):
 
 def tool_web_read(url, debut, ctx, liens=False):
     if not ctx.get("web", True):
-        raise _m.ErreurOutil(_t("L'accès web est désactivé (case « Web » dans les options)."))
+        raise _m.ToolError(_t("L'accès web est désactivé (case « Web » dans les options)."))
     url = str(url or "").strip()
     try:
         debut = max(0, int(debut or 0))
@@ -571,10 +571,10 @@ def tool_web_read(url, debut, ctx, liens=False):
     elif type_ == "application/pdf" or type_.startswith("text/") or "json" in type_ or "xml" in type_:
         texte = brut
     else:
-        raise _m.ErreurOutil(_t("Ce type de contenu n'est pas lisible ({}). Seules les pages, les textes et les PDF le sont.").format(type_))
+        raise _m.ToolError(_t("Ce type de contenu n'est pas lisible ({}). Seules les pages, les textes et les PDF le sont.").format(type_))
     if liens:
         if not est_html:
-            raise _m.ErreurOutil(_t("Seule une page web a des liens."))
+            raise _m.ToolError(_t("Seule une page web a des liens."))
         vus, lignes = set(), []
         for libelle, cible in adresses:
             if cible not in vus:
@@ -621,7 +621,7 @@ def normalize_tasks(liste):
         except ValueError:
             liste = [ligne.strip("-* \t") for ligne in liste.splitlines() if ligne.strip()]
     if not isinstance(liste, list):
-        raise _m.ErreurOutil("« liste » doit être une liste de tâches : [{\"texte\": \"...\", \"etat\": \"a_faire|en_cours|fait\"}].")
+        raise _m.ToolError("« liste » doit être une liste de tâches : [{\"texte\": \"...\", \"etat\": \"a_faire|en_cours|fait\"}].")
     propre = []
     for t in liste[:12]:
         if isinstance(t, dict):
@@ -647,7 +647,7 @@ def text_tasks(conv):
 def tool_tasks(liste, ctx):
     conv = ctx.get("conv")
     if conv is None:
-        raise _m.ErreurOutil(_t("Pas de conversation active."))
+        raise _m.ToolError(_t("Pas de conversation active."))
     conv["taches"] = normalize_tasks(liste)
     conv["taches_age"] = 0
     ctx["taches_maj"] = True

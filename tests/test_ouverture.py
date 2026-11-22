@@ -26,9 +26,9 @@ class Chemins(unittest.TestCase):
         (self.racine / ".git").mkdir()
         (self.racine / ".git" / "config").write_text("secret", encoding="utf-8")
         (self.racine / "outil.exe").write_bytes(b"MZ")
-        self.avant = _m.RACINE
-        _m.RACINE = self.racine
-        self.addCleanup(lambda: setattr(_m, "RACINE", self.avant))
+        self.avant = _m.ROOT
+        _m.ROOT = self.racine
+        self.addCleanup(lambda: setattr(_m, "ROOT", self.avant))
 
     def test_le_meme_fichier_se_retrouve_sous_toutes_ses_ecritures(self):
         attendu = (self.racine / "tests-naomi" / "galerie-v11b.html").resolve()

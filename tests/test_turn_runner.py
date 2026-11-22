@@ -42,18 +42,18 @@ def refusing(*a, **k):
 
 class Clean(unittest.TestCase):
     def setUp(self):
-        _m.TOURS_ACTIFS.clear()
-        _m.RACINE_TOURS.clear()
-        _m.LOCAL_TOUR.stop = None
-        self.addCleanup(_m.TOURS_ACTIFS.clear)
-        self.addCleanup(_m.RACINE_TOURS.clear)
+        _m.ACTIVE_TURNS.clear()
+        _m.TURNS_ROOT.clear()
+        _m.TURN_LOCAL.stop = None
+        self.addCleanup(_m.ACTIVE_TURNS.clear)
+        self.addCleanup(_m.TURNS_ROOT.clear)
 
     def person_writes_in(self, ident, root=None):
         """A person's turn running in the conversation `ident` (its seat taken the way the page takes it), in the work folder `root`."""
         stop = threading.Event()
-        with _m.VERROU_TOURS:
-            _m.TOURS_ACTIFS[ident] = stop
-            _m.RACINE_TOURS[ident] = str(root or _m.RACINE)
+        with _m.TURNS_LOCK:
+            _m.ACTIVE_TURNS[ident] = stop
+            _m.TURNS_ROOT[ident] = str(root or _m.ROOT)
         return stop
 
 
@@ -73,30 +73,30 @@ class ScheduledTasks(Clean):
         person = self.person_writes_in(self.conversation)
         with mock.patch.object(_m, "tour", refusing), self.assertRaises(ValueError):
             tasks.execute(self.task["id"])
-        self.assertIs(_m.TOURS_ACTIFS.get(self.conversation), person, "the person's Stop button still stops the person's turn")
+        self.assertIs(_m.ACTIVE_TURNS.get(self.conversation), person, "the person's Stop button still stops the person's turn")
         self.assertEqual(tasks.RUNNING, {}, "the task is not left « at work »")
 
     def test_an_abandoned_turn_writes_nothing_and_keeps_the_newer_seat(self):
         newer = threading.Event()
 
         def abandoned(conv, request, emit, r=None, stop=None, *a, **k):
-            with _m.VERROU_TOURS:                                         # what core._rendre_la_main does 20 s after « Stop », then a person writes again
+            with _m.TURNS_LOCK:                                         # what core._rendre_la_main does 20 s after « Stop », then a person writes again
                 stop.set()
                 stop.abandonne = True
-                _m.TOURS_ACTIFS.pop(conv["id"], None)
-                _m.TOURS_ACTIFS[conv["id"]] = newer
+                _m.ACTIVE_TURNS.pop(conv["id"], None)
+                _m.ACTIVE_TURNS[conv["id"]] = newer
             conv["messages"] += [{"role": "assistant", "content": "late answer"}]
             _m.conv_write(conv)                                          # the frozen turn finally ends
         with mock.patch.object(_m, "tour", abandoned):
             tasks.execute(self.task["id"])
         self.assertNotIn("late answer", [m.get("content") for m in _m.conv_read(self.conversation)["messages"]])
-        self.assertIs(_m.TOURS_ACTIFS.get(self.conversation), newer, "the newer turn keeps its seat")
+        self.assertIs(_m.ACTIVE_TURNS.get(self.conversation), newer, "the newer turn keeps its seat")
 
 
 class Missions(Clean):
     def setUp(self):
         super().setUp()
-        config = mock.patch.object(_m, "config_lue", lambda: {"emplacements": {"travail": str(_TEMP / "work")}})
+        config = mock.patch.object(_m, "read_config", lambda: {"emplacements": {"travail": str(_TEMP / "work")}})
         config.start()
         self.addCleanup(config.stop)
         for m in mission.read():
@@ -108,7 +108,7 @@ class Missions(Clean):
         person = self.person_writes_in(conv["id"], (_TEMP / "work").resolve())          # the same folder: only the conversation is busy
         with mock.patch.object(_m, "tour", refusing):
             self.assertFalse(mission._turn(mission.find(m["id"])), "no turn: the mission tries again at its next round")
-        self.assertIs(_m.TOURS_ACTIFS.get(conv["id"]), person)
+        self.assertIs(_m.ACTIVE_TURNS.get(conv["id"]), person)
         self.assertNotIn(m["id"], mission.ALIVE["arrets"])
 
 
@@ -117,7 +117,7 @@ class AddOns(Clean):
 
     def under_lock(self):
         seen = []
-        patch = mock.patch.object(_m, "activate_work", lambda conv, work: seen.append(_m.VERROU_TOURS.locked()))
+        patch = mock.patch.object(_m, "activate_work", lambda conv, work: seen.append(_m.TURNS_LOCK.locked()))
         patch.start()
         self.addCleanup(patch.stop)
         return seen
@@ -149,10 +149,10 @@ class AddOns(Clean):
             worker = threading.Thread(target=lambda: result.append(addons_telegram.reply_model("chat-2", "Alice", "Again", True)))
             worker.start()
             self.assertFalse(started.wait(0.5), "no second turn while the first one runs")
-            self.assertIs(_m.TOURS_ACTIFS.get(ident), person)
-            with _m.VERROU_TOURS:
-                _m.TOURS_ACTIFS.pop(ident, None)
-                _m.RACINE_TOURS.pop(ident, None)
+            self.assertIs(_m.ACTIVE_TURNS.get(ident), person)
+            with _m.TURNS_LOCK:
+                _m.ACTIVE_TURNS.pop(ident, None)
+                _m.TURNS_ROOT.pop(ident, None)
             worker.join(10)
         self.assertEqual(result, ["Second."], "the waiting message is answered once the conversation is free")
 
@@ -164,7 +164,7 @@ class Seats(Clean):
 
     def test_one_turn_per_conversation_and_a_limit(self):
         a, b, c = self.conv(), self.conv(), self.conv()
-        with mock.patch.object(_m, "TOURS_SIMULTANES", 2):
+        with mock.patch.object(_m, "CONCURRENT_TURNS", 2):
             first = turn_runner.reserve(a)
             with self.assertRaises(turn_runner.TurnRefused) as refused:
                 turn_runner.reserve(a)
@@ -183,18 +183,18 @@ class Seats(Clean):
         with mock.patch.object(_m, "activate_work", mock.Mock(side_effect=ValueError("busy folder"))), self.assertRaises(turn_runner.TurnRefused) as refused:
             turn_runner.reserve(a, work="elsewhere")
         self.assertEqual((refused.exception.code, refused.exception.message), (turn_runner.WORKSPACE_CONFLICT, "busy folder"))
-        self.assertEqual((_m.TOURS_ACTIFS, _m.RACINE_TOURS), ({}, {}))
+        self.assertEqual((_m.ACTIVE_TURNS, _m.TURNS_ROOT), ({}, {}))
 
     def test_a_launcher_registry_that_refuses_gives_the_seat_back(self):
         def also(stop):
             raise ValueError("already at work")
         with self.assertRaises(ValueError):
             turn_runner.reserve(self.conv(), also=also)
-        self.assertEqual(_m.TOURS_ACTIFS, {})
+        self.assertEqual(_m.ACTIVE_TURNS, {})
 
     def test_waiting_for_a_seat_then_giving_up(self):
         a, b = self.conv(), self.conv()
-        with mock.patch.object(_m, "TOURS_SIMULTANES", 1):
+        with mock.patch.object(_m, "CONCURRENT_TURNS", 1):
             held = turn_runner.reserve(a)
             threading.Timer(0.2, held.release).start()
             turn_runner.reserve(b, wait_s=5, poll_s=0.05).release()       # the seat came free while it waited
@@ -215,17 +215,17 @@ class Seats(Clean):
         a = self.conv()
         seat = turn_runner.reserve(a)
         newer = threading.Event()
-        with _m.VERROU_TOURS:
-            _m.TOURS_ACTIFS[a["id"]] = newer
+        with _m.TURNS_LOCK:
+            _m.ACTIVE_TURNS[a["id"]] = newer
         seat.release()
-        self.assertIs(_m.TOURS_ACTIFS.get(a["id"]), newer)
+        self.assertIs(_m.ACTIVE_TURNS.get(a["id"]), newer)
 
     def test_the_thread_is_marked_only_while_the_turn_runs(self):
         a = _m.conv_new()
         marks = []
 
         def fake(conv, request, emit, r=None, stop=None, *x, **k):
-            marks.append(getattr(_m.LOCAL_TOUR, "stop", None) is stop)
+            marks.append(getattr(_m.TURN_LOCAL, "stop", None) is stop)
             stop.abandonne = True
             conv["messages"].append({"role": "assistant", "content": "late"})
             _m.conv_write(conv)                                      # abandoned: not written
@@ -234,8 +234,8 @@ class Seats(Clean):
         self.assertEqual(marks, [True])
         self.assertTrue(seat.abandoned)
         self.assertEqual(_m.conv_read(a["id"])["messages"], [])
-        self.assertIsNone(getattr(_m.LOCAL_TOUR, "stop", None), "the thread can write the next conversation it handles")
-        self.assertEqual(_m.TOURS_ACTIFS, {})
+        self.assertIsNone(getattr(_m.TURN_LOCAL, "stop", None), "the thread can write the next conversation it handles")
+        self.assertEqual(_m.ACTIVE_TURNS, {})
 
 
 if __name__ == "__main__":

@@ -54,12 +54,12 @@ class Fond(unittest.TestCase):
         cls.vrai_ollama, _m.OLLAMA = _m.OLLAMA, "http://127.0.0.1:%d" % cls.serveur.server_address[1]
         cls.docs = _TEMP / "docs"
         cls.docs.mkdir()
-        cls.vrai_config = _m.config_lue
-        _m.config_lue = lambda: {"emplacements": {"travail": str(cls.docs)}}
+        cls.vrai_config = _m.read_config
+        _m.read_config = lambda: {"emplacements": {"travail": str(cls.docs)}}
 
     @classmethod
     def tearDownClass(cls):
-        _m.OLLAMA, _m.config_lue = cls.vrai_ollama, cls.vrai_config
+        _m.OLLAMA, _m.read_config = cls.vrai_ollama, cls.vrai_config
         cls.serveur.shutdown()
 
     def setUp(self):
@@ -70,7 +70,7 @@ class Fond(unittest.TestCase):
                 f.unlink()
         for t in background_jobs.read_works():
             background_jobs.action(t["id"], "supprimer")
-        _m.TOURS_ACTIFS.clear()
+        _m.ACTIVE_TURNS.clear()
         background_jobs.ALIVE["interrompre"].clear()
 
     def travail(self, **kw):
@@ -203,12 +203,12 @@ class Fond(unittest.TestCase):
     def test_il_cede_la_place_aux_conversations(self):
         (self.docs / "a.txt").write_text("texte", encoding="utf-8")
         t = self.travail()
-        _m.TOURS_ACTIFS["conv-en-cours"] = threading.Event()
+        _m.ACTIVE_TURNS["conv-en-cours"] = threading.Event()
         try:
             self.assertFalse(background_jobs.one_step(), "une conversation est en cours : rien n'est traité")
             self.assertEqual(RECUES, [])
         finally:
-            _m.TOURS_ACTIFS.clear()
+            _m.ACTIVE_TURNS.clear()
         MODE["v"] = "lent"
         fil = threading.Thread(target=background_jobs.one_step)
         fil.start()

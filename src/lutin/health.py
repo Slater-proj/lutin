@@ -146,7 +146,7 @@ def model_size(nom, charge=None):
     t = (_m.etat_moteur().get("tailles") or {}).get(nom)
     if t:
         return int(t)
-    return int(next((m["go"] for m in _m.MODELES if m["id"] == nom), 0) * GB)
+    return int(next((m["go"] for m in _m.MODELS if m["id"] == nom), 0) * GB)
 
 
 def gb(octets):
@@ -251,15 +251,15 @@ def _cache_reserve(r, charge):
 
 
 def health_state(r=None):
-    r = r or _m.reglages()
+    r = r or _m.settings()
     charge = _m.ps_modele(r["modele"])
     besoin = 0 if _model_on_another_machine(r) else model_size(r["modele"], charge) + _cache_reserve(r, charge)
-    etat = assess_health(_m.mesures_systeme(), r, besoin, charge, _engine_splits_itself(r))
+    etat = assess_health(_m.system_measures(), r, besoin, charge, _engine_splits_itself(r))
     try:
         from . import store
         avis = store.notices()                                      # partage réseau, base illisible mise de côté (ADR 0017)
     except Exception as erreur:  # noqa: BLE001  (une ligne de santé de plus : jamais l'écran entier perdu)
-        _m.journaliser("Santé : avis de la base impossibles ({!r}).".format(erreur))
+        _m.log_event("Santé : avis de la base impossibles ({!r}).".format(erreur))
         avis = []
     for niveau, texte in avis:
         etat["items"].append({"id": "base", "nom": _t("Base des conversations"), "niveau": "critique" if niveau == "erreur" else "attention", "valeur": texte, "conseil": ""})
@@ -283,16 +283,16 @@ def _blockers(r, emit, conv_id=""):
     moteur = (r or {}).get("moteur") or "ollama"
     charge = _m.ps_modele(r["modele"])
     besoin = model_size(r["modele"], charge) + _cache_reserve(r, charge)
-    sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _engine_splits_itself(r) and not _unload_before_loading(r))
+    sante = assess_health(_m.system_measures(), r, besoin, charge, _engine_splits_itself(r) and not _unload_before_loading(r))
     if charge is None and any(i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram") for i in sante["items"]):
         # only Ollama's models were unloaded before: a llama.cpp model of 20 GB kept the card while ExLlamaV3 waited for room nothing would give back
-        retenus = _m.modeles_retenus(sauf=moteur)
+        retenus = _m.kept_models(sauf=moteur)
         if retenus:
             emit({"type": "info", "texte": _t("La mémoire est trop pleine pour charger ce modèle : je décharge ce que les moteurs gardent en mémoire ({}).").format(", ".join(retenus))})
-            _m.liberer_vram(tout=True, sauf=moteur)
+            _m.free_vram(tout=True, sauf=moteur)
             time.sleep(1.5)
             forget_measures("vram")
-            sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _engine_splits_itself(r) and not _unload_before_loading(r))
+            sante = assess_health(_m.system_measures(), r, besoin, charge, _engine_splits_itself(r) and not _unload_before_loading(r))
     surveilles = ("ram", "vram", "comfy", "disque-donnees") if charge is not None else ("ram", "engagement", "vram", "comfy", "disque-donnees")
     for i in sante["items"]:
         if i["id"] in surveilles and ALERTS_SEEN.get((conv_id, i["id"]), "ok") != i["niveau"]:
@@ -307,7 +307,7 @@ def _blockers(r, emit, conv_id=""):
 def check_before_request(r, emit, conv_id="", stop=None):
     """Garde-fou : avant de lancer le modèle, vérifie qu'il y a assez de mémoire et de place. Si non : ta demande est GARDÉE et Lutin attend (au plus 15 minutes, `stop` l'interrompt) que la place
     revienne, puis répond tout seul. Renvoie False (et explique pourquoi) si la place n'est pas revenue : la demande risquerait de faire planter le PC."""
-    if not _m.GARDE_RESSOURCES_ACTIF or not r.get("garde_ressources"):
+    if not _m.RESOURCE_GUARD or not r.get("garde_ressources"):
         return True
     bloquants = _blockers(r, emit, conv_id)
     if bloquants and stop is not None and not r.get("_mission") and RESOURCE_WAIT_S > 0:
@@ -328,7 +328,7 @@ def check_before_request(r, emit, conv_id="", stop=None):
     if bloquants:
         emit({"type": "erreur", "texte": _t("Demande suspendue pour protéger le PC :\n{}\nRègle le problème puis écris « continue » (ou décoche « Garde-fous ressources » dans Réglages pour passer outre).").format(
             "\n".join("• {} : {}. {}".format(_tr(i["nom"]), _tr(i["valeur"]), _tr(i["conseil"])) for i in bloquants))})
-        _m.journaliser("Demande suspendue (ressources) : " + "; ".join("{} {}".format(i["id"], i["valeur"]) for i in bloquants))
+        _m.log_event("Demande suspendue (ressources) : " + "; ".join("{} {}".format(i["id"], i["valeur"]) for i in bloquants))
         return False
     return True
 
@@ -336,9 +336,9 @@ def check_before_request(r, emit, conv_id="", stop=None):
 def watch_comfy_once():
     """ComfyUI génère (ou a des images en attente) alors qu'un modèle d'Ollama occupe la carte : on décharge le modèle pour lui laisser la place, sauf si l'assistant est
     en train de répondre. Renvoie True si un déchargement a eu lieu. (Le modèle se recharge tout seul à la question suivante.)"""
-    if not _m.reglages().get("liberer_si_comfy", True) or _m.TOURS_ACTIFS:
+    if not _m.settings().get("liberer_si_comfy", True) or _m.ACTIVE_TURNS:
         return False
-    c = _m.etat_comfy()
+    c = _m.comfy_state()
     if not (c["actif"] and (c["en_cours"] or c["attente"])):
         return False
     try:
@@ -346,27 +346,27 @@ def watch_comfy_once():
             return False
     except (urllib.error.URLError, OSError, ValueError):
         return False
-    _m.liberer_vram()
-    _m.journaliser("ComfyUI travaille ({} en cours, {} en attente) : modèle(s) d'Ollama déchargé(s) pour lui laisser la carte graphique.".format(c["en_cours"], c["attente"]))
+    _m.free_vram()
+    _m.log_event("ComfyUI travaille ({} en cours, {} en attente) : modèle(s) d'Ollama déchargé(s) pour lui laisser la carte graphique.".format(c["en_cours"], c["attente"]))
     return True
 
 
 def watch_loop():
     try:
-        folder_size(_m.DONNEES)                  # première mesure du dossier de données faite ici, pas pendant la première demande
+        folder_size(_m.DATA)                  # première mesure du dossier de données faite ici, pas pendant la première demande
     except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("Mesure du dossier de données : {!r}".format(erreur))
+        _m.log_event("Mesure du dossier de données : {!r}".format(erreur))
     while True:
         try:
             watch_comfy_once()
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Surveillance de ComfyUI : {!r}".format(erreur))
+            _m.log_event("Surveillance de ComfyUI : {!r}".format(erreur))
         time.sleep(3)
 
 
 def run_selftest(profond=False):
     """Une série de vérifications de bout en bout. profond=True fait aussi répondre le vrai modèle (le charge en mémoire, peut durer une minute)."""
-    r = _m.reglages()
+    r = _m.settings()
     resultats = []
 
     def essai(nom, fonction, important=True):
@@ -393,7 +393,7 @@ def run_selftest(profond=False):
         return "{} installé{}".format(r["modele"], "" if caps is None else " ; capacités : " + ", ".join(sorted(caps)))
 
     def ecriture_donnees():
-        f = _m.DONNEES / ("autotest-" + secrets.token_hex(3) + ".tmp")
+        f = _m.DATA / ("autotest-" + secrets.token_hex(3) + ".tmp")
         try:
             _m.write_atomic(f, "essai éàü ✓")
             if f.read_text(encoding="utf-8") != "essai éàü ✓":
@@ -414,7 +414,7 @@ def run_selftest(profond=False):
         return "création, enregistrement, lecture"
 
     def outils_fichiers():
-        f = _m.RACINE / ".autotest-assistant.tmp"
+        f = _m.ROOT / ".autotest-assistant.tmp"
         try:
             f.write_text("a\nb\n", encoding="utf-8")
             texte, eol = _m.read_exact(f)
@@ -448,7 +448,7 @@ def run_selftest(profond=False):
 
     def autres_outils():
         t = []
-        for nom, url in (("outil d'images", _m.OUTIL + "/api/sante"), ("ComfyUI", os.environ.get("COMFY_URL", "http://127.0.0.1:8188"))):
+        for nom, url in (("outil d'images", _m.TOOL_URL + "/api/sante"), ("ComfyUI", os.environ.get("COMFY_URL", "http://127.0.0.1:8188"))):
             try:
                 urllib.request.urlopen(url, timeout=1.5).close()
                 t.append(nom + " : répond")
@@ -464,7 +464,7 @@ def run_selftest(profond=False):
         return "tout est en ordre" if not mauvais else "à surveiller : " + "; ".join("{} ({})".format(i["nom"], i["valeur"]) for i in mauvais)
 
     def generation():
-        corps = {"model": r["modele"], "messages": [{"role": "user", "content": "Réponds uniquement par le mot OK."}], "stream": False, "think": False, "options": _m.options_modele(r, 0, num_predict=12)}
+        corps = {"model": r["modele"], "messages": [{"role": "user", "content": "Réponds uniquement par le mot OK."}], "stream": False, "think": False, "options": _m.model_options(r, 0, num_predict=12)}
         rep = _m.ollama_json("/api/chat", corps, 240)
         if not (rep.get("message", {}).get("content") or "").strip():
             raise RuntimeError("Le modèle n'a rien répondu.")

@@ -26,7 +26,7 @@ class LutinVersion(unittest.TestCase):
     def setUp(self):
         self.cache = Path(tempfile.mkdtemp(prefix="lutin-version-")) / "lutin-version.json"
         for patch in (mock.patch.dict(os.environ, {"LUTIN_VERSION_CACHE": str(self.cache)}),
-                      mock.patch.object(access, "saved_security", lambda: A.SECURITE),          # the level saved is the one running: no restart waits
+                      mock.patch.object(access, "saved_security", lambda: A.SECURITY),          # the level saved is the one running: no restart waits
                       mock.patch.dict(access.RESTAURE, {"fait": False}),
                       mock.patch.dict(access.UPDATE, {"etat": "", "lignes": [], "avant": "", "apres": ""})):
             patch.start()
@@ -139,7 +139,7 @@ class LutinVersion(unittest.TestCase):
 
     def test_an_update_while_another_runs_or_during_an_answer(self):
         with mock.patch.object(V.api_v1._offline, "is_active", lambda: False):
-            with mock.patch.dict(A.TOURS_ACTIFS, {"conversation": object()}):
+            with mock.patch.dict(A.ACTIVE_TURNS, {"conversation": object()}):
                 status, answer = V.call("POST", "/api/v1/lutin/update", V.OWNER, {})
             self.assertEqual((status, answer["error"]["code"]), (409, "turn_running"))
             with mock.patch.dict(access.UPDATE, {"etat": "en cours"}):
@@ -152,7 +152,7 @@ class LutinVersion(unittest.TestCase):
         self.assertEqual((status, answer["error"]["code"]), (409, "cannot_restart"), "nothing would start Lutin again")
         timers = []
         with mock.patch.object(access, "can_restart", lambda: True), mock.patch.object(access.threading, "Timer", lambda *args: timers.append(args) or mock.Mock()):
-            with mock.patch.dict(A.TOURS_ACTIFS, {"conversation": object()}):
+            with mock.patch.dict(A.ACTIVE_TURNS, {"conversation": object()}):
                 status, answer = V.call("POST", "/api/v1/lutin/restart", V.OWNER, {})
             self.assertEqual((status, answer["error"]["code"]), (409, "turn_running"))
             self.assertEqual(timers, [])
@@ -167,7 +167,7 @@ class LutinVersion(unittest.TestCase):
         access.RESTAURE["fait"] = True
         self.assertTrue(self.status()["restart"]["needed"], "a backup put back")
         access.RESTAURE["fait"] = False
-        with mock.patch.object(access, "saved_security", lambda: type(A.SECURITE)(niveau=V.S.LOCAL)):
+        with mock.patch.object(access, "saved_security", lambda: type(A.SECURITY)(niveau=V.S.LOCAL)):
             self.assertTrue(self.status()["restart"]["needed"], "another access level saved for the next start")
 
 
@@ -194,7 +194,7 @@ class LutinStartup(unittest.TestCase):
         status, answer = V.call("PATCH", "/api/v1/lutin/startup", V.OWNER, {"check_updates": False, "autostart": True})
         self.assertEqual((status, answer["check_updates"], answer["autostart"]["installed"]), (200, False, True))
         self.assertFalse(json.loads(Path(os.environ["LUTIN_CONFIG"]).read_text(encoding="utf-8"))["verifier_maj"], "kept in config.json, read at launch")
-        self.assertFalse(A.config_lue()["verifier_maj"], "and by the engines' check")
+        self.assertFalse(A.read_config()["verifier_maj"], "and by the engines' check")
         self.assertEqual(V.call("PATCH", "/api/v1/lutin/startup", V.OWNER, {"autostart": False})[1]["autostart"]["installed"], False)
         self.assertEqual(self.asked, ["install", "remove"])
 
@@ -203,7 +203,7 @@ class LutinStartup(unittest.TestCase):
         for body in ({}, {"autostart": "yes"}, {"check_updates": 1}, {"check_updates": False, "autostart": None}):
             self.assertEqual(V.call("PATCH", "/api/v1/lutin/startup", V.OWNER, body)[0], 400, body)
         self.assertEqual(self.asked, [])
-        self.assertTrue(A.config_lue().get("verifier_maj", True))
+        self.assertTrue(A.read_config().get("verifier_maj", True))
 
 
 if __name__ == "__main__":

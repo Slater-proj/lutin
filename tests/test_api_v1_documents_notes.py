@@ -19,7 +19,7 @@ def setUpModule():
 
 class Notes(unittest.TestCase):
     def setUp(self):
-        path = A.MEMOIRE / "MEMOIRE.md"
+        path = A.MEMORY / "MEMOIRE.md"
         before = path.read_bytes() if path.is_file() else None
         self.addCleanup(lambda: path.write_bytes(before) if before is not None else path.unlink(missing_ok=True))
         path.unlink(missing_ok=True)

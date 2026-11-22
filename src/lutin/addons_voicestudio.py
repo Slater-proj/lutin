@@ -48,7 +48,7 @@ def _port():
     except ValueError:
         port = 0
     if not 1 <= port <= 65535:
-        raise _m.ErreurOutil(_t("Le port de VoiceStudio n'est pas valide (un nombre entre 1 et 65535)."))
+        raise _m.ToolError(_t("Le port de VoiceStudio n'est pas valide (un nombre entre 1 et 65535)."))
     return port
 
 
@@ -85,12 +85,12 @@ def _request(methode, chemin, json_corps=None, champs=None, fichier=None, delai=
     except urllib.error.HTTPError as e:
         corps = e.read(3000).decode("utf-8", "replace")
         if e.code == 401:
-            raise _m.ErreurOutil(_t("VoiceStudio demande une clé API : renseigne-la dans les réglages de l'addon (la valeur de OMNIVOICE_API_KEY)."))
-        raise _m.ErreurOutil(addons.mask(_t("VoiceStudio a refusé (HTTP {}) : {}").format(e.code, _summary_error(corps)), valeurs))
+            raise _m.ToolError(_t("VoiceStudio demande une clé API : renseigne-la dans les réglages de l'addon (la valeur de OMNIVOICE_API_KEY)."))
+        raise _m.ToolError(addons.mask(_t("VoiceStudio a refusé (HTTP {}) : {}").format(e.code, _summary_error(corps)), valeurs))
     except (urllib.error.URLError, OSError, ValueError) as e:
-        raise _m.ErreurOutil(addons.mask(_t("VoiceStudio ne répond pas sur le port {} ({}). Il doit être lancé sur cette machine.").format(_port(), e), valeurs))
+        raise _m.ToolError(addons.mask(_t("VoiceStudio ne répond pas sur le port {} ({}). Il doit être lancé sur cette machine.").format(_port(), e), valeurs))
     if len(brut) > max_octets:
-        raise _m.ErreurOutil(_t("La réponse de VoiceStudio est trop grosse."))
+        raise _m.ToolError(_t("La réponse de VoiceStudio est trop grosse."))
     return code, type_, brut
 
 
@@ -113,7 +113,7 @@ def _json(brut):
     try:
         return json.loads(brut.decode("utf-8", "replace"))
     except ValueError:
-        raise _m.ErreurOutil(_t("VoiceStudio n'a pas répondu comme prévu (le service a-t-il changé ?)."))
+        raise _m.ToolError(_t("VoiceStudio n'a pas répondu comme prévu (le service a-t-il changé ?)."))
 
 
 # ------------------------------------------------------------------------------- voix
@@ -136,7 +136,7 @@ def check():
     """La vérification de l'addon (appelée à l'activation et chaque jour) : VoiceStudio répond-il, avec combien de voix ?"""
     try:
         voix = list_voices()
-    except _m.ErreurOutil as e:
+    except _m.ToolError as e:
         return [{"appel": "voix", "ok": False, "message": str(e)}]
     return [{"appel": "voix", "ok": True, "message": _t("VoiceStudio répond : {} voix disponible(s).").format(len(voix))}]
 
@@ -175,20 +175,20 @@ def _file_audio(chemin, maximum):
     from .tools import safe_path
     brut = str(chemin or "").strip()
     if not brut:
-        raise _m.ErreurOutil(_t("Il faut le chemin d'un enregistrement."))
+        raise _m.ToolError(_t("Il faut le chemin d'un enregistrement."))
     try:
         p = safe_path(brut)
-    except _m.ErreurOutil:
+    except _m.ToolError:
         p = Path(brut).resolve()
         sortie = folder_output().resolve()
         if sortie not in p.parents:
             raise
     if not p.is_file():
-        raise _m.ErreurOutil(_t("Fichier introuvable : ") + str(chemin))
+        raise _m.ToolError(_t("Fichier introuvable : ") + str(chemin))
     if p.suffix.lower() not in AUDIO_TYPES:
-        raise _m.ErreurOutil(_t("Ce n'est pas un enregistrement lisible ({}).").format(", ".join(AUDIO_TYPES)))
+        raise _m.ToolError(_t("Ce n'est pas un enregistrement lisible ({}).").format(", ".join(AUDIO_TYPES)))
     if p.stat().st_size > maximum:
-        raise _m.ErreurOutil(_t("Enregistrement trop gros ({} Mo au plus).").format(maximum // 1_000_000))
+        raise _m.ToolError(_t("Enregistrement trop gros ({} Mo au plus).").format(maximum // 1_000_000))
     return p
 
 
@@ -206,13 +206,13 @@ def _refusal(ctx):
 def speak_tool(args, ctx):
     texte = str(args.get("texte") or "").strip()
     if not texte:
-        raise _m.ErreurOutil(_t("Il faut un texte à lire."))
+        raise _m.ToolError(_t("Il faut un texte à lire."))
     if len(texte) > MAX_TEXT:
-        raise _m.ErreurOutil(_t("Texte trop long ({} caractères au plus par appel) : découpe-le en plusieurs appels.").format(MAX_TEXT))
+        raise _m.ToolError(_t("Texte trop long ({} caractères au plus par appel) : découpe-le en plusieurs appels.").format(MAX_TEXT))
     voix = str(args.get("voix") or "default").strip()[:120] or "default"
     format_ = str(args.get("format") or addons.settings(IDENT).get("format") or "wav").lower()
     if format_ not in FORMATS:
-        raise _m.ErreurOutil(_t("Format inconnu : « {} » ({}).").format(format_, ", ".join(FORMATS)))
+        raise _m.ToolError(_t("Format inconnu : « {} » ({}).").format(format_, ", ".join(FORMATS)))
     corps = {"model": "omnivoice", "input": texte, "voice": voix, "response_format": format_}
     try:
         vitesse = float(args.get("vitesse") or 1.0)
@@ -229,7 +229,7 @@ def speak_tool(args, ctx):
         return _refusal(ctx)
     _, type_, audio = _request("POST", "/v1/audio/speech", json_corps=corps)
     if "json" in type_.lower() or audio[:1] == b"{" or len(audio) < 100:          # une erreur déguisée en réponse : on la montre, on n'enregistre pas un faux fichier audio
-        raise _m.ErreurOutil(_t("VoiceStudio n'a pas rendu d'audio : {}").format(_summary_error(audio.decode("utf-8", "replace"))))
+        raise _m.ToolError(_t("VoiceStudio n'a pas rendu d'audio : {}").format(_summary_error(audio.decode("utf-8", "replace"))))
     chemin = _folder_audio(ctx) / _name_file(texte, format_)
     chemin.write_bytes(audio)
     ctx.setdefault("fichiers_joints", []).append(str(chemin))
@@ -252,10 +252,10 @@ def transcribe_tool(args, ctx):
 def clone_tool(args, ctx):
     nom = re.sub(r"\s+", " ", str(args.get("nom") or "")).strip()[:80]
     if not nom:
-        raise _m.ErreurOutil(_t("Il faut un nom pour la nouvelle voix."))
+        raise _m.ToolError(_t("Il faut un nom pour la nouvelle voix."))
     base = str(args.get("base") or "").lower()
     if base not in ("ma_voix", "permission"):
-        raise _m.ErreurOutil(_t("Précise « base » : « ma_voix » (c'est la voix de l'utilisateur) ou « permission » (la personne a donné son accord). Demande-le à l'utilisateur ; ne le suppose jamais."))
+        raise _m.ToolError(_t("Précise « base » : « ma_voix » (c'est la voix de l'utilisateur) ou « permission » (la personne a donné son accord). Demande-le à l'utilisateur ; ne le suppose jamais."))
     fichier = _file_audio(args.get("chemin"), REF_MAX_BYTES)
     champs = {"name": nom, "kind": "clone", "language": str(args.get("langue") or "Auto")[:30]}
     if args.get("texte_reference"):
@@ -271,7 +271,7 @@ def clone_tool(args, ctx):
     if ident:
         try:
             _request("POST", "/profiles/{}/attestation".format(urllib.parse.quote(ident, safe="")), json_corps={"basis": "own_voice" if base == "ma_voix" else "speaker_permission"}, delai=30, max_octets=200_000)
-        except _m.ErreurOutil as e:
+        except _m.ToolError as e:
             suite = _t(" (la déclaration d'autorisation n'a pas pu être enregistrée dans VoiceStudio : {})").format(str(e)[:150])
     return _t("Voix « {} » créée (id : {}){}. Utilise-la avec voix_parler en mettant son nom dans « voix ».").format(nom, ident or "?", suite)
 
@@ -279,7 +279,7 @@ def clone_tool(args, ctx):
 def voice_tool(nom, args, ctx):
     """Aiguillage des quatre outils de l'addon (change_review.py)."""
     if not addons.actif(IDENT):
-        raise _m.ErreurOutil(_t("L'addon VoiceStudio n'est pas activé."))
+        raise _m.ToolError(_t("L'addon VoiceStudio n'est pas activé."))
     if nom == "voix_liste":
         return text_voices()
     if nom == "voix_parler":
@@ -288,4 +288,4 @@ def voice_tool(nom, args, ctx):
         return transcribe_tool(args, ctx)
     if nom == "voix_cloner":
         return clone_tool(args, ctx)
-    raise _m.ErreurOutil(_t("Outil inconnu : {}").format(nom))
+    raise _m.ToolError(_t("Outil inconnu : {}").format(nom))

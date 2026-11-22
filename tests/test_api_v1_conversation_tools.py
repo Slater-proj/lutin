@@ -44,7 +44,7 @@ class ConversationTools(unittest.TestCase):
         self.assertEqual(V.call("GET", "/api/v1/conversations/0123456789ab/memory", V.DEVICE)[0], 404)
 
     def test_nothing_changes_during_an_answer(self):
-        with mock.patch.dict(A.TOURS_ACTIFS, {self.id: object()}):
+        with mock.patch.dict(A.ACTIVE_TURNS, {self.id: object()}):
             status, answer = V.call("PATCH", self.base + "/memory", V.DEVICE, {"mode": "summary"})
         self.assertEqual((status, answer["error"]["code"]), (409, "turn_running"))
 
@@ -92,7 +92,7 @@ class ConversationTools(unittest.TestCase):
 
     def test_the_actions_log_never_holds_contents(self):
         entries = [{"ts": "2026-11-18T10:00:00", "conversation": self.id, "dossier": "C:/work", "outil": "ecrire", "cible": "a.py", "issue": "ok", "accord": "manuel", "qui": "moi"}]
-        with mock.patch.object(A, "lire_journal", lambda n: entries):
+        with mock.patch.object(A, "read_log", lambda n: entries):
             status, answer = V.call("GET", "/api/v1/actions-log?n=5", V.DEVICE)
         self.assertEqual(answer["entries"], [{"at": "2026-11-18T10:00:00", "conversation": self.id, "folder": "C:/work", "tool": "ecrire", "target": "a.py", "outcome": "ok",
                                               "approval": "manuel", "who": "moi"}])

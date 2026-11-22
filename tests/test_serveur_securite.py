@@ -50,15 +50,15 @@ def json_de(texte):
 
 class Base(unittest.TestCase):
     def setUp(self):
-        self.avant = (A.SECURITE, A.APPAREILS, A.LIMITEUR_PIN, A.IP_LAN)
-        A.APPAREILS = S.Devices()
-        A.LIMITEUR_PIN = S.RateLimiter(10, 60)
+        self.avant = (A.SECURITY, A.DEVICES, A.PIN_LIMITER, A.IP_LAN)
+        A.DEVICES = S.Devices()
+        A.PIN_LIMITER = S.RateLimiter(10, 60)
 
     def tearDown(self):
-        A.SECURITE, A.APPAREILS, A.LIMITEUR_PIN, A.IP_LAN = self.avant
+        A.SECURITY, A.DEVICES, A.PIN_LIMITER, A.IP_LAN = self.avant
 
     def niveau(self, **kw):
-        A.SECURITE = S.Security(**kw)
+        A.SECURITY = S.Security(**kw)
 
 
 class NiveauLocal(Base):
@@ -69,7 +69,7 @@ class NiveauLocal(Base):
     def test_la_page_contient_le_jeton_et_mermaid_est_strict(self):
         statut, page, _ = requete("GET", "/ancienne/")          # l'ancienne page, à /ancienne/ depuis la 1.0
         self.assertEqual(statut, 200)
-        self.assertIn(A.JETON, page)
+        self.assertIn(A.TOKEN, page)
         self.assertNotIn("securityLevel: 'loose'", page)
         self.assertIn("securityLevel: 'strict'", page)
 
@@ -77,7 +77,7 @@ class NiveauLocal(Base):
         self.assertEqual(requete("GET", "/api/skills")[0], 403)
         self.assertEqual(requete("GET", "/api/conversation?id=abcd1234")[0], 403)
         self.assertEqual(requete("GET", "/api/memoire", {"X-Token": "faux"})[0], 403)
-        self.assertEqual(requete("GET", "/api/skills", {"X-Token": A.JETON})[0], 200)
+        self.assertEqual(requete("GET", "/api/skills", {"X-Token": A.TOKEN})[0], 200)
 
     def test_les_api_en_ecriture_exigent_le_jeton(self):
         self.assertEqual(requete("POST", "/api/reglages", corps={"modele": "x"})[0], 403)
@@ -85,11 +85,11 @@ class NiveauLocal(Base):
 
     def test_un_nom_d_hote_etranger_est_refuse_dns_rebinding(self):
         for chemin in ("/", "/api/skills", "/lib/highlight.min.js"):
-            self.assertEqual(requete("GET", chemin, {"Host": "evil.example.com", "X-Token": A.JETON})[0], 403, chemin)
-        self.assertEqual(requete("POST", "/api/reglages", {"Host": "evil.example.com", "X-Token": A.JETON}, {"mode": "technique"})[0], 403)
+            self.assertEqual(requete("GET", chemin, {"Host": "evil.example.com", "X-Token": A.TOKEN})[0], 403, chemin)
+        self.assertEqual(requete("POST", "/api/reglages", {"Host": "evil.example.com", "X-Token": A.TOKEN}, {"mode": "technique"})[0], 403)
 
     def test_une_origine_etrangere_est_refusee_en_ecriture(self):
-        h = {"X-Token": A.JETON}
+        h = {"X-Token": A.TOKEN}
         self.assertEqual(requete("POST", "/api/reglages", dict(h, Origin="http://evil.example.com"), {"mode": "technique"})[0], 403)
         self.assertEqual(requete("POST", "/api/reglages", dict(h, Origin="null"), {"mode": "technique"})[0], 403)
         self.assertEqual(requete("POST", "/api/reglages", dict(h, Origin="http://127.0.0.1:%d" % PORT), {"mode": "technique"})[0], 200)
@@ -118,14 +118,14 @@ class NiveauReseau(Base):
         statut, page, _ = requete("GET", "/")
         self.assertEqual(statut, 200)
         self.assertIn("connexion", page)
-        self.assertNotIn(A.JETON, page, "le jeton n'est jamais servi à un appareil non appairé")
+        self.assertNotIn(A.TOKEN, page, "le jeton n'est jamais servi à un appareil non appairé")
 
     def test_api_refusee_sans_session_meme_avec_le_jeton_de_page(self):
-        self.assertEqual(requete("GET", "/api/skills", {"X-Token": A.JETON})[0], 401)
-        self.assertEqual(requete("POST", "/api/reglages", {"X-Token": A.JETON}, {"mode": "technique"})[0], 401)
+        self.assertEqual(requete("GET", "/api/skills", {"X-Token": A.TOKEN})[0], 401)
+        self.assertEqual(requete("POST", "/api/reglages", {"X-Token": A.TOKEN}, {"mode": "technique"})[0], 401)
 
     def test_appairage_par_pin(self):
-        pin = A.APPAREILS.nouveau_pin()
+        pin = A.DEVICES.nouveau_pin()
         mauvais = "000000" if pin != "000000" else "111111"
         self.assertEqual(requete("POST", "/api/appairer", corps={"pin": mauvais})[0], 403)
         statut, texte, h = requete("POST", "/api/appairer", corps={"pin": pin, "nom": "Téléphone"})
@@ -136,25 +136,25 @@ class NiveauReseau(Base):
         self.assertNotIn("Secure", cookie, "pas de HTTPS en réseau local simple")
         session = cookie.split(";")[0]
         statut, page, _ = requete("GET", "/", {"Cookie": session})
-        self.assertIn(A.JETON, page, "appareil appairé : il reçoit la vraie page")
-        self.assertEqual(requete("GET", "/api/skills", {"Cookie": session, "X-Token": A.JETON})[0], 200)
+        self.assertIn(A.TOKEN, page, "appareil appairé : il reçoit la vraie page")
+        self.assertEqual(requete("GET", "/api/skills", {"Cookie": session, "X-Token": A.TOKEN})[0], 200)
         self.assertEqual(requete("GET", "/api/skills", {"Cookie": session})[0], 403, "la session ne remplace pas le jeton de page")
         self.assertEqual(requete("POST", "/api/appairer", corps={"pin": pin})[0], 403, "un PIN ne sert qu'une fois")
-        self.assertEqual(len(A.APPAREILS.liste()), 1)
-        self.assertEqual(json_de(requete("POST", "/api/appareils", {"Cookie": session, "X-Token": A.JETON}, {})[1])["appareils"][0]["nom"], "Téléphone")
-        requete("POST", "/api/appareils-revoquer", {"Cookie": session, "X-Token": A.JETON}, {})
-        self.assertEqual(requete("GET", "/api/skills", {"Cookie": session, "X-Token": A.JETON})[0], 401, "session révoquée")
+        self.assertEqual(len(A.DEVICES.liste()), 1)
+        self.assertEqual(json_de(requete("POST", "/api/appareils", {"Cookie": session, "X-Token": A.TOKEN}, {})[1])["appareils"][0]["nom"], "Téléphone")
+        requete("POST", "/api/appareils-revoquer", {"Cookie": session, "X-Token": A.TOKEN}, {})
+        self.assertEqual(requete("GET", "/api/skills", {"Cookie": session, "X-Token": A.TOKEN})[0], 401, "session révoquée")
 
     def test_trop_d_essais_de_pin_sont_limites(self):
-        A.APPAREILS.nouveau_pin()
+        A.DEVICES.nouveau_pin()
         codes = [requete("POST", "/api/appairer", corps={"pin": "%06d" % i})[0] for i in range(12)]
         self.assertIn(429, codes)
 
     def test_la_console_de_la_machine_passe_sans_pin_et_obtient_un_pin(self):
-        statut, texte, _ = requete("POST", "/api/nouveau-pin", {"X-Token": A.JETON_CONSOLE}, {})
+        statut, texte, _ = requete("POST", "/api/nouveau-pin", {"X-Token": A.CONSOLE_TOKEN}, {})
         self.assertEqual(statut, 200)
         self.assertRegex(json_de(texte)["pin"], r"^\d{6}$")
-        self.assertEqual(requete("GET", "/api/skills", {"X-Token": A.JETON_CONSOLE})[0], 200)
+        self.assertEqual(requete("GET", "/api/skills", {"X-Token": A.CONSOLE_TOKEN})[0], 200)
 
     def test_hote_public_refuse_en_reseau_local(self):
         self.assertEqual(requete("GET", "/", {"Host": "8.8.8.8"})[0], 403)
@@ -167,12 +167,12 @@ class ConfigurationSousDocker(Base):
     def setUp(self):
         super().setUp()
         self.niveau(niveau=S.RESEAU)
-        pin = A.APPAREILS.nouveau_pin()
+        pin = A.DEVICES.nouveau_pin()
         _, _, h = requete("POST", "/api/appairer", corps={"pin": pin, "nom": "Téléphone"})
         self.cookie = h["set-cookie"].split(";")[0]
 
     def supprimer(self):
-        return requete("POST", "/api/fichier-supprimer", {"Cookie": self.cookie, "X-Token": A.JETON, "X-Forwarded-For": "10.0.0.5"}, {"conversation": "absente", "id": "x"})
+        return requete("POST", "/api/fichier-supprimer", {"Cookie": self.cookie, "X-Token": A.TOKEN, "X-Forwarded-For": "10.0.0.5"}, {"conversation": "absente", "id": "x"})
 
     def test_sans_la_variable_un_appareil_appaire_ne_configure_pas_et_la_page_dit_quoi_faire(self):
         from unittest import mock
@@ -198,13 +198,13 @@ class AdministrationADistance(Base):
     def setUp(self):
         super().setUp()
         self.niveau(niveau=S.RESEAU)
-        _, _, h = requete("POST", "/api/appairer", corps={"pin": A.APPAREILS.nouveau_pin(), "nom": "Autre PC"})
+        _, _, h = requete("POST", "/api/appairer", corps={"pin": A.DEVICES.nouveau_pin(), "nom": "Autre PC"})
         self.cookie = h["set-cookie"].split(";")[0]
         self.config = _TEMP / "config.json"
         self.config.unlink(missing_ok=True)
 
     def distant(self, chemin, corps):
-        return requete("POST", chemin, {"Cookie": self.cookie, "X-Token": A.JETON, "X-Forwarded-For": "10.0.0.5"}, corps)
+        return requete("POST", chemin, {"Cookie": self.cookie, "X-Token": A.TOKEN, "X-Forwarded-For": "10.0.0.5"}, corps)
 
     def test_ferme_par_defaut_ouvert_depuis_la_machine_puis_ferme_de_nouveau(self):
         from unittest import mock
@@ -213,11 +213,11 @@ class AdministrationADistance(Base):
             self.assertEqual(statut, 403)
             self.assertIn("Administration à distance", texte, "le refus dit où l'ouvrir")
             self.assertEqual(self.distant("/api/admin-distance", {"actif": True})[0], 403, "un appareil distant ne peut pas s'ouvrir lui-même la porte")
-            self.assertEqual(requete("POST", "/api/admin-distance", {"X-Token": A.JETON_CONSOLE}, {"actif": True})[0], 200, "depuis la machine : possible")
+            self.assertEqual(requete("POST", "/api/admin-distance", {"X-Token": A.CONSOLE_TOKEN}, {"actif": True})[0], 200, "depuis la machine : possible")
             self.assertNotEqual(self.distant("/api/fichier-supprimer", {"conversation": "absente", "id": "x"})[0], 403, "ouvert : la demande est traitée")
             self.assertEqual(requete("POST", "/api/fichier-supprimer", {"X-Forwarded-For": "10.0.0.5"}, {})[0], 401, "sans être admis, rien n'est ouvert")
-            self.assertTrue(json_de(requete("GET", "/api/acces", {"Cookie": self.cookie, "X-Token": A.JETON, "X-Forwarded-For": "10.0.0.5"})[1])["admin_distance"]["actif"])
-            requete("POST", "/api/admin-distance", {"X-Token": A.JETON_CONSOLE}, {"actif": False})
+            self.assertTrue(json_de(requete("GET", "/api/acces", {"Cookie": self.cookie, "X-Token": A.TOKEN, "X-Forwarded-For": "10.0.0.5"})[1])["admin_distance"]["actif"])
+            requete("POST", "/api/admin-distance", {"X-Token": A.CONSOLE_TOKEN}, {"actif": False})
             self.assertEqual(self.distant("/api/fichier-supprimer", {"conversation": "absente", "id": "x"})[0], 403, "refermé")
 
 
@@ -229,16 +229,16 @@ class NiveauProxy(Base):
         self.proxy(["127.0.0.1"])
         h = {"Host": "lutin.exemple.fr", "Remote-User": "alice"}
         statut, page, _ = requete("GET", "/", h)
-        self.assertIn(A.JETON, page)
-        self.assertEqual(requete("GET", "/api/skills", dict(h, **{"X-Token": A.JETON}))[0], 200)
+        self.assertIn(A.TOKEN, page)
+        self.assertEqual(requete("GET", "/api/skills", dict(h, **{"X-Token": A.TOKEN}))[0], 200)
 
     def test_en_tete_falsifie_ignore_quand_la_connexion_ne_vient_pas_du_proxy(self):
         self.proxy(["10.9.9.9"])                                  # le proxy déclaré n'est pas celui qui se connecte (ici 127.0.0.1)
         h = {"Host": "lutin.exemple.fr", "Remote-User": "admin"}
         statut, page, _ = requete("GET", "/", h)
-        self.assertNotIn(A.JETON, page)
+        self.assertNotIn(A.TOKEN, page)
         self.assertIn("connexion", page)
-        self.assertEqual(requete("GET", "/api/skills", dict(h, **{"X-Token": A.JETON}))[0], 401)
+        self.assertEqual(requete("GET", "/api/skills", dict(h, **{"X-Token": A.TOKEN}))[0], 401)
 
     def test_sans_identite_page_de_connexion(self):
         self.proxy(["127.0.0.1"])
@@ -250,7 +250,7 @@ class NiveauProxy(Base):
 
     def test_le_cookie_est_secure_derriere_https(self):
         self.proxy(["10.9.9.9"])
-        pin = A.APPAREILS.nouveau_pin()
+        pin = A.DEVICES.nouveau_pin()
         statut, _, h = requete("POST", "/api/appairer", {"Host": "lutin.exemple.fr", "Origin": "https://lutin.exemple.fr"}, {"pin": pin})
         self.assertEqual(statut, 200)
         self.assertIn("Secure", h["set-cookie"])
@@ -258,50 +258,50 @@ class NiveauProxy(Base):
     def setUp(self):
         super().setUp()
         self.niveau(niveau=S.LOCAL)
-        self.ancien = A.VERIFICATEUR
+        self.ancien = A.MODEL_CHECKER
         self.appels = []
-        A.VERIFICATEUR = lambda portee: (self.appels.append(portee), {"propositions": [{"cle": "k", "type": "maj", "modele": "m", "raison": "r"}], "erreurs": [], "catalogue": "absent"})[1]
+        A.MODEL_CHECKER = lambda portee: (self.appels.append(portee), {"propositions": [{"cle": "k", "type": "maj", "modele": "m", "raison": "r"}], "erreurs": [], "catalogue": "absent"})[1]
 
     def tearDown(self):
-        A.VERIFICATEUR = self.ancien
+        A.MODEL_CHECKER = self.ancien
         super().tearDown()
 
     def test_les_trois_portees(self):
         for portee in ("maj", "nouveaux", "tout"):
-            statut, texte, _ = requete("POST", "/api/modeles-verifier", {"X-Token": A.JETON}, {"portee": portee})
+            statut, texte, _ = requete("POST", "/api/modeles-verifier", {"X-Token": A.TOKEN}, {"portee": portee})
             self.assertEqual(statut, 200, portee)
             self.assertEqual(json_de(texte)["propositions"][0]["modele"], "m")
         self.assertEqual(self.appels, ["maj", "nouveaux", "tout"])
-        requete("POST", "/api/modeles-verifier", {"X-Token": A.JETON}, {})
+        requete("POST", "/api/modeles-verifier", {"X-Token": A.TOKEN}, {})
         self.assertEqual(self.appels[-1], "tout", "portée par défaut")
 
     def test_portee_inconnue_refusee(self):
-        self.assertEqual(requete("POST", "/api/modeles-verifier", {"X-Token": A.JETON}, {"portee": "x"})[0], 400)
+        self.assertEqual(requete("POST", "/api/modeles-verifier", {"X-Token": A.TOKEN}, {"portee": "x"})[0], 400)
         self.assertEqual(self.appels, [])
 
     def test_exige_le_jeton_et_l_authentification(self):
         self.assertEqual(requete("POST", "/api/modeles-verifier", corps={"portee": "maj"})[0], 403)
         self.niveau(niveau=S.RESEAU)
-        self.assertEqual(requete("POST", "/api/modeles-verifier", {"X-Token": A.JETON}, {"portee": "maj"})[0], 401)
+        self.assertEqual(requete("POST", "/api/modeles-verifier", {"X-Token": A.TOKEN}, {"portee": "maj"})[0], 401)
         self.assertEqual(self.appels, [])
 
     def test_indisponible_hors_lanceur(self):
-        A.VERIFICATEUR = None
-        self.assertEqual(requete("POST", "/api/modeles-verifier", {"X-Token": A.JETON}, {"portee": "maj"})[0], 501)
+        A.MODEL_CHECKER = None
+        self.assertEqual(requete("POST", "/api/modeles-verifier", {"X-Token": A.TOKEN}, {"portee": "maj"})[0], 501)
 
 
 class CommandesPortables(unittest.TestCase):
     """Les lectures sans accord et les chemins interdits, pour Windows ET pour Linux / macOS (le test tourne partout)."""
 
     def test_lectures_windows(self):
-        lecture = A.construire_commandes_lecture(False)
+        lecture = A.build_read_commands(False)
         for ok in ("git status", "git diff HEAD", "dir", "dir docs", "type README.md", "where python", "echo bonjour", "python -V"):
             self.assertTrue(lecture.match(ok), ok)
         for non in ("ls", "cat fichier", "del x", "git push", "git status && del x", "type a | more", "rm -rf ."):
             self.assertFalse(lecture.match(non), non)
 
     def test_lectures_posix(self):
-        lecture = A.construire_commandes_lecture(True)
+        lecture = A.build_read_commands(True)
         for ok in ("git status", "ls", "ls -la docs", "cat README.md", "pwd", "which python3", "echo bonjour"):
             self.assertTrue(lecture.match(ok), ok)
         for non in ("dir", "type x", "rm -rf .", "git push", "ls; rm x", "cat a > b", "sudo ls", "cat a | sh"):

@@ -135,7 +135,7 @@ class CatalogueSource(ModelSource):
 
     def installed(self):
         state = self.engine.modeles()
-        sizes, current = state.get("tailles") or {}, str(_m.reglages().get("modele") or "")
+        sizes, current = state.get("tailles") or {}, str(_m.settings().get("modele") or "")
         judge = _judge(self.engine)
         return [entry(name, name, size_gb=round(sizes[name] / 1e9, 1) if sizes.get(name) else None, fit=judge(sizes[name] / 1e9) if sizes.get(name) else None,
                       installed=True, in_use=name == current) for name in state.get("installes", [])]
@@ -250,7 +250,7 @@ class ManagedSource(ModelSource):
         return managed_models
 
     def installed(self):
-        seen = self._managed().models(self.engine.id, _m.reglages().get("modele"))
+        seen = self._managed().models(self.engine.id, _m.settings().get("modele"))
         return [entry(item.get("depot") or item["nom"], item["nom"], revision=item.get("revision") or "", size_gb=item.get("taille_go"), fit=item.get("adequation"), installed=True,
                       in_use=bool(item.get("utilise")), incomplete=bool(item.get("incomplet")), removable=item.get("supprimable", True) is not False) for item in seen["modeles"]]
 
@@ -298,7 +298,7 @@ class ExternalSource(ModelSource):
 
     def installed(self):
         state = self.engine.modeles()
-        current = str(_m.reglages().get("modele") or "")
+        current = str(_m.settings().get("modele") or "")
         return [entry(name, name, installed=True, in_use=name == current, removable=False) for name in state.get("installes", [])]
 
 

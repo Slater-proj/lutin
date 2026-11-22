@@ -82,7 +82,7 @@ class TheGuardCountsIt(unittest.TestCase):
             self.assertEqual(round(exl.cache_reserve("Other", 36864) / 1024 ** 3, 1), 2.2, "no config.json: the cautious estimate")
             self.assertEqual(exl.cache_reserve("../Big-32B", 36864), 0, "a name outside the models' folder is not read")
             self.assertEqual(engines.ENGINES["llamacpp"].cache_reserve("Big-32B", 36864), 0, "llama.cpp spills to the processor instead of failing")
-            r = dict(_m.reglages(), moteur="exllamav3", modele="Big-32B", num_ctx=36864)
+            r = dict(_m.settings(), moteur="exllamav3", modele="Big-32B", num_ctx=36864)
             self.assertGreater(health._cache_reserve(r, None), 4 * 1024 ** 3)
             self.assertEqual(health._cache_reserve(r, {"taille": 0, "vram": 0}), 0, "once loaded, nothing more is reserved")
 

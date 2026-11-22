@@ -94,13 +94,13 @@ class Traduction(unittest.TestCase):
         from unittest import mock
         from lutin import core
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
-            page = core.page_web()
+            page = core.web_page()
         self.assertIn("const LANGUE = 'en', DICO = {", page)
         self.assertIn('<html lang="en">', page)
         self.assertNotIn("__DICO__", page)
         self.assertNotIn("__LANGUE__", page)
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "fr"}):
-            page = core.page_web()
+            page = core.web_page()
         self.assertIn("const LANGUE = 'fr', DICO = {};", page)
         self.assertNotIn("</script><", page.replace("</script>\n", ""), "le dictionnaire ne doit pas pouvoir fermer la balise script")
 

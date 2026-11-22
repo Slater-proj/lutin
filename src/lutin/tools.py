@@ -22,38 +22,38 @@ from . import safe_commands as _safe
 # --------------------------------------------------------------------------- outils de l'agent
 def safe_path(rel, ecriture=False):
     rel = str(rel or ".").replace("\\", "/").strip()
-    p = (_m.RACINE / rel).resolve()
-    if p != _m.RACINE and _m.RACINE not in p.parents:
-        raise _m.ErreurOutil(_t("Chemin refusé : en dehors du projet (« {} »).").format(rel) + path_hint())
-    parties = p.relative_to(_m.RACINE).parts
+    p = (_m.ROOT / rel).resolve()
+    if p != _m.ROOT and _m.ROOT not in p.parents:
+        raise _m.ToolError(_t("Chemin refusé : en dehors du projet (« {} »).").format(rel) + path_hint())
+    parties = p.relative_to(_m.ROOT).parts
     if parties and parties[0] == ".git":
-        raise _m.ErreurOutil(_t("Le dossier .git est protégé."))
-    for prive in (_m.DONNEES, Path.home() / ".lutin", Path.home() / ".lutin-signature"):
+        raise _m.ToolError(_t("Le dossier .git est protégé."))
+    for prive in (_m.DATA, Path.home() / ".lutin", Path.home() / ".lutin-signature"):
         prive = prive.resolve()
         if p == prive or prive in p.parents:
-            raise _m.ErreurOutil(_t("Le dossier des données de Lutin (jetons, canaux de notification, clés) est réservé : l'assistant ne peut ni le lire ni y écrire."))
+            raise _m.ToolError(_t("Le dossier des données de Lutin (jetons, canaux de notification, clés) est réservé : l'assistant ne peut ni le lire ni y écrire."))
     if ecriture:
         if p.suffix.lower() in (".safetensors", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".zip", ".exe", ".dll", ".ckpt", ".pt", ".gguf"):
-            raise _m.ErreurOutil(_t("Fichier binaire refusé en écriture."))
+            raise _m.ToolError(_t("Fichier binaire refusé en écriture."))
     return p
 
 
 def path_hint():
     """Ce qu'il faut dire au modèle quand un chemin n'existe pas : sinon il improvise avec des commandes (chacune demande un accord) pour atteindre un dossier hors du projet."""
-    return _t(" Les chemins sont relatifs au projet ({}). Un dossier situé en dehors du projet doit d'abord être ajouté comme dossier de travail (Réglages) ; demande-le à l'utilisateur plutôt que de le contourner avec des commandes.").format(_m.RACINE.name)
+    return _t(" Les chemins sont relatifs au projet ({}). Un dossier situé en dehors du projet doit d'abord être ajouté comme dossier de travail (Réglages) ; demande-le à l'utilisateur plutôt que de le contourner avec des commandes.").format(_m.ROOT.name)
 
 
 def rel(p):
-    return Path(p).resolve().relative_to(_m.RACINE).as_posix() or "."
+    return Path(p).resolve().relative_to(_m.ROOT).as_posix() or "."
 
 
 def list_tool(dossier="."):
     d = safe_path(dossier)
     if not d.is_dir():
-        raise _m.ErreurOutil(_t("Ce n'est pas un dossier : ") + rel(d) + path_hint())
+        raise _m.ToolError(_t("Ce n'est pas un dossier : ") + rel(d) + path_hint())
     lignes = []
     for f in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower())):
-        if f.name in _m.DOSSIERS_IGNORES or (f.is_dir() and _m.ignore_chemin(f)):
+        if f.name in _m.IGNORED_FOLDERS or (f.is_dir() and _m.path_ignored(f)):
             lignes.append(f.name + _t("/  (volumineux ou technique : ignoré)"))
         elif f.is_dir():
             lignes.append(f.name + "/")
@@ -74,22 +74,22 @@ def read_tool(chemin, debut=1, fin=None, limite=None):
     """Lit un fichier texte avec ses numéros de ligne. limite : caractères au plus (la part de la fenêtre laissée à un résultat d'outil), sinon LECTURE_MAX."""
     f = safe_path(chemin)
     if not f.is_file():
-        raise _m.ErreurOutil(_t("Fichier introuvable : ") + rel(f) + path_hint())
+        raise _m.ToolError(_t("Fichier introuvable : ") + rel(f) + path_hint())
     if f.suffix.lower() in formats_reminder():
         from . import text_extraction, recall
         try:
             texte = "\n\n".join(("## {}\n\n".format(t) if t else "") + c for t, c in recall.document_parts(f)).splitlines()
         except text_extraction.ExtractionError as e:
-            raise _m.ErreurOutil(str(e)) from e
+            raise _m.ToolError(str(e)) from e
     elif f.stat().st_size > 6_000_000:
-        raise _m.ErreurOutil(_t("Fichier trop gros pour être lu (plus de 6 Mo)."))
+        raise _m.ToolError(_t("Fichier trop gros pour être lu (plus de 6 Mo)."))
     else:
         texte = f.read_text(encoding="utf-8", errors="replace").splitlines()
     debut = max(1, int(debut or 1))
     fin = int(fin) if fin else len(texte)
     extrait = texte[debut - 1:fin]
     # limite : la part de la fenêtre laissée à un résultat (ADR 0019), comptée comme dans la requête (échappements JSON compris) ; sans elle, LECTURE_MAX
-    plafond = min(_m.LECTURE_MAX, int(limite)) if limite else _m.LECTURE_MAX
+    plafond = min(_m.READ_MAX, int(limite)) if limite else _m.READ_MAX
     cout = (lambda x: len(json.dumps(x, ensure_ascii=False))) if limite else (lambda x: len(x) + 1)
     sortie, n, coupe = [], 0, None
     for i, l in enumerate(extrait, debut):
@@ -118,12 +118,12 @@ def walk_files(d, filtre=""):
         yield d
         return
     for racine, sous, noms in os.walk(str(d)):
-        sous[:] = sorted(s for s in sous if s not in _m.DOSSIERS_IGNORES and not _m.ignore_chemin(Path(racine) / s))      # on ne descend pas dans les dossiers techniques
+        sous[:] = sorted(s for s in sous if s not in _m.IGNORED_FOLDERS and not _m.path_ignored(Path(racine) / s))      # on ne descend pas dans les dossiers techniques
         for nom in sorted(noms):
             if motifs and not any(fnmatch.fnmatch(nom.lower(), p) for p in motifs):
                 continue
             f = Path(racine) / nom
-            if f.suffix.lower() in BINARY_EXTENSIONS or _m.ignore_chemin(f):
+            if f.suffix.lower() in BINARY_EXTENSIONS or _m.path_ignored(f):
                 continue
             yield f
 
@@ -133,16 +133,16 @@ def search_tool(motif, dossier=".", contexte=0, fichiers=""):
     try:
         re_ = re.compile(str(motif), re.I)
     except re.error as e:
-        raise _m.ErreurOutil(_t("Expression régulière invalide : ") + str(e))
+        raise _m.ToolError(_t("Expression régulière invalide : ") + str(e))
     try:
         contexte = max(0, min(5, int(contexte or 0)))
     except (TypeError, ValueError):
         contexte = 0
     sortie, nb_resultats = [], 0
-    limite = time.time() + _m.CHERCHER_DELAI
+    limite = time.time() + _m.SEARCH_TIMEOUT
     for f in walk_files(d, fichiers):
         if time.time() > limite:
-            sortie.append(_t("... (recherche arrêtée après {} s : précise le dossier)").format(_m.CHERCHER_DELAI))
+            sortie.append(_t("... (recherche arrêtée après {} s : précise le dossier)").format(_m.SEARCH_TIMEOUT))
             break
         try:
             if not f.is_file() or f.stat().st_size > 2_000_000:
@@ -170,13 +170,13 @@ def symbols_tool(nom, dossier="."):
     """Où un nom (fonction, classe, variable, identifiant HTML) est défini, et où il est utilisé."""
     nom = str(nom or "").strip()
     if not re.match(r"^[\w$.\-]{1,80}$", nom):
-        raise _m.ErreurOutil("Nom invalide (lettres, chiffres, _ $ . - seulement).")
+        raise _m.ToolError("Nom invalide (lettres, chiffres, _ $ . - seulement).")
     d = safe_path(dossier)
     n = re.escape(nom)
     definition = re.compile(r"^\s*(?:async\s+)?(?:def|class|function)\s+" + n + r"\b|^\s*(?:const|let|var)\s+" + n + r"\s*=|\bid\s*=\s*[\"']" + n + r"[\"']|^\s*" + n + r"\s*=(?!=)")
     usage = re.compile(r"(?<![\w$])" + n + r"(?![\w$])")
     defs, usages, fichiers_utilisant = [], [], set()
-    limite = time.time() + _m.CHERCHER_DELAI
+    limite = time.time() + _m.SEARCH_TIMEOUT
     for f in walk_files(d):
         if time.time() > limite:
             break
@@ -212,7 +212,7 @@ def read_many_tool(fichiers, limite=None):
         except ValueError:
             fichiers = [p.strip() for p in re.split(r"[,\n]", fichiers) if p.strip()]
     if not isinstance(fichiers, list) or not fichiers:
-        raise _m.ErreurOutil(_t("« fichiers » doit être une liste de chemins ou de {\"chemin\": ..., \"debut\": ..., \"fin\": ...}."))
+        raise _m.ToolError(_t("« fichiers » doit être une liste de chemins ou de {\"chemin\": ..., \"debut\": ..., \"fin\": ...}."))
     sorties = []
     part = max(300, int(limite) // min(6, len(fichiers)) - 40) if limite else None
     for x in fichiers[:6]:
@@ -222,7 +222,7 @@ def read_many_tool(fichiers, limite=None):
             continue
         try:
             s = read_tool(x.get("chemin"), x.get("debut"), x.get("fin"), part)
-        except _m.ErreurOutil as e:
+        except _m.ToolError as e:
             s = "Erreur : " + str(e)
         sorties.append(s if len(s) <= 3500 else s[:3500] + _t("\n[... coupé : relis ce fichier seul avec debut/fin pour la suite]"))
     return "\n\n=====\n\n".join(sorties) + (_t("\n\n(6 fichiers au plus par appel : les suivants ne sont pas lus)") if len(fichiers) > 6 else "")
@@ -237,7 +237,7 @@ def back_up(f, ctx=None):
     Pendant une demande (ctx["tour"]), toutes les sauvegardes vont dans le même dossier et seule la version d'AVANT la demande est gardée ;
     la liste des fichiers touchés est inscrite dans _tour.json, ce qui permet d'annuler toute la demande d'un clic."""
     tour_ = (ctx or {}).get("tour")
-    dossier = _m.DONNEES / "sauvegardes" / (tour_["id"] if tour_ else datetime.now().strftime("%Y%m%d-%H%M%S"))
+    dossier = _m.DATA / "sauvegardes" / (tour_["id"] if tour_ else datetime.now().strftime("%Y%m%d-%H%M%S"))
     cible = dossier / rel(f)
     if tour_ is not None:
         if rel(f) in tour_["fichiers"]:                                    # déjà sauvegardé pendant cette demande : la version d'origine est celle-là
@@ -256,7 +256,7 @@ def record_after(ctx, f):
     if tour_ is None or rel(f) not in tour_["fichiers"]:
         return
     tour_["fichiers"][rel(f)]["apres"] = file_sha(f)
-    _m.write_atomic(_m.DONNEES / "sauvegardes" / tour_["id"] / "_tour.json", json.dumps({"id": tour_["id"], "conversation": tour_["conversation"], "fichiers": tour_["fichiers"], "annule": False}, ensure_ascii=False, indent=1))
+    _m.write_atomic(_m.DATA / "sauvegardes" / tour_["id"] / "_tour.json", json.dumps({"id": tour_["id"], "conversation": tour_["conversation"], "fichiers": tour_["fichiers"], "annule": False}, ensure_ascii=False, indent=1))
 
 
 BACKUP_DAYS = 60
@@ -264,7 +264,7 @@ BACKUP_DAYS = 60
 
 def purge_backups():
     """Au démarrage : supprime les sauvegardes de fichiers vieilles de plus de 60 jours (donnees/sauvegardes/<date>/...)."""
-    dossier = _m.DONNEES / "sauvegardes"
+    dossier = _m.DATA / "sauvegardes"
     limite = time.time() - BACKUP_DAYS * 86400
     try:
         anciens = [d for d in dossier.iterdir() if d.is_dir() and d.stat().st_mtime < limite]
@@ -273,7 +273,7 @@ def purge_backups():
     for d in anciens:
         shutil.rmtree(d, ignore_errors=True)
     if anciens:
-        _m.journaliser("{} ancienne(s) sauvegarde(s) supprimée(s) (plus de {} jours).".format(len(anciens), BACKUP_DAYS))
+        _m.log_event("{} ancienne(s) sauvegarde(s) supprimée(s) (plus de {} jours).".format(len(anciens), BACKUP_DAYS))
     return len(anciens)
 
 
@@ -297,11 +297,11 @@ def clean_orphans():
     de la base. Si la base ne se lit pas, rien n'est retiré : mieux vaut un reste qu'une perte. Renvoie False dans ce cas."""
     import sqlite3
     from . import archive, embeddings, progress_sheet, store
-    ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}          # les fichiers d'abord : un import entre les deux lectures met la conversation dans la base
+    ids = {c.stem for c in (_m.DATA / "conversations").glob("*.json")}          # les fichiers d'abord : un import entre les deux lectures met la conversation dans la base
     try:
         ids |= set(store.ids())
     except (sqlite3.Error, OSError) as erreur:
-        _m.journaliser("Nettoyage des restes de conversations sauté : la base ne se lit pas ({!r})".format(erreur))
+        _m.log_event("Nettoyage des restes de conversations sauté : la base ne se lit pas ({!r})".format(erreur))
         return False
     progress_sheet.clean_orphans(ids)
     archive.clean_orphans(ids)
@@ -314,9 +314,9 @@ def purge_data():
     """Garde donnees/ sous le plafond réglé (Réglages) : efface d'abord les restes temporaires, puis les plus anciennes sauvegardes de fichiers.
     Ne touche jamais aux conversations, ni aux 5 sauvegardes les plus récentes, ni à celles dont dépend un bouton « Annuler »."""
     PURGE["derniere"] = time.time()
-    plafond = int(_m.reglages()["plafond_donnees_go"] * _m.GB)
+    plafond = int(_m.settings()["plafond_donnees_go"] * _m.GB)
     for motif in ("verif-*.js", "commit-*.txt", "autotest-*.tmp"):
-        for f in _m.DONNEES.glob(motif):
+        for f in _m.DATA.glob(motif):
             try:
                 if time.time() - f.stat().st_mtime > 3600:
                     f.unlink()
@@ -329,11 +329,11 @@ def purge_data():
         clean_orphans()
     except OSError:
         pass
-    _m.SIZE_CACHE.pop(str(_m.DONNEES), None)
-    taille = _m.folder_size(_m.DONNEES, delai=10)
+    _m.SIZE_CACHE.pop(str(_m.DATA), None)
+    taille = _m.folder_size(_m.DATA, delai=10)
     if taille <= plafond:
         return 0
-    dossier = _m.DONNEES / "sauvegardes"
+    dossier = _m.DATA / "sauvegardes"
     try:
         anciens = sorted((d for d in dossier.iterdir() if d.is_dir()), key=lambda d: d.stat().st_mtime)
     except OSError:
@@ -353,8 +353,8 @@ def purge_data():
         supprimes += 1
         if taille <= plafond * 0.8:
             break
-    _m.SIZE_CACHE.pop(str(_m.DONNEES), None)
-    _m.journaliser("Dossier de données au-dessus du plafond ({} Go) : {} ancienne(s) sauvegarde(s) supprimée(s).".format(round(plafond / _m.GB, 1), supprimes))
+    _m.SIZE_CACHE.pop(str(_m.DATA), None)
+    _m.log_event("Dossier de données au-dessus du plafond ({} Go) : {} ancienne(s) sauvegarde(s) supprimée(s).".format(round(plafond / _m.GB, 1), supprimes))
     return supprimes
 
 
@@ -405,11 +405,11 @@ def read_exact(f):
     """Lit un fichier texte sans rien abîmer : renvoie (texte avec \\n partout, fin de ligne d'origine « \\r\\n » ou « \\n »).
     Un fichier qui n'est pas de l'UTF-8 valide est refusé (l'écrire le corromprait)."""
     if f.stat().st_size > 5_000_000:
-        raise _m.ErreurOutil(_t("{} est trop gros pour être modifié par l'assistant (plus de 5 Mo).").format(rel(f)))
+        raise _m.ToolError(_t("{} est trop gros pour être modifié par l'assistant (plus de 5 Mo).").format(rel(f)))
     try:
         texte = f.read_bytes().decode("utf-8")
     except UnicodeDecodeError:
-        raise _m.ErreurOutil(_t("{} n'est pas de l'UTF-8 valide (ancien encodage ?) : je ne le modifie pas pour ne pas le corrompre. Demande à l'utilisateur de le convertir.").format(rel(f)))
+        raise _m.ToolError(_t("{} n'est pas de l'UTF-8 valide (ancien encodage ?) : je ne le modifie pas pour ne pas le corrompre. Demande à l'utilisateur de le convertir.").format(rel(f)))
     crlf = texte.count("\r\n")
     seuls = texte.count("\n") - crlf
     return texte.replace("\r\n", "\n"), ("\r\n" if crlf and crlf >= seuls else "\n")
@@ -425,7 +425,7 @@ def write_exact(f, texte, eol):
 def write_tool(chemin, contenu, ctx):
     f = safe_path(chemin, ecriture=True)
     if len(contenu) > 400_000:
-        raise _m.ErreurOutil(_t("Contenu trop long (400 000 caractères au maximum)."))
+        raise _m.ToolError(_t("Contenu trop long (400 000 caractères au maximum)."))
     contenu = contenu.replace("\r\n", "\n")
     if f.is_file():
         avant, eol = read_exact(f)
@@ -453,16 +453,16 @@ def document_tool(chemin, contenu, titre, ctx):
         return res
     fabrique = documents.FORMATS.get(ext)
     if fabrique is None:
-        raise _m.ErreurOutil(_t("Format non géré : {}. Formats possibles : .md, .txt, .html, .csv, .pdf, .docx.").format(ext or _t("(sans extension)")))
+        raise _m.ToolError(_t("Format non géré : {}. Formats possibles : .md, .txt, .html, .csv, .pdf, .docx.").format(ext or _t("(sans extension)")))
     if len(contenu) > documents.MAX_SIZE:
-        raise _m.ErreurOutil(_t("Contenu trop long ({} caractères au maximum).").format(documents.MAX_SIZE))
+        raise _m.ToolError(_t("Contenu trop long ({} caractères au maximum).").format(documents.MAX_SIZE))
     octets = fabrique(contenu, str(titre or "").strip()[:150])
     if not ctx["accord"](_t("Créer ") + rel(f), _t("{} ({} caractères de texte, {} Ko).").format(_t("Remplace le document") if f.is_file() else _t("Crée le document"), len(contenu), len(octets) // 1024 + 1), "", auto=ctx["auto_ecriture"]):
         return refusal(ctx, _t("Refusé par l'utilisateur : rien n'a été écrit."))
-    for dossier_ecrit in (f.parent, _m.DONNEES):
+    for dossier_ecrit in (f.parent, _m.DATA):
         d = _m.disk_space(dossier_ecrit)
         if d and d["libre"] < 300 * 1024 ** 2:
-            raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas. Fais de la place d'abord.").format(d["racine"], _m.gb(d["libre"])))
+            raise _m.ToolError(_t("Le disque {} est presque plein ({} libres) : je n'écris pas. Fais de la place d'abord.").format(d["racine"], _m.gb(d["libre"])))
     copie = back_up(f, ctx)
     f.parent.mkdir(parents=True, exist_ok=True)
     provisoire = f.with_name(f.name + ".tmp")
@@ -487,10 +487,10 @@ def refusal(ctx, texte):
 
 def write_and_check(f, texte, eol, ctx, message):
     """Sauvegarde, écrit, puis contrôle la syntaxe et le dit au modèle tout de suite (il peut corriger sans que l'utilisateur ait à le remarquer)."""
-    for dossier_ecrit in (f.parent, _m.DONNEES):                      # pas d'écriture sur un disque presque plein (fichier tronqué, sauvegarde impossible)
+    for dossier_ecrit in (f.parent, _m.DATA):                      # pas d'écriture sur un disque presque plein (fichier tronqué, sauvegarde impossible)
         d = _m.disk_space(dossier_ecrit)
         if d and d["libre"] < 300 * 1024 ** 2:
-            raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas pour ne pas abîmer le fichier. Fais de la place d'abord.").format(d["racine"], _m.gb(d["libre"])))
+            raise _m.ToolError(_t("Le disque {} est presque plein ({} libres) : je n'écris pas pour ne pas abîmer le fichier. Fais de la place d'abord.").format(d["racine"], _m.gb(d["libre"])))
     copie = back_up(f, ctx)
     cree = not f.exists()
     f.parent.mkdir(parents=True, exist_ok=True)
@@ -545,7 +545,7 @@ def check_js(f, texte, suffixe):
     if not morceaux:
         return ""
     for debut, code in morceaux:
-        tmp = _m.DONNEES / ("verif-" + secrets.token_hex(3) + ".js")
+        tmp = _m.DATA / ("verif-" + secrets.token_hex(3) + ".js")
         try:
             tmp.parent.mkdir(parents=True, exist_ok=True)
             tmp.write_text(code, encoding="utf-8")
@@ -596,9 +596,9 @@ def replace_once(texte, ancien, nouveau):
     if n == 1:
         return texte.replace(ancien, nouveau, 1), ""
     if n > 1:
-        raise _m.ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois, aux lignes {}). Ajoute des lignes autour pour le rendre unique.").format(n, ", ".join(map(str, line_positions(texte, ancien)[:8]))))
+        raise _m.ToolError(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois, aux lignes {}). Ajoute des lignes autour pour le rendre unique.").format(n, ", ".join(map(str, line_positions(texte, ancien)[:8]))))
     if not ancien.strip():
-        raise _m.ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois : il est vide)."))
+        raise _m.ToolError(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois : il est vide)."))
     lignes = texte.split("\n")
     al = ancien.strip("\n").split("\n")
     cible = [l.strip() for l in al]
@@ -614,13 +614,13 @@ def replace_once(texte, ancien, nouveau):
             nl = [(prefixe + l) if l.strip() else l for l in nl]
         return "\n".join(lignes[:i] + nl + lignes[i + k:]), _t("Correspondance tolérante : espaces ou indentation différents, lignes {} à {}{}.").format(i + 1, i + k, _t(" (indentation ajustée)") if prefixe else "")
     if len(fenetres) > 1:
-        raise _m.ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois en ignorant l'indentation, aux lignes {}). Ajoute des lignes autour.").format(len(fenetres), ", ".join(str(i + 1) for i in fenetres[:8])))
+        raise _m.ToolError(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois en ignorant l'indentation, aux lignes {}). Ajoute des lignes autour.").format(len(fenetres), ", ".join(str(i + 1) for i in fenetres[:8])))
     proche = nearby_passage(lignes, al)
     if proche:
         debut, fin, r = proche
-        raise _m.ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois). Le passage le plus proche (lignes {} à {}, ressemblance {} %) est :\n{}\nRecopie-le exactement comme « ancien ».").format(
+        raise _m.ToolError(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois). Le passage le plus proche (lignes {} à {}, ressemblance {} %) est :\n{}\nRecopie-le exactement comme « ancien ».").format(
             debut + 1, fin, round(100 * r), "\n".join(lignes[debut:fin])[:1500]))
-    raise _m.ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois, et rien de ressemblant). Relis le fichier avec « lire » avant de modifier."))
+    raise _m.ToolError(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois, et rien de ressemblant). Relis le fichier avec « lire » avant de modifier."))
 
 
 def edit_tool(chemin, ancien, nouveau, ctx):
@@ -631,25 +631,25 @@ def edit_many_tool(chemin, remplacements, ctx):
     """Applique plusieurs remplacements à un fichier, en une seule demande d'accord. Tout ou rien : si un seul échoue, rien n'est écrit."""
     f = safe_path(chemin, ecriture=True)
     if not f.is_file():
-        raise _m.ErreurOutil(_t("Fichier introuvable : ") + rel(f))
+        raise _m.ToolError(_t("Fichier introuvable : ") + rel(f))
     if isinstance(remplacements, str):
         try:
             remplacements = json.loads(remplacements)
         except ValueError:
-            raise _m.ErreurOutil(_t("« remplacements » doit être une liste de {\"ancien\": ..., \"nouveau\": ...}."))
+            raise _m.ToolError(_t("« remplacements » doit être une liste de {\"ancien\": ..., \"nouveau\": ...}."))
     if not isinstance(remplacements, list) or not remplacements or not all(isinstance(x, dict) for x in remplacements):
-        raise _m.ErreurOutil(_t("« remplacements » doit être une liste non vide de {\"ancien\": ..., \"nouveau\": ...}."))
+        raise _m.ToolError(_t("« remplacements » doit être une liste non vide de {\"ancien\": ..., \"nouveau\": ...}."))
     if len(remplacements) > 20:
-        raise _m.ErreurOutil(_t("20 remplacements au plus par appel."))
+        raise _m.ToolError(_t("20 remplacements au plus par appel."))
     avant, eol = read_exact(f)
     texte, remarques = avant, []
     for numero, x in enumerate(remplacements, 1):
         try:
             texte, remarque = replace_once(texte, str(x.get("ancien", "")).replace("\r\n", "\n"), str(x.get("nouveau", "")).replace("\r\n", "\n"))
-        except _m.ErreurOutil as e:
+        except _m.ToolError as e:
             if len(remplacements) == 1:
                 raise
-            raise _m.ErreurOutil(_t("Remplacement {} sur {} : {} Rien n'a été écrit.").format(numero, len(remplacements), e))
+            raise _m.ToolError(_t("Remplacement {} sur {} : {} Rien n'a été écrit.").format(numero, len(remplacements), e))
         if remarque:
             remarques.append(("Remplacement {} : ".format(numero) if len(remplacements) > 1 else "") + remarque)
     if not ctx["accord"]("Modifier " + rel(f), "Remplace {} passage(s).".format(len(remplacements)) + ((" " + " ".join(remarques)) if remarques else ""), difference(avant, texte, rel(f)), auto=ctx["auto_ecriture"]):
@@ -669,7 +669,7 @@ def _confined_path(chemin):
     """Le chemin résolu s'il reste dans le dossier de travail (et hors des données de Lutin), sinon None : la règle de `chemin_sur`, sans exception."""
     try:
         return safe_path(chemin)
-    except _m.ErreurOutil:
+    except _m.ToolError:
         return None
 
 
@@ -677,9 +677,9 @@ def read_plan(commande):
     """Comment lancer cette commande SANS accord et SANS shell, ou None si ce n'est pas une lecture sûre (voir lutin.safe_commands).
     Trois contrôles, tous nécessaires : la liste blanche, aucun chemin hors du projet, puis un validateur propre à chaque programme qui relit chaque argument."""
     commande = str(commande or "").strip()
-    if not _m.COMMANDES_LECTURE.match(commande) or RE_OUTSIDE_PROJECT.search(commande):
+    if not _m.READ_COMMANDS.match(commande) or RE_OUTSIDE_PROJECT.search(commande):
         return None
-    return _safe.plan(commande, posix=os.name != "nt", confine=_confined_path, root=_m.RACINE, extra=_m.COMMANDES_SANS_ACCORD)
+    return _safe.plan(commande, posix=os.name != "nt", confine=_confined_path, root=_m.ROOT, extra=_m.COMMANDS_WITHOUT_APPROVAL)
 
 
 def safe_read_command(commande):
@@ -772,7 +772,7 @@ def limit_process_memory(p, limite_octets):
             return None
         return job
     except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("Limite de mémoire des commandes impossible : {!r}".format(erreur))
+        _m.log_event("Limite de mémoire des commandes impossible : {!r}".format(erreur))
         return None
 
 
@@ -831,15 +831,15 @@ def run_tool(commande, ctx, shell="cmd"):
     demande = next((str(m.get("content") or "") for m in reversed((ctx.get("conv") or {}).get("messages") or []) if m.get("role") == "user"), "")
     commande = repair_unc(commande, demande)
     if not commande:
-        raise _m.ErreurOutil(_t("Commande vide (l'argument n'est pas arrivé). Réessaie avec l'outil « executer » en donnant la commande dans « commande »."))
+        raise _m.ToolError(_t("Commande vide (l'argument n'est pas arrivé). Réessaie avec l'outil « executer » en donnant la commande dans « commande »."))
     if len(commande) > 1500:
-        raise _m.ErreurOutil(_t("Commande trop longue (max 1500 caractères)."))
+        raise _m.ToolError(_t("Commande trop longue (max 1500 caractères)."))
     shell = (shell or "cmd").strip().lower()
     if shell not in ("cmd", "powershell"):
-        raise _m.ErreurOutil(_t("Shell inconnu « {} ». Utilise « cmd » (défaut) ou « powershell ».").format(shell))
+        raise _m.ToolError(_t("Shell inconnu « {} ». Utilise « cmd » (défaut) ou « powershell ».").format(shell))
     lecture = read_plan(commande) if shell == "cmd" else None
     from . import approval_rules
-    effet, origine = approval_rules.decide(commande, str((ctx.get("conv") or {}).get("id") or ""), _m.RACINE)          # refuser > demander > autoriser (voir approval_rules)
+    effet, origine = approval_rules.decide(commande, str((ctx.get("conv") or {}).get("id") or ""), _m.ROOT)          # refuser > demander > autoriser (voir approval_rules)
     if effet == "deny":
         return refusal(ctx, _t("Refusé par une règle d'accord ({}) : la commande n'a pas été lancée. Ne la relance pas : propose autre chose ou explique ce que tu voulais faire.").format(_t("la tienne") if origine == "yours" else _t("celle du projet")))
     if effet in ("hardline", "ask"):
@@ -864,27 +864,27 @@ def run_tool(commande, ctx, shell="cmd"):
             part = (ctx.get("plafond_lecture") or 0) // len(lecture.paths) or None          # la part de la fenêtre d'un résultat (ADR 0019), partagée entre les fichiers
             return _t("Code de sortie {}.\n{}").format(0, "\n\n".join(read_tool(p, limite=part) if len(lecture.paths) == 1 else "{}\n\n{}".format(p, read_tool(p, limite=part)) for p in lecture.paths))
         try:
-            code, sortie, raison = start_process(list(lecture.argv), False, str(_m.RACINE), stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
+            code, sortie, raison = start_process(list(lecture.argv), False, str(_m.ROOT), stop, delai=_m.COMMAND_TIMEOUT_S, limite_ram=ctx.get("limite_ram", 0))
         except OSError:
-            raise _m.ErreurOutil(_t("Programme introuvable : {}").format(lecture.argv[0]))
+            raise _m.ToolError(_t("Programme introuvable : {}").format(lecture.argv[0]))
     elif shell == "powershell":
         exe_ps = "powershell" if os.name == "nt" else shutil.which("pwsh")
         if not exe_ps:
-            raise _m.ErreurOutil(_t("PowerShell n'est pas installé sur cette machine : utilise le shell par défaut."))
+            raise _m.ToolError(_t("PowerShell n'est pas installé sur cette machine : utilise le shell par défaut."))
         # PowerShell gère les chemins UNC nativement via Set-Location.
-        ps_cmd = "Set-Location -LiteralPath '{}'; {}".format(str(_m.RACINE).replace("'", "''"), commande)
-        code, sortie, raison = start_process([exe_ps, "-NoProfile", "-NonInteractive", "-Command", ps_cmd], False, None, stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
+        ps_cmd = "Set-Location -LiteralPath '{}'; {}".format(str(_m.ROOT).replace("'", "''"), commande)
+        code, sortie, raison = start_process([exe_ps, "-NoProfile", "-NonInteractive", "-Command", ps_cmd], False, None, stop, delai=_m.COMMAND_TIMEOUT_S, limite_ram=ctx.get("limite_ram", 0))
     else:
         # CMD.EXE ne sait pas démarrer dans un chemin UNC (NAS) : il retombe sur C:\Windows.
         # pushd crée alors une lettre de lecteur temporaire, ce qui règle le problème. (Sous Linux / macOS, le shell par défaut est sh.)
-        if os.name == "nt" and "\\" in str(_m.RACINE):
-            code, sortie, raison = start_process('pushd "{}" && {}'.format(str(_m.RACINE), commande), True, None, stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
+        if os.name == "nt" and "\\" in str(_m.ROOT):
+            code, sortie, raison = start_process('pushd "{}" && {}'.format(str(_m.ROOT), commande), True, None, stop, delai=_m.COMMAND_TIMEOUT_S, limite_ram=ctx.get("limite_ram", 0))
         else:
-            code, sortie, raison = start_process(commande, True, str(_m.RACINE), stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
+            code, sortie, raison = start_process(commande, True, str(_m.ROOT), stop, delai=_m.COMMAND_TIMEOUT_S, limite_ram=ctx.get("limite_ram", 0))
     if raison == "stop":
-        raise _m.Arret()
+        raise _m.TurnStopped()
     if raison == "delai":
-        return _t("La commande a dépassé {} s et a été arrêtée (avec ses sous-processus).").format(_m.DELAI_COMMANDE_S)
+        return _t("La commande a dépassé {} s et a été arrêtée (avec ses sous-processus).").format(_m.COMMAND_TIMEOUT_S)
     try:
         texte = sortie.decode("utf-8")
     except UnicodeDecodeError:
@@ -892,7 +892,7 @@ def run_tool(commande, ctx, shell="cmd"):
     # pendant un tour, la sortie est bornée à la part de la fenêtre d'un résultat par la boucle, qui garde le texte entier à l'archive (ADR 0019) :
     # la couper ici d'abord perdrait son milieu avant qu'il soit gardé ; seule une sortie démesurée l'est ici
     from . import archive
-    sortie_max = max(_m.SORTIE_MAX, archive.RESULT_MAX) if ctx.get("plafond_resultat") else _m.SORTIE_MAX
+    sortie_max = max(_m.OUTPUT_MAX, archive.RESULT_MAX) if ctx.get("plafond_resultat") else _m.OUTPUT_MAX
     if len(texte) > sortie_max:
         texte = texte[:sortie_max // 2] + _t("\n... (sortie coupée : {} caractères au milieu ; pour lire un fichier, utilise l'outil « lire » avec debut et fin, il donne les numéros de ligne et dit où reprendre) ...\n").format(len(texte) - sortie_max) + texte[-sortie_max // 2:]
     return _t("Code de sortie {}.\n{}").format(code, texte)
@@ -900,24 +900,24 @@ def run_tool(commande, ctx, shell="cmd"):
 
 def tool_token():
     """L'outil d'images met son jeton dans ses pages : on le lit pour pouvoir lui demander des actions (installer un module...)."""
-    if not _m.OUTIL:
-        raise _m.ErreurOutil("Aucune extension d'outil d'images n'est configurée.")
-    with urllib.request.urlopen(_m.OUTIL + "/studio", timeout=5) as r:
+    if not _m.TOOL_URL:
+        raise _m.ToolError("Aucune extension d'outil d'images n'est configurée.")
+    with urllib.request.urlopen(_m.TOOL_URL + "/studio", timeout=5) as r:
         page = r.read().decode("utf-8", "replace")
     m = re.search(r"TOKEN = '([0-9a-f]{16,64})'", page)
     if not m:
-        raise _m.ErreurOutil("Impossible de lire le jeton de l'outil d'images.")
+        raise _m.ToolError("Impossible de lire le jeton de l'outil d'images.")
     return m.group(1)
 
 
 def state_tool():
     try:
-        with urllib.request.urlopen(_m.OUTIL + "/api/config", timeout=5) as r:
+        with urllib.request.urlopen(_m.TOOL_URL + "/api/config", timeout=5) as r:
             c = json.loads(r.read().decode("utf-8"))
-        with urllib.request.urlopen(_m.OUTIL + "/api/modules", timeout=8) as r:
+        with urllib.request.urlopen(_m.TOOL_URL + "/api/modules", timeout=8) as r:
             m = json.loads(r.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):
-        return _t("L'outil d'images ne répond pas sur {} (est-il lancé ?).").format(_m.OUTIL)
+        return _t("L'outil d'images ne répond pas sur {} (est-il lancé ?).").format(_m.TOOL_URL)
     modules = m.get("modules", []) if isinstance(m, dict) else m
     lignes = [_t("Outil d'images, version {}. ComfyUI prêt : {}.").format(c.get("version"), c.get("comfy"))]
     lignes.append(_t("Opérations disponibles : ") + ", ".join(k for k, v in sorted((c.get("operations") or {}).items()) if v and k != "t"))
@@ -929,11 +929,11 @@ def state_tool():
 
 def install_module_tool(module, ctx):
     if not re.match(r"^[a-z0-9_-]{1,40}$", str(module)):
-        raise _m.ErreurOutil(_t("Identifiant de module invalide."))
+        raise _m.ToolError(_t("Identifiant de module invalide."))
     if not ctx["accord"](_t("Installer le module « {} » dans l'outil d'images").format(module), _t("Téléchargement de plusieurs Go : la progression s'affiche dans l'outil d'images."), ""):
         return refusal(ctx, _t("Refusé par l'utilisateur."))
     try:
-        req = urllib.request.Request(_m.OUTIL + "/api/installer", data=json.dumps({"module": module}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": tool_token()})
+        req = urllib.request.Request(_m.TOOL_URL + "/api/installer", data=json.dumps({"module": module}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": tool_token()})
         with urllib.request.urlopen(req, timeout=15) as r:
             return _t("Installation demandée : ") + r.read().decode("utf-8", "replace")[:500]
     except urllib.error.HTTPError as e:

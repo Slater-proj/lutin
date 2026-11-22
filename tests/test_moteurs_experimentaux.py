@@ -80,7 +80,7 @@ class JamaisParDefaut(unittest.TestCase):
             self.assertNotIn(r["moteur"], EXPERIMENTAUX)
 
     def test_le_moteur_par_defaut_reste_ollama(self):
-        self.assertEqual(_m.REGLAGES_DEFAUT["moteur"], "ollama")
+        self.assertEqual(_m.DEFAULT_SETTINGS["moteur"], "ollama")
 
 
 class AvecUnFauxServeur(unittest.TestCase):

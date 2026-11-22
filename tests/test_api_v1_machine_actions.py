@@ -19,13 +19,13 @@ UNKNOWN = "0" * 32
 class MachineActions(unittest.TestCase):
     def setUp(self):
         quiet_node.quiet(self)
-        A.LIMITEUR_PIN.evenements.clear()          # every pairing counts against the limit of the node, which is this server
+        A.PIN_LIMITER.evenements.clear()          # every pairing counts against the limit of the node, which is this server
         machines.CODES.clear()
         machines.SONDES.clear()
         machines.DERNIER_ETAT.clear()
         machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
         machines.noeud_activer(True)
-        self.answering = A.reglages().get("machine", "")
+        self.answering = A.settings().get("machine", "")
 
         def restore():
             machines._ecrire_registre([])
@@ -55,7 +55,7 @@ class MachineActions(unittest.TestCase):
         A.save_settings({"machine": paired["id"]})
         status, answer = api("DELETE", "/api/v1/machines/" + paired["id"])
         self.assertEqual((status, answer["machines"], answer["answering"]), (200, [], ""), "the machine that answered is gone: this one answers again")
-        self.assertEqual(A.reglages().get("machine"), "")
+        self.assertEqual(A.settings().get("machine"), "")
         self.assertEqual(api("DELETE", "/api/v1/machines/" + paired["id"])[1]["error"]["code"], "not_found")
 
     def test_a_refused_pairing_adds_nothing_and_keeps_the_code(self):

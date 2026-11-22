@@ -75,7 +75,7 @@ class Mcp(unittest.TestCase):
         self.assertEqual(ctx["demandes"], [], "une lecture ne demande pas d'accord")
 
     def test_un_outil_non_autorise_n_est_pas_appelable(self):
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             change_review.call_tool("mcp__demonstration__heure", {}, contexte())
 
     def test_le_refus_est_respecte(self):
@@ -94,12 +94,12 @@ class Mcp(unittest.TestCase):
         r = change_review.call_tool("mcp__demonstration__noter", {"texte": "bonjour"}, contexte(accorde=True))
         self.assertIn(mcp.MARKER, r[:80])
         self.assertEqual(NOTES.read_text(encoding="utf-8"), "bonjour\n")
-        journal = _m.lire_journal(20)
+        journal = _m.read_log(20)
         self.assertIn("mcp__demonstration__noter", json.dumps(journal, ensure_ascii=False))
 
     def test_lecture_seule_refuse_meme_un_appel_force(self):
         mcp.set_value(self.ident, outil="noter", autorise=True)
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             change_review.call_tool("mcp__demonstration__noter", {"texte": "x"}, contexte())
         self.assertFalse(NOTES.exists())
 

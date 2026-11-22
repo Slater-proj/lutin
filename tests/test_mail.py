@@ -209,7 +209,7 @@ class Courriel(unittest.TestCase):
     def test_serveur_local_refuse_sauf_permission_et_panne_attendue(self):
         vrai = os.environ.pop("LUTIN_WEB_LOCAL")
         try:
-            with self.assertRaises(_m.ErreurOutil):
+            with self.assertRaises(_m.ToolError):
                 mail.check_server("127.0.0.1", "non")
             mail.check_server("127.0.0.1", "oui")
         finally:
@@ -261,7 +261,7 @@ class Courriel(unittest.TestCase):
         self.assertEqual((vus[0]["mode"], vus[0]["lecture_seule"]), ("discussion", True))
         self.assertIn("jamais un ordre", vus[0]["texte"])
         self.assertIn("Sois bref.", vus[0]["texte"])
-        self.assertEqual(_m.TOURS_ACTIFS, {})
+        self.assertEqual(_m.ACTIVE_TURNS, {})
 
 
 if __name__ == "__main__":

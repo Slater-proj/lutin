@@ -77,14 +77,14 @@ class Base(unittest.TestCase):
         machines.CODES.clear()
         machines.SONDES.clear()
         machines.DERNIER_ETAT.clear()
-        A.LIMITEUR_PIN.evenements.clear()
+        A.PIN_LIMITER.evenements.clear()
         machines.REGISTRE.update(t=0.0)
         self.noeud = FauxNoeud()
-        self.avant = (A.SECURITE, A.APPAREILS)
-        A.SECURITE = S.Security()
+        self.avant = (A.SECURITY, A.DEVICES)
+        A.SECURITY = S.Security()
         import lutin.server as srv
         self.p_moteur = mock.patch.object(srv._moteurs, "by_id", lambda ident: self.noeud)
-        self.p_reglages = mock.patch.object(srv._m, "reglages", lambda: dict(A.REGLAGES_DEFAUT))
+        self.p_reglages = mock.patch.object(srv._m, "settings", lambda: dict(A.DEFAULT_SETTINGS))
         self.p_moteur.start()
         self.p_reglages.start()
         self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler if hasattr(A, "Handler") else srv.Handler)
@@ -100,7 +100,7 @@ class Base(unittest.TestCase):
             pass
         self.p_moteur.stop()
         self.p_reglages.stop()
-        A.SECURITE, A.APPAREILS = self.avant
+        A.SECURITY, A.DEVICES = self.avant
         machines.DOSSIER = None
 
     def jumeler(self):
@@ -587,11 +587,11 @@ class Relais(Base):
             emit({"type": "texte", "texte": "voilà"})
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
         with mock.patch("lutin.server._m.tour", faux_tour):
-            statut, corps = self.http("POST", "/h/{}/api/chat".format(m["id"]), {"message": "salut", "conversation": conv["id"]}, {"X-Token": A.JETON})
+            statut, corps = self.http("POST", "/h/{}/api/chat".format(m["id"]), {"message": "salut", "conversation": conv["id"]}, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 200, corps)
         evenements = [json.loads(l) for l in corps.splitlines() if l.strip()]
         self.assertEqual([e["type"] for e in evenements], ["debut", "texte", "fin"])
-        statut, corps = self.http("POST", "/h/{}/api/image".format(m["id"]), None, {"X-Token": A.JETON})
+        statut, corps = self.http("POST", "/h/{}/api/image".format(m["id"]), None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 400, "l'erreur de l'hôte est rendue telle quelle, pas déguisée en panne")
         machines.noeud_autoriser_piloter(False)
         statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
@@ -629,11 +629,11 @@ class Relais(Base):
 
 class MesuresApi(Base):
     def test_la_page_lit_le_classement_et_refuse_ce_qui_n_existe_pas(self):
-        statut, corps = self.http("GET", "/api/mesures-moteurs", None, {"X-Token": A.JETON})
+        statut, corps = self.http("GET", "/api/mesures-moteurs", None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 200, corps)
         vue = json.loads(corps)
         self.assertEqual(sorted(vue), ["candidats", "classement", "etat", "nombre"])
-        self.assertEqual(self.http("POST", "/api/mesurer-moteur", {"moteur": "inconnu", "modele": "x"}, {"X-Token": A.JETON})[0], 400)
+        self.assertEqual(self.http("POST", "/api/mesurer-moteur", {"moteur": "inconnu", "modele": "x"}, {"X-Token": A.TOKEN})[0], 400)
 
 
 if __name__ == "__main__":

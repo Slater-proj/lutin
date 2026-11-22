@@ -35,7 +35,7 @@ class Apercu(unittest.TestCase):
         return {"accord": lambda t, d, df, auto=False: (self.accords.append(t), accord)[1], "auto_commandes": False, "essai": False}
 
     def setUp(self):
-        (_m.RACINE / "page.html").write_text("<html></html>", encoding="utf-8")
+        (_m.ROOT / "page.html").write_text("<html></html>", encoding="utf-8")
         self.vrai = page_preview.browser
         page_preview.browser = lambda: [sys.executable, str(FAUX)]
 
@@ -70,7 +70,7 @@ class Apercu(unittest.TestCase):
 
     def test_seuls_les_fichiers_du_projet_et_les_adresses_locales(self):
         for cible in ("https://example.com/", "http://192.168.1.5/x", "../dehors.html", "inexistant.html", "file:///C:/Windows/win.ini"):
-            with self.assertRaises(_m.ErreurOutil, msg=cible):
+            with self.assertRaises(_m.ToolError, msg=cible):
                 page_preview.address(cible)
         self.assertTrue(page_preview.address("page.html").startswith("file:///"))
         self.assertEqual(page_preview.address("http://127.0.0.1:8000/a"), "http://127.0.0.1:8000/a")
@@ -78,12 +78,12 @@ class Apercu(unittest.TestCase):
 
     def test_sans_navigateur_le_message_est_clair(self):
         page_preview.browser = lambda: None
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             change_review.call_tool("apercu_page", {"chemin": "page.html"}, self.ctx())
         self.assertIn("Aucun navigateur", str(e.exception))
 
     def test_dimensions_invalides(self):
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             change_review.call_tool("apercu_page", {"chemin": "page.html", "largeur": "large"}, self.ctx())
 
 

@@ -33,11 +33,11 @@ LOCK = threading.Lock()
 
 
 def active():
-    return bool(_m.reglages().get("recherche_sens"))
+    return bool(_m.settings().get("recherche_sens"))
 
 
 def model_name():
-    m = str(_m.reglages().get("modele_embeddings") or DEFAULT_MODEL).strip()
+    m = str(_m.settings().get("modele_embeddings") or DEFAULT_MODEL).strip()
     return m if RE_MODEL.match(m) else DEFAULT_MODEL
 
 
@@ -58,7 +58,7 @@ def is_search_model(nom):
     base = str(nom).split(":")[0]
     if base == model_name().split(":")[0]:
         return True
-    return bool((model_info.already_known(str(nom), _m.DONNEES) or {}).get("embedding"))
+    return bool((model_info.already_known(str(nom), _m.DATA) or {}).get("embedding"))
 
 
 def state():
@@ -82,7 +82,7 @@ def _key(texte):
 
 
 def _path(ident):
-    return _m.DONNEES / "embeddings" / (str(ident) + ".json")
+    return _m.DATA / "embeddings" / (str(ident) + ".json")
 
 
 def _load(ident, modele):
@@ -116,7 +116,7 @@ def remove(ident):
 def clean_orphans(ids_existants):
     n = 0
     try:
-        for f in (_m.DONNEES / "embeddings").glob("*.json"):
+        for f in (_m.DATA / "embeddings").glob("*.json"):
             if f.stem not in ids_existants:
                 f.unlink(missing_ok=True)
                 n += 1
@@ -151,7 +151,7 @@ def similarities(ident, morceaux, question, budget=8.0):
         FAILURE["jusqua"] = time.time() + PAUSE_AFTER_FAILURE
         if not FAILURE["vu"]:
             FAILURE["vu"] = True
-            _m.journaliser("Recherche par le sens indisponible ({!r}) : recherche par mots seulement.".format(erreur))
+            _m.log_event("Recherche par le sens indisponible ({!r}) : recherche par mots seulement.".format(erreur))
         return {}
     sims = {}
     for i, m in enumerate(morceaux):

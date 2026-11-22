@@ -34,7 +34,7 @@ CURRENT = threading.local()          # les options de la recherche en cours (les
 # --------------------------------------------------------------------------- configuration (recherche.json, à part de reglages.json : elle porte un secret)
 def _path():
     from . import core as _m
-    return _m.DONNEES / "recherche.json"
+    return _m.DATA / "recherche.json"
 
 
 def config():
@@ -201,7 +201,7 @@ def results_searxng(requete):
     from . import core as _m
     base = config()["searxng"]
     if not base:
-        raise _m.ErreurOutil(_t("SearXNG n'est pas configuré."))
+        raise _m.ToolError(_t("SearXNG n'est pas configuré."))
     o = options()
     q = {"q": request_with_site(requete, o), "format": "json", "language": o.get("langue", "fr"), "safesearch": "1", "pageno": "1"}
     if o.get("periode"):
@@ -212,7 +212,7 @@ def results_searxng(requete):
     try:
         donnees = json.loads(texte)
     except ValueError:
-        raise _m.ErreurOutil(_t("SearXNG n'a pas répondu en JSON : le format « json » est-il activé dans son settings.yml ?")) from None
+        raise _m.ToolError(_t("SearXNG n'a pas répondu en JSON : le format « json » est-il activé dans son settings.yml ?")) from None
     sortie = []
     for x in donnees.get("results") or []:
         if isinstance(x, dict) and x.get("url"):
@@ -226,7 +226,7 @@ def results_brave(requete):
     from . import core as _m
     cle = config()["brave_cle"]
     if not cle:
-        raise _m.ErreurOutil(_t("La clé Brave n'est pas configurée."))
+        raise _m.ToolError(_t("La clé Brave n'est pas configurée."))
     o = options()
     q = {"q": request_with_site(requete, o), "count": "20", "search_lang": o.get("langue", "fr"), "safesearch": "moderate"}
     if o.get("periode"):
@@ -238,7 +238,7 @@ def results_brave(requete):
     try:
         donnees = json.loads(texte)
     except ValueError:
-        raise _m.ErreurOutil(_t("Brave n'a pas répondu en JSON.")) from None
+        raise _m.ToolError(_t("Brave n'a pas répondu en JSON.")) from None
     brut = donnees.get("results") if o.get("actualites") else (donnees.get("web") or {}).get("results")
     sortie = []
     for x in brut or []:
@@ -257,7 +257,7 @@ def _post(nom, base, chemin, corps, entetes):
     try:
         donnees = json.loads(texte)
     except ValueError:
-        raise _m.ErreurOutil(_t("{} n'a pas répondu en JSON.").format(nom.capitalize())) from None
+        raise _m.ToolError(_t("{} n'a pas répondu en JSON.").format(nom.capitalize())) from None
     return donnees if isinstance(donnees, dict) else {}
 
 
@@ -265,7 +265,7 @@ def _key(nom):
     from . import core as _m
     cle = config()[nom + "_cle"]
     if not cle:
-        raise _m.ErreurOutil(_t("La clé {} n'est pas configurée.").format(nom.capitalize()))
+        raise _m.ToolError(_t("La clé {} n'est pas configurée.").format(nom.capitalize()))
     return cle
 
 

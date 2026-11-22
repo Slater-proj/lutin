@@ -91,7 +91,7 @@ def dossier():
     if DOSSIER is not None:
         return Path(DOSSIER)
     from . import core as _m
-    return Path(_m.DONNEES)
+    return Path(_m.DATA)
 
 
 def _lire(nom, defaut):

@@ -43,11 +43,11 @@ class Fiche(unittest.TestCase):
         self.assertEqual(len(progress_sheet.read(ID)["fait"]), 2, "« fait » s'ajoute")
         progress_sheet.modify(ID, "fait", "chapitre 1", "retirer")
         self.assertEqual(progress_sheet.read(ID)["fait"], ["Chapitre 2"])
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             progress_sheet.modify(ID, "nimporte", "x")
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             progress_sheet.modify(ID, "fait", "")
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             progress_sheet.modify(ID, "fait", "x", "bizarre")
 
     def test_la_fiche_ne_grossit_pas_sans_fin(self):
@@ -133,16 +133,16 @@ class PartDuContexte(unittest.TestCase):
         progress_sheet.delete(ID)
 
     def test_le_plafond_suit_le_reglage_et_reste_borne(self):
-        self.assertEqual(_m.reglages()["fiche_part"], 10)
+        self.assertEqual(_m.settings()["fiche_part"], 10)
         self.assertEqual(progress_sheet.budget_caracteres(16384), int(16384 * 0.10 * 3))
         _m.save_settings({"fiche_part": 25})
         self.assertEqual(progress_sheet.budget_caracteres(16384), int(16384 * 0.25 * 3), "25 % : la fiche peut garder plus de détails")
         _m.save_settings({"fiche_part": 400})
-        self.assertEqual(_m.reglages()["fiche_part"], 25, "borné à 25 %")
+        self.assertEqual(_m.settings()["fiche_part"], 25, "borné à 25 %")
         _m.save_settings({"fiche_part": 1})
-        self.assertEqual(_m.reglages()["fiche_part"], 5, "borné à 5 %")
+        self.assertEqual(_m.settings()["fiche_part"], 5, "borné à 5 %")
         _m.save_settings({"fiche_part": "n'importe quoi"})
-        self.assertEqual(_m.reglages()["fiche_part"], 10, "valeur absurde : retour à 10 %")
+        self.assertEqual(_m.settings()["fiche_part"], 10, "valeur absurde : retour à 10 %")
 
     def test_la_fiche_garde_plus_de_lignes_avec_un_plafond_plus_haut_et_l_avertissement_suit(self):
         for i in range(25):
@@ -356,12 +356,12 @@ class RappelDuFil(unittest.TestCase):
         c = self.conv(msgs)
         c["messages"] = msgs + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE s'il te plaît ?"}]
         self.assertEqual(recall.thread_recall(c)[1], 1, "sans savoir ce qui part : le message 3 sur 21 est hors des six derniers, il est remis")
-        grand = dict(_m.reglages(), num_ctx=131072)
+        grand = dict(_m.settings(), num_ctx=131072)
         outils = agent.outils_du_mode(grand)
         vus = agent.ce_que_voit_le_modele(c, grand, outils)
         self.assertTrue(any("4711-ZEBRE" in (m.get("content") or "") for m in vus), "sur 131 072 jetons, toute la conversation part")
         self.assertEqual(recall.thread_recall(c, "", 1800, vus), ("", 0), "le modèle le voit déjà : rien n'est remis")
-        petit = dict(_m.reglages(), num_ctx=4096)
+        petit = dict(_m.settings(), num_ctx=4096)
         vus = agent.ce_que_voit_le_modele(c, petit, agent.outils_du_mode(petit))
         self.assertFalse(any("4711-ZEBRE" in (m.get("content") or "") for m in vus), "sur 4 096 jetons, l'ajustement le retire")
         texte, n = recall.thread_recall(c, "", 1800, vus)
@@ -448,7 +448,7 @@ class RappelDuFil(unittest.TestCase):
         progress_sheet.modify(self.ident, "etape", "Ouvrir le coffre ZEBRE")
         msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Le code du coffre ZEBRE est 4711, où en est la serrure du coffre ? " if i == 2 else "") + "blabla de remplissage numéro %d " % i * 40} for i in range(20)]
         c = self.conv(msgs)
-        r = dict(_m.reglages(), num_ctx=4096, rappel_ici=True, web=False)          # 4 096 : le début n'est plus sous les yeux du modèle
+        r = dict(_m.settings(), num_ctx=4096, rappel_ici=True, web=False)          # 4 096 : le début n'est plus sous les yeux du modèle
         rappels = []
         with mock.patch.object(_m, "thread_recall", lambda *a, **k: rappels.append(a) or recall.thread_recall(*a, **k)), mock.patch.object(_m, "automatic_recalls", lambda *a, **k: rappels.append(a) or ("", [])):
             c["messages"] = msgs + [{"role": "user", "content": "Où en est-on ?"}]

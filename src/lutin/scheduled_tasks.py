@@ -27,7 +27,7 @@ PERIOD = 30            # secondes entre deux regards sur l'horloge
 
 
 def path():
-    return _m.DONNEES / "planifie.json"
+    return _m.DATA / "planifie.json"
 
 
 def read():
@@ -141,7 +141,7 @@ def remove(ident, conversation=False):
             TO_REMOVE.add(conv)
         else:
             _m.conv_delete(conv)
-    _m.journaliser("Tâche planifiée « {} » supprimée{}.".format(tache.get("nom", ""), " (et sa conversation)" if conversation and conv else ""))
+    _m.log_event("Tâche planifiée « {} » supprimée{}.".format(tache.get("nom", ""), " (et sa conversation)" if conversation and conv else ""))
     return {"ok": True}
 
 
@@ -246,7 +246,7 @@ def _record(ident, etat_final, debut, erreur=""):
 def _failure_startup(tache, texte):
     """La tâche n'a pas pu démarrer (dossier de travail disparu…) : c'est écrit sur la tâche, dans le journal et dans la notification, et elle n'est pas relancée toutes les 30 secondes."""
     debut = datetime.now()
-    _m.journaliser("Tâche planifiée « {} » : impossible de démarrer ({}).".format(tache["nom"], texte[:200]))
+    _m.log_event("Tâche planifiée « {} » : impossible de démarrer ({}).".format(tache["nom"], texte[:200]))
     if _note(tache["id"], derniere_exec=debut.isoformat(timespec="seconds"), derniere_etat="erreur", derniere_erreur=texte[:300]):
         _record(tache["id"], "erreur", debut, texte)
         _notify(tache, "erreur", "⚠ " + texte)
@@ -258,7 +258,7 @@ def execute(ident):
     tache = next((t for t in read() if t["id"] == ident), None)
     if tache is None:
         raise ValueError(_t("Cette tâche planifiée n'existe plus."))
-    with _m.VERROU_TOURS:
+    with _m.TURNS_LOCK:
         if ident in RUNNING:
             raise ValueError(_t("Cette tâche travaille déjà."))
     if _turns.full():
@@ -289,15 +289,15 @@ def execute(ident):
             problemes.append(str(evenement.get("texte", "")))
     demande = _t("(Tâche planifiée « {} » lancée le {} à {}.)").format(tache["nom"], debut.strftime("%d/%m/%Y"), debut.strftime("%H:%M")) + " " + tache["prompt"]
     try:
-        _m.journaliser("Tâche planifiée « {} » : démarrage (conversation {}).".format(tache["nom"], conv["id"]))
-        siege.run(demande, recueillir, _m.reglages(), identite="planifié", lecture_seule=True)
+        _m.log_event("Tâche planifiée « {} » : démarrage (conversation {}).".format(tache["nom"], conv["id"]))
+        siege.run(demande, recueillir, _m.settings(), identite="planifié", lecture_seule=True)
     except Exception as erreur:  # noqa: BLE001
         etat_final = "erreur"
         problemes.append(_t("Erreur inattendue : {}").format(str(erreur)[:300]))
-        _m.journaliser("Tâche planifiée « {} » en erreur : {!r}".format(tache["nom"], erreur))
+        _m.log_event("Tâche planifiée « {} » en erreur : {!r}".format(tache["nom"], erreur))
     finally:
         siege.release()
-        with _m.VERROU_TOURS:
+        with _m.TURNS_LOCK:
             RUNNING.pop(ident, None)
     arretee = stop.is_set()
     resultat = ""
@@ -311,7 +311,7 @@ def execute(ident):
                 finale["messages"].append({"role": "assistant", "content": "⚠ " + texte, "ts": datetime.now().isoformat(timespec="seconds")})
                 _m.conv_write(finale)
             resultat = resultat if (resultat and not problemes) else "⚠ " + texte
-            _m.journaliser("Tâche planifiée « {} » sans résultat : {}".format(tache["nom"], texte[:200]))
+            _m.log_event("Tâche planifiée « {} » sans résultat : {}".format(tache["nom"], texte[:200]))
     except (OSError, ValueError):
         pass
     if conv["id"] in TO_REMOVE:                        # sa tâche a été supprimée avec sa conversation pendant qu'elle travaillait : l'écriture de fin de tour est défaite
@@ -343,7 +343,7 @@ def _notify(tache, etat_final, resultat):
         bilan = "ok"
     except ValueError as erreur:
         bilan = str(erreur)[:200]
-        _m.journaliser("Tâche planifiée « {} » : notification impossible ({}).".format(tache["nom"], bilan))
+        _m.log_event("Tâche planifiée « {} » : notification impossible ({}).".format(tache["nom"], bilan))
     try:
         modify(tache["id"], derniere_notif=bilan)
     except ValueError:
@@ -354,7 +354,7 @@ def run_first_due(maintenant=None):
     """Lance la première tâche échue si la machine est libre. Renvoie son identifiant (ou None)."""
     maintenant = maintenant or datetime.now()
     for tache in read():
-        if due(tache, maintenant) and not _m.TOURS_ACTIFS and tache["id"] not in RUNNING:
+        if due(tache, maintenant) and not _m.ACTIVE_TURNS and tache["id"] not in RUNNING:
             try:
                 execute(tache["id"])
             except ValueError:
@@ -368,7 +368,7 @@ def loop():
         try:
             run_first_due()
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Planification : {!r}".format(erreur))
+            _m.log_event("Planification : {!r}".format(erreur))
         time.sleep(PERIOD)
 
 

@@ -34,7 +34,7 @@ _cache = {}
 
 
 def folder():
-    return _m.DONNEES / "suivis"
+    return _m.DATA / "suivis"
 
 
 def path(ident):
@@ -55,7 +55,7 @@ def normalize_section(nom):
              "fichier": "fichiers", "fichiers": "fichiers", "fichierstouches": "fichiers", "demande": "demandes", "demandes": "demandes", "dernieresdemandes": "demandes"}
     cle = alias.get(base)
     if not cle:
-        raise _m.ErreurOutil(_t("Section inconnue : « {} ». Sections : {}.").format(nom, ", ".join(KEYS)))
+        raise _m.ToolError(_t("Section inconnue : « {} ». Sections : {}.").format(nom, ", ".join(KEYS)))
     return cle
 
 
@@ -162,18 +162,18 @@ def modify(ident, section, texte, mode=""):
     nouvelles = [clean_line(x) for x in re.split(r"\n+", str(texte or "")) if clean_line(x)]
     mode = (mode or ("remplacer" if cle in ("objectif", "plan", "etape") else "ajouter")).lower()
     if mode not in ("remplacer", "ajouter", "retirer"):
-        raise _m.ErreurOutil(_t("Mode inconnu : « {} » (remplacer, ajouter ou retirer).").format(mode))
+        raise _m.ToolError(_t("Mode inconnu : « {} » (remplacer, ajouter ou retirer).").format(mode))
     if mode == "retirer":
         cherche = clean_line(texte).lower()
         if not cherche:
-            raise _m.ErreurOutil(_t("Dis quelle ligne retirer."))
+            raise _m.ToolError(_t("Dis quelle ligne retirer."))
         avant = len(sections[cle])
         sections[cle] = [ligne for ligne in sections[cle] if cherche not in ligne.lower()]
         retirees = avant - len(sections[cle])
         write(ident, sections)
         return _t("{} ligne(s) retirée(s) de « {} ».").format(retirees, TITLES[cle])
     if not nouvelles:
-        raise _m.ErreurOutil(_t("Texte vide."))
+        raise _m.ToolError(_t("Texte vide."))
     sections[cle] = nouvelles if mode == "remplacer" else sections[cle] + nouvelles
     write(ident, sections)
     return _t("Fiche de suivi mise à jour : « {} ».").format(TITLES[cle])
@@ -216,7 +216,7 @@ def render(sections, budget_caracteres):
 def max_share():
     """La part de la fenêtre de contexte que la fiche peut prendre : le réglage « fiche_part » (5 à 25 %, 10 par défaut)."""
     try:
-        return max(5, min(25, int(_m.reglages().get("fiche_part", 10)))) / 100
+        return max(5, min(25, int(_m.settings().get("fiche_part", 10)))) / 100
     except (TypeError, ValueError):
         return MAX_SHARE
 

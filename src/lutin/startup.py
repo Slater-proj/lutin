@@ -55,14 +55,14 @@ def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
         os.environ["LUTIN_SANS_NAVIGATEUR"] = "1"
     ensure_ollama_runs(cfg, profil, ecrire)
     from . import core
-    core.SECURITE = security.Security.depuis_dict(cfg["securite"])
+    core.SECURITY = security.Security.depuis_dict(cfg["securite"])
     core.PORT = int(cfg["securite"]["port"])
-    core.APPAREILS = security.Devices(Path(dossiers["config"]) / "appareils.json")
+    core.DEVICES = security.Devices(Path(dossiers["config"]) / "appareils.json")
 
     def verifier_a_la_demande(portee):
         """Boutons de l'onglet Modèles : la configuration est relue à chaque fois (les propositions refusées entre-temps comptent)."""
         return updates.check(profil, config.load(dossiers), dossiers, ollama_client.Ollama(), force=True, portee=portee)
-    core.VERIFICATEUR = verifier_a_la_demande
+    core.MODEL_CHECKER = verifier_a_la_demande
     if cfg.get("verifier_maj", True):
         def verification():
             try:
@@ -92,4 +92,4 @@ def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
                     pass
                 time.sleep(6 * 3600)
         threading.Thread(target=verification_moteurs, daemon=True, name="verification-moteurs-boucle").start()
-    core.principal()
+    core.main()

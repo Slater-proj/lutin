@@ -44,7 +44,7 @@ def _port():
     except ValueError:
         port = 0
     if not 1 <= port <= 65535:
-        raise _m.ErreurOutil(_t("Le port d'ACE-Step n'est pas valide (un nombre entre 1 et 65535)."))
+        raise _m.ToolError(_t("Le port d'ACE-Step n'est pas valide (un nombre entre 1 et 65535)."))
     return port
 
 
@@ -68,12 +68,12 @@ def _request(methode, chemin, json_corps=None, delai=60, max_octets=2_000_000):
     except urllib.error.HTTPError as e:
         corps = e.read(3000).decode("utf-8", "replace")
         if e.code == 401:
-            raise _m.ErreurOutil(_t("ACE-Step demande une clé API : renseigne-la dans les réglages de l'addon."))
-        raise _m.ErreurOutil(addons.mask(_t("ACE-Step a refusé (HTTP {}) : {}").format(e.code, _summary_error(corps)), valeurs))
+            raise _m.ToolError(_t("ACE-Step demande une clé API : renseigne-la dans les réglages de l'addon."))
+        raise _m.ToolError(addons.mask(_t("ACE-Step a refusé (HTTP {}) : {}").format(e.code, _summary_error(corps)), valeurs))
     except (urllib.error.URLError, OSError, ValueError) as e:
-        raise _m.ErreurOutil(addons.mask(_t("ACE-Step ne répond pas sur le port {} ({}). Il doit être lancé sur cette machine (uv run acestep-api).").format(_port(), e), valeurs))
+        raise _m.ToolError(addons.mask(_t("ACE-Step ne répond pas sur le port {} ({}). Il doit être lancé sur cette machine (uv run acestep-api).").format(_port(), e), valeurs))
     if len(brut) > max_octets:
-        raise _m.ErreurOutil(_t("La réponse d'ACE-Step est trop grosse."))
+        raise _m.ToolError(_t("La réponse d'ACE-Step est trop grosse."))
     return type_, brut
 
 
@@ -95,11 +95,11 @@ def _answer(brut):
     try:
         d = json.loads(brut.decode("utf-8", "replace"))
     except ValueError:
-        raise _m.ErreurOutil(_t("ACE-Step n'a pas répondu comme prévu (le service a-t-il changé ?)."))
+        raise _m.ToolError(_t("ACE-Step n'a pas répondu comme prévu (le service a-t-il changé ?)."))
     if not isinstance(d, dict) or "data" not in d:
-        raise _m.ErreurOutil(_t("ACE-Step n'a pas répondu comme prévu (le service a-t-il changé ?)."))
+        raise _m.ToolError(_t("ACE-Step n'a pas répondu comme prévu (le service a-t-il changé ?)."))
     if d.get("error") or int(d.get("code") or 200) != 200:
-        raise _m.ErreurOutil(_t("ACE-Step a refusé : {}").format(str(d.get("error") or d.get("code"))[:300]))
+        raise _m.ToolError(_t("ACE-Step a refusé : {}").format(str(d.get("error") or d.get("code"))[:300]))
     return d["data"]
 
 
@@ -108,7 +108,7 @@ def check():
     try:
         _, brut = _request("GET", "/health", delai=15, max_octets=100_000)
         data = _answer(brut)
-    except _m.ErreurOutil as e:
+    except _m.ToolError as e:
         return [{"appel": "sante", "ok": False, "message": str(e)}]
     version = str(data.get("version") or "") if isinstance(data, dict) else ""
     return [{"appel": "sante", "ok": True, "message": _t("ACE-Step répond (version {}).").format(version or "?")}]
@@ -153,7 +153,7 @@ def _wait_for(task_id):
         entree = next((x for x in data if isinstance(x, dict) and x.get("task_id") == task_id), None) if isinstance(data, list) else None
         status = int(entree.get("status") or 0) if entree else 0
         if status == 2:
-            raise _m.ErreurOutil(_t("ACE-Step n'a pas pu composer ce morceau : {}").format(_failure_reason(entree)))
+            raise _m.ToolError(_t("ACE-Step n'a pas pu composer ce morceau : {}").format(_failure_reason(entree)))
         if status == 1:
             try:
                 resultats = json.loads(entree.get("result") or "[]")
@@ -161,10 +161,10 @@ def _wait_for(task_id):
                 resultats = []
             chemin = next((str(x.get("file") or "") for x in resultats if isinstance(x, dict) and x.get("file")), "") if isinstance(resultats, list) else ""
             if not chemin:
-                raise _m.ErreurOutil(_t("ACE-Step a fini sans rendre de fichier audio."))
+                raise _m.ToolError(_t("ACE-Step a fini sans rendre de fichier audio."))
             return chemin
         time.sleep(POLL_S)
-    raise _m.ErreurOutil(_t("ACE-Step n'a pas fini en {} minutes : le travail continue peut-être de son côté.").format(WAIT_MAX_S // 60))
+    raise _m.ToolError(_t("ACE-Step n'a pas fini en {} minutes : le travail continue peut-être de son côté.").format(WAIT_MAX_S // 60))
 
 
 def _failure_reason(entree):
@@ -180,12 +180,12 @@ def _failure_reason(entree):
 def music_tool(args, ctx):
     style = str(args.get("description") or "").strip()
     if not style:
-        raise _m.ErreurOutil(_t("Il faut décrire le style du morceau (genre, instruments, ambiance)."))
+        raise _m.ToolError(_t("Il faut décrire le style du morceau (genre, instruments, ambiance)."))
     if len(style) > MAX_TEXT:
-        raise _m.ErreurOutil(_t("Description trop longue ({} caractères au plus).").format(MAX_TEXT))
+        raise _m.ToolError(_t("Description trop longue ({} caractères au plus).").format(MAX_TEXT))
     paroles = str(args.get("paroles") or "").strip()
     if len(paroles) > MAX_TEXT:
-        raise _m.ErreurOutil(_t("Paroles trop longues ({} caractères au plus).").format(MAX_TEXT))
+        raise _m.ToolError(_t("Paroles trop longues ({} caractères au plus).").format(MAX_TEXT))
     try:
         duree = int(args.get("duree") or DEFAULT_DURATION)
     except (TypeError, ValueError):
@@ -193,7 +193,7 @@ def music_tool(args, ctx):
     duree = max(MIN_DURATION, min(MAX_DURATION, duree))
     format_ = str(args.get("format") or addons.settings(IDENT).get("format") or "mp3").lower()
     if format_ not in FORMATS:
-        raise _m.ErreurOutil(_t("Format inconnu : « {} » ({}).").format(format_, ", ".join(FORMATS)))
+        raise _m.ToolError(_t("Format inconnu : « {} » ({}).").format(format_, ", ".join(FORMATS)))
     langue = re.sub(r"[^A-Za-z-]", "", str(args.get("langue") or "en"))[:10] or "en"
     corps = {"prompt": style, "lyrics": paroles or INSTRUMENTAL, "audio_duration": duree, "audio_format": format_, "vocal_language": langue}
     detail = _t("Style : {}\nParoles : {}\nDurée : {} s\nFormat : {}").format(style[:300] + ("…" if len(style) > 300 else ""),
@@ -203,13 +203,13 @@ def music_tool(args, ctx):
     _, brut = _request("POST", "/release_task", json_corps=corps)
     task_id = str((_answer(brut) or {}).get("task_id") or "")
     if not task_id:
-        raise _m.ErreurOutil(_t("ACE-Step n'a pas pris la demande en compte (pas de numéro de tâche)."))
+        raise _m.ToolError(_t("ACE-Step n'a pas pris la demande en compte (pas de numéro de tâche)."))
     chemin = _wait_for(task_id)
     if not chemin.startswith("/v1/audio?path="):          # le fichier ne vient que de ce service, jamais d'une adresse qu'il désignerait
-        raise _m.ErreurOutil(_t("ACE-Step a désigné un fichier à un endroit inattendu : refusé."))
+        raise _m.ToolError(_t("ACE-Step a désigné un fichier à un endroit inattendu : refusé."))
     type_, audio = _request("GET", chemin, delai=300, max_octets=OUTPUT_MAX_BYTES)
     if "json" in type_.lower() or audio[:1] == b"{" or len(audio) < 100:          # une erreur déguisée en réponse : on la montre, on n'enregistre pas un faux fichier audio
-        raise _m.ErreurOutil(_t("ACE-Step n'a pas rendu d'audio : {}").format(_summary_error(audio.decode("utf-8", "replace"))))
+        raise _m.ToolError(_t("ACE-Step n'a pas rendu d'audio : {}").format(_summary_error(audio.decode("utf-8", "replace"))))
     sortie = _folder_audio(ctx) / _name_file(style, format_)
     sortie.write_bytes(audio)
     ctx.setdefault("fichiers_joints", []).append(str(sortie))
@@ -219,7 +219,7 @@ def music_tool(args, ctx):
 def acestep_tool(nom, args, ctx):
     """Aiguillage de l'outil de l'addon (change_review.py)."""
     if not addons.actif(IDENT):
-        raise _m.ErreurOutil(_t("L'addon ACE-Step n'est pas activé."))
+        raise _m.ToolError(_t("L'addon ACE-Step n'est pas activé."))
     if nom == "musique_generer":
         return music_tool(args, ctx)
-    raise _m.ErreurOutil(_t("Outil inconnu : {}").format(nom))
+    raise _m.ToolError(_t("Outil inconnu : {}").format(nom))

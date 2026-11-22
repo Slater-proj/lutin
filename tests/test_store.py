@@ -30,7 +30,7 @@ def conversation(ident, title, maj, messages=(), **fields):
 class Store(unittest.TestCase):
     def setUp(self):
         self.data = Path(tempfile.mkdtemp(prefix="lutin-store-"))
-        patch = mock.patch.object(A, "DONNEES", self.data)
+        patch = mock.patch.object(A, "DATA", self.data)
         patch.start()
         self.addCleanup(patch.stop)
         self.addCleanup(store.close)
@@ -201,8 +201,8 @@ class Store(unittest.TestCase):
             from lutin import health
             with mock.patch.object(health, "assess_health", return_value={"niveau": "ok", "items": []}), \
                     mock.patch.object(health, "model_size", return_value=0), mock.patch.object(A, "ps_modele", return_value=None), \
-                    mock.patch.object(A, "mesures_systeme", return_value={}):
-                state = health.health_state(A.reglages())
+                    mock.patch.object(A, "system_measures", return_value={}):
+                state = health.health_state(A.settings())
             self.assertEqual((state["niveau"], [i["id"] for i in state["items"]]), ("attention", ["base"]))
         if sys.platform == "win32":
             self.assertTrue(store.on_network_share("\\\\server\\share\\donnees"))

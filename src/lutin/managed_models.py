@@ -84,7 +84,7 @@ def _context_size():
     """The conversation window Lutin asks TabbyAPI to reserve (the settings' num_ctx)."""
     try:
         from . import core as _m
-        return int(_m.reglages().get("num_ctx") or 0) or 16384
+        return int(_m.settings().get("num_ctx") or 0) or 16384
     except Exception:  # noqa: BLE001  (unreadable settings: the default of the settings)
         return 16384
 

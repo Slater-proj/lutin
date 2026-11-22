@@ -22,7 +22,7 @@ SOURCE = Path(__file__).resolve().parent.parent / "src" / "lutin"
 
 def api(method, path, body=None):
     request = urllib.request.Request(T.BASE + path, method=method, data=None if body is None else json.dumps(body).encode("utf-8"),
-                                     headers={"Content-Type": "application/json", "X-Token": A.JETON})
+                                     headers={"Content-Type": "application/json", "X-Token": A.TOKEN})
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
@@ -34,7 +34,7 @@ def turn(conversation, body, scenario=None, approve=None):
     """Sends a message and returns (status, events), or (status, error) when the turn is refused before the stream. `approve(event)` answers an approval request."""
     T.SCENARIO[:] = scenario or []
     request = urllib.request.Request("{}/api/v1/conversations/{}/turns".format(T.BASE, conversation), data=json.dumps(body).encode("utf-8"),
-                                     headers={"Content-Type": "application/json", "X-Token": A.JETON})
+                                     headers={"Content-Type": "application/json", "X-Token": A.TOKEN})
     events = []
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
@@ -104,7 +104,7 @@ class Stream(unittest.TestCase):
 
 
 def upload(path, data, headers=None):
-    request = urllib.request.Request(T.BASE + path, data=data, method="POST", headers=dict({"X-Token": A.JETON}, **(headers or {})))
+    request = urllib.request.Request(T.BASE + path, data=data, method="POST", headers=dict({"X-Token": A.TOKEN}, **(headers or {})))
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8"))
 
@@ -155,13 +155,13 @@ class Refusals(unittest.TestCase):
 
     def test_a_conversation_already_answering_and_too_many_turns(self):
         conversation = new_conversation()
-        with mock.patch.dict(A.TOURS_ACTIFS, {conversation: threading.Event()}):
+        with mock.patch.dict(A.ACTIVE_TURNS, {conversation: threading.Event()}):
             status, _, answer = turn(conversation, {"message": "Hello"})
             self.assertEqual((status, answer["error"]["code"]), (409, "turn_running"))
-        with mock.patch.object(A, "TOURS_SIMULTANES", 0):
+        with mock.patch.object(A, "CONCURRENT_TURNS", 0):
             status, _, answer = turn(conversation, {"message": "Hello"})
             self.assertEqual((status, sorted(answer["error"]), answer["error"]["code"]), (429, ["code", "message"], "too_many_turns"))
-        self.assertNotIn(conversation, A.TOURS_ACTIFS)
+        self.assertNotIn(conversation, A.ACTIVE_TURNS)
 
     def test_the_memory_choice_route_stays_but_no_question_waits(self):
         """ADR 0019: the question « sheet or summary? » is no longer asked (the progress sheet for every conversation). The route stays for older

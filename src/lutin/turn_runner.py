@@ -30,14 +30,14 @@ class TurnRefused(Exception):
 
 def active():
     """The conversations that have a turn running (a copy, safe to iterate)."""
-    with _m.VERROU_TOURS:
-        return dict(_m.TOURS_ACTIFS)
+    with _m.TURNS_LOCK:
+        return dict(_m.ACTIVE_TURNS)
 
 
 def full():
     """True when no seat is free: a cheap check before doing any work, the seat itself is taken by `reserve`."""
-    with _m.VERROU_TOURS:
-        return len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES
+    with _m.TURNS_LOCK:
+        return len(_m.ACTIVE_TURNS) >= _m.CONCURRENT_TURNS
 
 
 class Seat:
@@ -48,19 +48,19 @@ class Seat:
 
     def run(self, text, emit, settings=None, replace_from=None, **options):
         """Runs the turn (`core.tour`) in this thread, marked with the stop event of the seat for the time of the turn."""
-        before = getattr(_m.LOCAL_TOUR, "stop", None)
-        _m.LOCAL_TOUR.stop = self.stop
+        before = getattr(_m.TURN_LOCAL, "stop", None)
+        _m.TURN_LOCAL.stop = self.stop
         try:
             return _m.tour(self.conv, text, emit, settings, self.stop, replace_from, **options)
         finally:
-            _m.LOCAL_TOUR.stop = before          # a thread that runs several turns (a mission, an add-on) is not left marked by an abandoned one
+            _m.TURN_LOCAL.stop = before          # a thread that runs several turns (a mission, an add-on) is not left marked by an abandoned one
 
     def release(self):
-        with _m.VERROU_TOURS:
+        with _m.TURNS_LOCK:
             ident = self.conv["id"]
-            if _m.TOURS_ACTIFS.get(ident) is self.stop:
-                _m.TOURS_ACTIFS.pop(ident, None)
-                _m.RACINE_TOURS.pop(ident, None)
+            if _m.ACTIVE_TURNS.get(ident) is self.stop:
+                _m.ACTIVE_TURNS.pop(ident, None)
+                _m.TURNS_ROOT.pop(ident, None)
 
     @property
     def abandoned(self):
@@ -83,11 +83,11 @@ def reserve(conv, *, work=None, wait_s=0, give_up=None, poll_s=2, also=None):
     stop = threading.Event()
     deadline = time.monotonic() + max(0, wait_s)
     while True:
-        with _m.VERROU_TOURS:
+        with _m.TURNS_LOCK:
             ident = conv["id"]
-            if ident in _m.TOURS_ACTIFS:
+            if ident in _m.ACTIVE_TURNS:
                 refused = TurnRefused(TURN_RUNNING)
-            elif len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+            elif len(_m.ACTIVE_TURNS) >= _m.CONCURRENT_TURNS:
                 refused = TurnRefused(TOO_MANY_TURNS)
             else:
                 if work is not None:
@@ -95,14 +95,14 @@ def reserve(conv, *, work=None, wait_s=0, give_up=None, poll_s=2, also=None):
                         _m.activate_work(conv, work)
                     except ValueError as erreur:
                         raise TurnRefused(WORKSPACE_CONFLICT, str(erreur)) from None
-                _m.RACINE_TOURS[ident] = str(_m.RACINE)
-                _m.TOURS_ACTIFS[ident] = stop
+                _m.TURNS_ROOT[ident] = str(_m.ROOT)
+                _m.ACTIVE_TURNS[ident] = stop
                 if also is not None:
                     try:
                         also(stop)
                     except BaseException:
-                        _m.TOURS_ACTIFS.pop(ident, None)
-                        _m.RACINE_TOURS.pop(ident, None)
+                        _m.ACTIVE_TURNS.pop(ident, None)
+                        _m.TURNS_ROOT.pop(ident, None)
                         raise
                 return Seat(conv, stop)
         if time.monotonic() >= deadline or (give_up is not None and give_up.is_set()):

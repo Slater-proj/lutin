@@ -250,7 +250,7 @@ def one_read():
                 try:
                     handle(email.message_from_bytes(brut, policy=email.policy.default), v, regles_liste)
                 except Exception as erreur:  # noqa: BLE001  (un courriel qui plante ne bloque pas les suivants)
-                    _m.journaliser("Courriel : message en erreur ({!r}).".format(erreur))
+                    _m.log_event("Courriel : message en erreur ({!r}).".format(erreur))
             with LOCK:
                 e = read()
                 e["uid"][cle] = uid
@@ -275,7 +275,7 @@ def loop():
         try:
             n = one_read()
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Courriel : lecture en erreur ({!r}).".format(erreur))
+            _m.log_event("Courriel : lecture en erreur ({!r}).".format(erreur))
             n = -1
         if n < 0:
             echecs += 1

@@ -87,7 +87,7 @@ class Node(unittest.TestCase):
         self.assertEqual(call("PATCH", "/api/v1/node", {"lending": False})[1]["lending"], False)
 
     def test_at_the_level_local_lending_is_refused(self):
-        with mock.patch.object(A, "SECURITE", S.Security(niveau=S.LOCAL)):
+        with mock.patch.object(A, "SECURITY", S.Security(niveau=S.LOCAL)):
             status, answer = call("PATCH", "/api/v1/node", {"lending": True})
             self.assertEqual((status, answer["error"]["code"]), (409, "local_only"))
             self.assertIn("réseau", answer["error"]["message"])

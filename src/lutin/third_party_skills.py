@@ -148,7 +148,7 @@ def listed_repos(q="", http=None):
 # ------------------------------------------------------------------ le contenu d'un dépôt
 def _cache_folder(dossiers=None):
     from . import core as _m
-    return (dossiers or {}).get("donnees", _m.DONNEES) / "cache" / "skills_tiers"
+    return (dossiers or {}).get("donnees", _m.DATA) / "cache" / "skills_tiers"
 
 
 def skills_of_repo(depot, http=None):
@@ -479,7 +479,7 @@ def available_updates(liste, http=None):
 # ------------------------------------------------------------------ les dépôts choisis
 def _sources_file():
     from . import core as _m
-    return _m.DONNEES / "skills_sources.json"
+    return _m.DATA / "skills_sources.json"
 
 
 def sources():

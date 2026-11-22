@@ -51,14 +51,14 @@ def call(method, path, headers=None, body=None, raw=None):
 
 def setUpModule():
     global SERVER, PORT, OWNER, DEVICE
-    for patch in (mock.patch.object(A, "SECURITE", S.Security(niveau=S.RESEAU)), mock.patch.object(A, "APPAREILS", S.Devices()), mock.patch.object(A, "LIMITEUR_PIN", S.RateLimiter(10_000, 60))):
+    for patch in (mock.patch.object(A, "SECURITY", S.Security(niveau=S.RESEAU)), mock.patch.object(A, "DEVICES", S.Devices()), mock.patch.object(A, "PIN_LIMITER", S.RateLimiter(10_000, 60))):
         patch.start()
         unittest.addModuleCleanup(patch.stop)
     SERVER = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
     threading.Thread(target=SERVER.serve_forever, daemon=True).start()
     unittest.addModuleCleanup(SERVER.shutdown)
     PORT = SERVER.server_address[1]
-    session = {"Cookie": "{}={}".format(S.NAME_COOKIE, A.APPAREILS.appairer(A.APPAREILS.nouveau_pin(), "browser")), "X-Token": A.JETON}
+    session = {"Cookie": "{}={}".format(S.NAME_COOKIE, A.DEVICES.appairer(A.DEVICES.nouveau_pin(), "browser")), "X-Token": A.TOKEN}
     OWNER = dict(session)                              # the browser of this machine: may configure
     DEVICE = dict(session, **ELSEWHERE)                # a paired phone: a session, no right to configure
 
@@ -192,7 +192,7 @@ class Status(unittest.TestCase):
         self.assertEqual(sorted(answer["engine"]), ["id", "name", "running"])
         self.assertEqual((answer["engine"]["id"], answer["engine"]["running"]), ("ollama", False), "no engine answers in this test")
         self.assertEqual((answer["language"], answer["offline"], answer["version"]), ("fr", True, A.VERSION))
-        self.assertEqual(answer["workspace"], {"path": str(A.RACINE)})
+        self.assertEqual(answer["workspace"], {"path": str(A.ROOT)})
         self.assertEqual((answer["active_turns"], answer["pending_approvals"], answer["installed_models"]), ([], [], []))
         self.assertIsInstance(answer["model"], str)
 
@@ -293,7 +293,7 @@ class Conversations(unittest.TestCase):
     def test_a_conversation_that_is_answering_cannot_be_renamed_or_deleted(self):
         identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
         stop = threading.Event()
-        A.TOURS_ACTIFS[identifier] = stop
+        A.ACTIVE_TURNS[identifier] = stop
         try:
             for method, body in (("PATCH", {"title": "x"}), ("DELETE", None)):
                 status, answer = call(method, "/api/v1/conversations/" + identifier, OWNER, body=body)
@@ -302,7 +302,7 @@ class Conversations(unittest.TestCase):
             self.assertEqual(call("POST", "/api/v1/conversations/" + identifier + "/stop", OWNER, body={}), (200, {"was_running": True}))
             self.assertTrue(stop.is_set(), "the running turn was told to stop")
         finally:
-            A.TOURS_ACTIFS.pop(identifier, None)
+            A.ACTIVE_TURNS.pop(identifier, None)
         self.assertEqual(call("DELETE", "/api/v1/conversations/" + identifier, OWNER)[0], 200)
 
     def test_a_paired_device_may_use_its_conversations(self):

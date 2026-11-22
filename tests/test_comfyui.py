@@ -155,13 +155,13 @@ class ComfyUI(unittest.TestCase):
                 f.unlink()
         addons.save_settings(cu.IDENT, {"port": str(self.port), "dossier": "", "modele": ""})
         self.vram = []
-        self.vrai_vram = _m.liberer_vram
-        _m.liberer_vram = lambda *a, **k: self.vram.append(1)
+        self.vrai_vram = _m.free_vram
+        _m.free_vram = lambda *a, **k: self.vram.append(1)
         self.vrai_pause = time.sleep
         cu.time.sleep = lambda s: self.vrai_pause(0.01)                          # le test n'attend pas les 2 s entre deux regards
 
     def tearDown(self):
-        _m.liberer_vram = self.vrai_vram
+        _m.free_vram = self.vrai_vram
         cu.time.sleep = self.vrai_pause
 
     def ctx(self, accord=True, **plus):
@@ -226,12 +226,12 @@ class ComfyUI(unittest.TestCase):
         SERVICE["histoire"] = 0
         cu.generate_tool({"prompt": "x", "modele": "SDXL"}, self.ctx(conv={"messages": [{"role": "user", "content": "Fais-le avec sdxl s'il te plaît"}]}))
         self.assertEqual(SERVICE["soumis"][2]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "un modèle que l'utilisateur nomme dans sa demande est respecté (à la casse près)")
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x", "modele": "perso.safetensors"}, self.ctx(conv={"messages": [{"role": "user", "content": "avec perso.safetensors"}]}))
         self.assertIn("n'est pas installé", str(e.exception))
         self.assertIn("sdxl.safetensors", str(e.exception), "le message dit quels modèles existent")
         for faux in ({"prompt": ""}, {"prompt": "x", "type": "hologramme"}, {"prompt": "x", "largeur": "beaucoup"}, {"prompt": "x", "type": "video"}):
-            with self.assertRaises(_m.ErreurOutil):
+            with self.assertRaises(_m.ToolError):
                 cu.generate_tool(faux, self.ctx())
 
     def test_l_image_creee_est_attachee_au_resultat_pour_etre_affichee_dans_la_conversation(self):
@@ -295,7 +295,7 @@ class ComfyUI(unittest.TestCase):
         addons.save_settings(cu.IDENT, {"modele": ""})
         self.assertEqual(cu.choose_model("sdxl.safetensors", "", detail=True), ("image", "sdxl.safetensors", ""), "sans réglage : la proposition est suivie")
         addons.save_settings(cu.IDENT, {"modele": "absent.safetensors"})
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.choose_model("", "")
         self.assertIn("réglage de l'utilisateur", str(e.exception))
         self.assertTrue(casse)
@@ -303,15 +303,15 @@ class ComfyUI(unittest.TestCase):
     def test_dans_une_mission_la_demande_est_le_cahier_des_charges(self):
         from lutin import mission
         addons.save_settings(cu.IDENT, {"modele": "sd15.safetensors"})
-        vrai_config = _m.config_lue
-        _m.config_lue = lambda: {"emplacements": {"travail": str(_TEMP)}}
+        vrai_config = _m.read_config
+        _m.read_config = lambda: {"emplacements": {"travail": str(_TEMP)}}
         m = mission.create("Visuels", "Génère les illustrations avec le modèle sdxl.", "principal", 1, True)
         try:
             cu.generate_tool({"prompt": "x", "modele": "sdxl.safetensors"}, self.ctx(mission=m["id"], conv={"messages": [{"role": "user", "content": "Continue la mission"}]}))
             self.assertEqual(SERVICE["soumis"][-1]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "le cahier des charges nomme sdxl")
         finally:
             mission.action("supprimer", {"id": m["id"]})
-            _m.config_lue = vrai_config
+            _m.read_config = vrai_config
 
     def test_refus_essai_a_blanc_erreurs_et_arret(self):
         res = cu.generate_tool({"prompt": "x"}, self.ctx(accord=False))
@@ -333,7 +333,7 @@ class ComfyUI(unittest.TestCase):
         ctx = self.ctx()
         fil = threading.Thread(target=lambda: ctx["stop"].set() if time.sleep(0.2) is None else None)
         fil.start()
-        with self.assertRaises(_m.Arret):
+        with self.assertRaises(_m.TurnStopped):
             cu.generate_tool({"prompt": "x"}, ctx)
         fil.join()
         self.assertEqual(SERVICE["interrompu"], 1, "le bouton Arrêter interrompt aussi le travail dans ComfyUI")
@@ -347,7 +347,7 @@ class ComfyUI(unittest.TestCase):
         f = json.loads(json.dumps(addons.shipped_stream(cu.IDENT)))
         f["workflows"]["video"] = wf
         addons.apply_stream(cu.IDENT, f)
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x", "type": "video"}, self.ctx())
         self.assertIn("{rien}", str(e.exception), "le workflow demande une valeur que Lutin ne sait pas donner : message clair, rien n'est envoyé")
         self.assertEqual(SERVICE["soumis"], [])
@@ -474,7 +474,7 @@ class ComfyUI(unittest.TestCase):
                 self.terminate()
         vrai_popen = cu.subprocess.Popen
         cu.subprocess.Popen = Faux
-        _m.liberer_vram = lambda *a, **k: ordre.append("memoire")
+        _m.free_vram = lambda *a, **k: ordre.append("memoire")
         self.addCleanup(setattr, cu.subprocess, "Popen", vrai_popen)
         # éteint : Lutin le lance (après avoir rendu la mémoire au modèle de langage), génère, puis le referme
         SERVICE["panne"] = True
@@ -508,7 +508,7 @@ class ComfyUI(unittest.TestCase):
         def impossible(*a, **k):
             raise OSError("introuvable")
         cu.subprocess.Popen = impossible
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("Impossible de lancer", str(e.exception))
 
@@ -519,7 +519,7 @@ class ComfyUI(unittest.TestCase):
             def poll(self):
                 return 1
         cu.subprocess.Popen = Mort
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("s'est arrêté au démarrage", str(e.exception))
 
@@ -539,7 +539,7 @@ class ComfyUI(unittest.TestCase):
                 return 0
         cu.subprocess.Popen = Muet
         cu.TIMEOUT_STARTUP = 0.3
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("n'a pas répondu", str(e.exception))
         self.assertEqual(arrets, [1], "un ComfyUI qui ne répond pas est refermé")
@@ -548,7 +548,7 @@ class ComfyUI(unittest.TestCase):
         vrai_trouver = cu.find_folder
         cu.find_folder = lambda *a, **k: ""
         self.addCleanup(setattr, cu, "find_folder", vrai_trouver)
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x"}, self.ctx())
         self.assertIn("ne trouve pas ComfyUI", str(e.exception))
 
@@ -584,13 +584,13 @@ class ComfyUI(unittest.TestCase):
         self.assertEqual(SERVICE["soumis"][-1]["prompt"]["10"]["inputs"]["unet_name"], "flux1-dev-fp8.safetensors")
         # famille inconnue : message clair, rien n'est envoyé
         avant = len(SERVICE["soumis"])
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x", "modele": "mystere_xl"}, self.ctx())
         self.assertIn("famille", str(e.exception))
         # un fichier manque (aucun encodeur de texte installé) : on dit lequel et où
         SERVICE["sans_clip"] = True
         cu.CACHE["modeles"] = (0, None)
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             cu.generate_tool({"prompt": "x", "modele": "flux1-dev"}, self.ctx())
         self.assertIn("encodeur de texte", str(e.exception))
         self.assertIn("text_encoders", str(e.exception))
@@ -659,7 +659,7 @@ class ComfyUI(unittest.TestCase):
             DIFFUSION[cle] = (DIFFUSION[cle][0], [])
         cu.CACHE["modeles"] = (0, None)
         try:
-            with self.assertRaises(_m.ErreurOutil) as e:
+            with self.assertRaises(_m.ToolError) as e:
                 cu.generate_tool({"prompt": "x"}, self.ctx())
             self.assertIn("aucun modèle d'image", str(e.exception))
         finally:
@@ -669,13 +669,13 @@ class ComfyUI(unittest.TestCase):
 
     def test_les_outils_n_existent_que_si_l_addon_est_actif(self):
         from lutin import agent, change_review
-        base = dict(_m.reglages(), web=True)
+        base = dict(_m.settings(), web=True)
 
         def noms(mode):
             return {t["function"]["name"] for t in agent.outils_du_mode(dict(base, mode=mode))}
         comfy = {"comfy_generer", "comfy_modeles"}
         self.assertFalse(comfy & noms("polyvalent"), "addon désactivé : le modèle ne voit pas ces outils")
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             change_review.call_tool("comfy_generer", {"prompt": "x"}, self.ctx())
         vrai = addons.actif
         addons.actif = lambda ident: True

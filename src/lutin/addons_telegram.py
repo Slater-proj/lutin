@@ -102,7 +102,7 @@ def reply_model(cle, titre, demande, proprietaire, consigne=""):
     except (ValueError, OSError):
         conv = _m.conv_new()
     conv["titre"] = "✈ Telegram — " + titre
-    r = _m.reglages()
+    r = _m.settings()
     if not proprietaire:
         r["mode"] = "discussion"                                                  # aucun outil : une tierce personne ne peut rien faire faire à Lutin
         demande = (_t("[Message reçu d'une tierce personne sur Telegram. Réponds-lui en suivant ces consignes de l'utilisateur : {}. "
@@ -114,7 +114,7 @@ def reply_model(cle, titre, demande, proprietaire, consigne=""):
     except _turns.TurnRefused:
         return None
     except Exception as erreur:  # noqa: BLE001  (une demande qui plante ne doit pas arrêter l'écoute)
-        _m.journaliser("Telegram : demande en erreur ({!r}).".format(erreur))
+        _m.log_event("Telegram : demande en erreur ({!r}).".format(erreur))
         return None
     with LOCK:
         e = read()
@@ -199,7 +199,7 @@ def one_read(attente=WAIT_POLLING):
         try:
             handle(update)
         except Exception as erreur:  # noqa: BLE001  (un message qui plante ne doit pas bloquer les suivants)
-            _m.journaliser("Telegram : message en erreur ({!r}).".format(erreur))
+            _m.log_event("Telegram : message en erreur ({!r}).".format(erreur))
         with LOCK:
             e = read()
             e["offset"] = max(e["offset"], int(update.get("update_id", 0)) + 1)
@@ -214,7 +214,7 @@ def loop():
         try:
             n = one_read()
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Telegram : écoute en erreur ({!r}).".format(erreur))
+            _m.log_event("Telegram : écoute en erreur ({!r}).".format(erreur))
             n = -1
         if n < 0:
             echecs += 1

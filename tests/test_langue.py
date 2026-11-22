@@ -130,14 +130,14 @@ class Traduction(unittest.TestCase):
     def test_traduction_complete_des_messages_du_moteur(self):
         from lutin import core as A
         with self.en():
-            self.assertEqual(A.traduire_json({"erreur": "Nom de modèle invalide.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}),
+            self.assertEqual(A.translate_json({"erreur": "Nom de modèle invalide.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}),
                              {"erreur": "Invalid model name.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}), "le contenu des conversations n'est jamais traduit"
-            self.assertEqual(A.traduire_evenement({"type": "info", "texte": "Accord automatique : Modifier docs/a.txt"})["texte"], "Automatic approval: Modify docs/a.txt")
-            self.assertEqual(A.traduire_evenement({"type": "texte", "texte": "Nom de modèle invalide."})["texte"], "Nom de modèle invalide.", "le texte du modèle n'est jamais traduit")
-            sante = A.assess_health({"ram": {"total": 8 * 1024 ** 3, "libre": 1 * 1024 ** 3, "engagement_libre": 3 * 1024 ** 3}}, A.reglages())
-            ram = A.traduire_json(sante)["items"][0]
+            self.assertEqual(A.translate_event({"type": "info", "texte": "Accord automatique : Modifier docs/a.txt"})["texte"], "Automatic approval: Modify docs/a.txt")
+            self.assertEqual(A.translate_event({"type": "texte", "texte": "Nom de modèle invalide."})["texte"], "Nom de modèle invalide.", "le texte du modèle n'est jamais traduit")
+            sante = A.assess_health({"ram": {"total": 8 * 1024 ** 3, "libre": 1 * 1024 ** 3, "engagement_libre": 3 * 1024 ** 3}}, A.settings())
+            ram = A.translate_json(sante)["items"][0]
             self.assertEqual((ram["nom"], ram["valeur"]), ("Memory (RAM)", "1.0 GB free of 8.0 GB"))
-        self.assertEqual(A.traduire_json({"erreur": "Nom de modèle invalide."}), {"erreur": "Nom de modèle invalide."}, "en français : rien ne change")
+        self.assertEqual(A.translate_json({"erreur": "Nom de modèle invalide."}), {"erreur": "Nom de modèle invalide."}, "en français : rien ne change")
 
 
 class Completude(unittest.TestCase):
@@ -178,7 +178,7 @@ class Completude(unittest.TestCase):
 
     def test_les_constantes_de_niveau_module_sont_traduites(self):
         from lutin import terminal_chat, setup_wizard, core
-        for texte in (cli.HELP_GENERAL, terminal_chat.HELP, setup_wizard.WARNING_NETWORK, setup_wizard.WARNING_PROXY, *core.TEXTES_PAGE_CONNEXION):
+        for texte in (cli.HELP_GENERAL, terminal_chat.HELP, setup_wizard.WARNING_NETWORK, setup_wizard.WARNING_PROXY, *core.LOGIN_PAGE_TEXTS):
             self.assertIn(texte, self.dico, texte[:60])
         for _, titre, detail in setup_wizard.LEVELS_TEXT.values():
             self.assertIn(titre, self.dico)

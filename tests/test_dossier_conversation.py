@@ -11,9 +11,9 @@ _TEMP = Path(tempfile.mkdtemp(prefix="lutin-dosconv-"))
 
 class DossierConversation(unittest.TestCase):
     def setUp(self):
-        self.avant = m.RACINE
-        m.RACINE = _TEMP.resolve()
-        self.addCleanup(setattr, m, "RACINE", self.avant)
+        self.avant = m.ROOT
+        m.ROOT = _TEMP.resolve()
+        self.addCleanup(setattr, m, "ROOT", self.avant)
 
     def test_nom_lisible_sans_accents_ni_caracteres_speciaux(self):
         nom = produced_files._name_folder_conversation("Écrire un résumé : 100 % fiable !", "20261108-abc123def")

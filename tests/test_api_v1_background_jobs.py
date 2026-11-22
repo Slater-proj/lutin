@@ -18,13 +18,13 @@ def setUpModule():
 
 class BackgroundJobs(unittest.TestCase):
     def setUp(self):
-        patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"id": "t0000001", "nom": "Projet", "chemin": str(A.RACINE)}])          # the project folder is a work folder
+        patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"id": "t0000001", "nom": "Projet", "chemin": str(A.ROOT)}])          # the project folder is a work folder
         patch.start()
         self.addCleanup(patch.stop)
         self.addCleanup(lambda: [background_jobs.action(job["id"], "supprimer") for job in background_jobs.liste()])
 
     def create(self, **more):
-        body = dict({"name": "Factures", "folder": str(A.RACINE), "patterns": "*.pdf, *.txt", "instruction": "Donne le montant total."}, **more)
+        body = dict({"name": "Factures", "folder": str(A.ROOT), "patterns": "*.pdf, *.txt", "instruction": "Donne le montant total."}, **more)
         return V.call("POST", "/api/v1/background-jobs", V.OWNER, body)
 
     def test_a_job_is_created_listed_and_acted_on(self):

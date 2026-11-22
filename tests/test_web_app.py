@@ -53,7 +53,7 @@ class Served(unittest.TestCase):
     def test_the_page_receives_the_token_the_version_the_language_and_a_strict_policy(self):
         status, headers, body = get("/app/", V.OWNER)
         self.assertEqual((status, headers["Content-Type"], headers["Content-Security-Policy"]), (200, "text/html; charset=utf-8", web_app.CSP))
-        self.assertIn('<meta name="lutin-token" content="{}">'.format(A.JETON), body)
+        self.assertIn('<meta name="lutin-token" content="{}">'.format(A.TOKEN), body)
         self.assertIn('<html lang="fr">', body)
         self.assertIn('<meta name="lutin-version" content="{}">'.format(A.VERSION), body)
         self.assertNotIn("__", body)
@@ -64,7 +64,7 @@ class Served(unittest.TestCase):
     def test_without_a_session_the_sign_in_page_is_shown_and_no_file_is_served(self):
         status, headers, body = get("/app/", V.ELSEWHERE)
         self.assertEqual((status, body), (200, get("/", V.ELSEWHERE)[2]), "the same sign-in page as the present interface")
-        self.assertNotIn(A.JETON, body)
+        self.assertNotIn(A.TOKEN, body)
         self.assertNotIn("Content-Security-Policy", headers)
         self.assertEqual(get("/app/assets/index-B1x_9.js", V.ELSEWHERE)[0], 401)
 
@@ -96,7 +96,7 @@ class Served(unittest.TestCase):
         status, headers, body = get("/app/diagram.html", V.OWNER)
         policy = headers["Content-Security-Policy"]
         self.assertEqual((status, headers["Content-Type"]), (200, "text/html; charset=utf-8"))
-        self.assertNotIn(A.JETON, body, "the frame never receives the page token")
+        self.assertNotIn(A.TOKEN, body, "the frame never receives the page token")
         directives = {part.split()[0]: part.split()[1:] for part in policy.split(";") if part.strip()}
         self.assertEqual(directives["default-src"], ["'none'"])
         self.assertEqual(directives["sandbox"], ["allow-scripts"], "scripts and nothing else: no origin, so no cookie, no storage and no request made as the user")
@@ -145,7 +145,7 @@ class Served(unittest.TestCase):
         self.assertEqual(get("/ancienne", V.OWNER)[1].get("Location"), "/ancienne/")
         sign_in = get("/", V.ELSEWHERE)[2]
         self.assertEqual(get("/ancienne/", V.ELSEWHERE)[2], sign_in)
-        self.assertNotIn(A.JETON, sign_in)
+        self.assertNotIn(A.TOKEN, sign_in)
         (self.root / "index.html").unlink()
         self.assertIn("securityLevel: 'strict'", get("/", V.OWNER)[2], "a copy without a build keeps the old page at « / »")
 

@@ -22,19 +22,19 @@ def tool_find(motif, dossier="."):
     from .tools import safe_path, rel
     motif = str(motif or "").strip().replace("\\", "/")
     if not motif:
-        raise _m.ErreurOutil(_t("Motif vide : donne un nom ou un motif comme « *.py » ou « test_*.json »."))
+        raise _m.ToolError(_t("Motif vide : donne un nom ou un motif comme « *.py » ou « test_*.json »."))
     racine = safe_path(dossier)
     if not racine.is_dir():
-        raise _m.ErreurOutil(_t("Ce n'est pas un dossier : ") + str(dossier))
+        raise _m.ToolError(_t("Ce n'est pas un dossier : ") + str(dossier))
     motifs = [m.strip() for m in motif.replace(",", " ").split() if m.strip()]
     if not any(c in motif for c in "*?["):
         motifs = ["*{}*".format(m) for m in motifs]          # « univers » trouve univers.md et mon_univers.txt : un mot sans joker est un morceau de nom
     trouves, coupe = [], False
     for courant, sous, fichiers in os.walk(str(racine)):
-        sous[:] = sorted(d for d in sous if d not in _m.DOSSIERS_IGNORES and not _m.ignore_chemin(os.path.join(courant, d)))
+        sous[:] = sorted(d for d in sous if d not in _m.IGNORED_FOLDERS and not _m.path_ignored(os.path.join(courant, d)))
         for nom in fichiers:
             chemin = os.path.join(courant, nom)
-            relatif = os.path.relpath(chemin, str(_m.RACINE)).replace("\\", "/")
+            relatif = os.path.relpath(chemin, str(_m.ROOT)).replace("\\", "/")
             if any(fnmatch.fnmatch(nom.lower(), m.lower()) or fnmatch.fnmatch(relatif.lower(), m.lower()) for m in motifs):
                 try:
                     st = os.stat(chemin)
@@ -107,11 +107,11 @@ def tool_calculate(expression):
     if not re.search(r"[A-Za-z]", texte):
         texte = re.sub(r"(?<=\d),(?=\d)", ".", texte)          # « 3,5 * 2 » : virgule décimale française (pas quand il y a un appel comme max(1,2))
     if not texte or len(texte) > 300:
-        raise _m.ErreurOutil(_t("Expression vide ou trop longue (300 caractères au plus)."))
+        raise _m.ToolError(_t("Expression vide ou trop longue (300 caractères au plus)."))
     try:
         resultat = _eval(ast.parse(texte, mode="eval"))
     except ZeroDivisionError:
-        raise _m.ErreurOutil(_t("Division par zéro."))
+        raise _m.ToolError(_t("Division par zéro."))
     except (ValueError, SyntaxError, TypeError, OverflowError) as erreur:
-        raise _m.ErreurOutil(_t("Calcul impossible : {}.").format(str(erreur)[:150] or _t("expression invalide")))
+        raise _m.ToolError(_t("Calcul impossible : {}.").format(str(erreur)[:150] or _t("expression invalide")))
     return "{} = {}".format(texte, _format_value(resultat))

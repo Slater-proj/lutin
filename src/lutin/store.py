@@ -31,7 +31,7 @@ SUMMARY = ("id", "titre", "maj", "messages", "epingle", "memoire", "origine")
 
 def _data_folder() -> Path:
     from . import core as _m
-    return Path(_m.DONNEES)
+    return Path(_m.DATA)
 
 
 def database_path() -> Path:
@@ -67,7 +67,7 @@ def _open_or_set_aside(path: Path) -> sqlite3.Connection:
         folder = _set_aside(path)
         _STATE["set_aside"] = {"database": str(path), "folder": str(folder), "error": str(error)}
         from . import core as _m
-        _m.journaliser("Base des conversations illisible ({}) : mise de côté dans {}, nouvelle base vide.".format(error, folder))
+        _m.log_event("Base des conversations illisible ({}) : mise de côté dans {}, nouvelle base vide.".format(error, folder))
         return _open(path)
 
 
@@ -488,7 +488,7 @@ def import_files(replace: bool = False) -> dict:
         con.execute("INSERT INTO migrations (name, done_at, report) VALUES (?, ?, ?) ON CONFLICT(name) DO UPDATE SET done_at = excluded.done_at, report = excluded.report",
                     ("import-json-" + datetime.now().strftime("%Y%m%d%H%M%S%f"), datetime.now().isoformat(timespec="seconds"), json.dumps(report, ensure_ascii=False)))
     if report["imported"] or report["unreadable"]:
-        _m.journaliser("Conversations importées dans la base : {} (déjà là : {}, illisibles : {}). Sauvegarde : {}".format(
+        _m.log_event("Conversations importées dans la base : {} (déjà là : {}, illisibles : {}). Sauvegarde : {}".format(
             report["imported"], report["skipped"], ", ".join(report["unreadable"]) or "aucune", report["backup"]))
     return report
 

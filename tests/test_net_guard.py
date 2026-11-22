@@ -123,7 +123,7 @@ class Pinning(unittest.TestCase):
 
     def test_web_download_refuses_a_name_that_points_inside(self):
         patch, calls = fake_dns({"rebind.test": ["127.0.0.1"]})
-        with patch, self.assertRaises(A.ErreurOutil) as caught:
+        with patch, self.assertRaises(A.ToolError) as caught:
             web.web_download("http://rebind.test:%d/secret" % PORT)
         self.assertIn("rebind.test", str(caught.exception))
         self.assertEqual(RECEIVED, [])
@@ -144,7 +144,7 @@ class Redirections(unittest.TestCase):
     def test_a_redirection_towards_the_local_network_is_refused_before_any_request(self):
         """The audit's reproduction: the first host is legitimate (here the allowed one), it redirects to an internal address."""
         patch, _ = fake_dns({"searx.test": ["127.0.0.1"]})
-        with patch, self.assertRaises(A.ErreurOutil) as caught:
+        with patch, self.assertRaises(A.ToolError) as caught:
             web.web_download("http://searx.test:%d/to-internal" % PORT, hote_autorise="searx.test")
         self.assertIn("127.0.0.1", str(caught.exception))
         self.assertEqual([path for _, path, _ in RECEIVED], ["/to-internal"], "the internal target received nothing")
@@ -183,7 +183,7 @@ class Redirections(unittest.TestCase):
 
     def test_other_schemes_are_refused_by_the_web_check(self):
         for url in ("file:///etc/passwd", "ftp://example.org/x", "gopher://example.org/", "http:///nohost"):
-            with self.assertRaises(A.ErreurOutil, msg=url):
+            with self.assertRaises(A.ToolError, msg=url):
                 web.web_download(url)
 
 

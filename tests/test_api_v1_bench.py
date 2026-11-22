@@ -51,7 +51,7 @@ class Bench(unittest.TestCase):
 
     def test_a_series_is_started_and_one_measure_at_a_time(self):
         started = []
-        with mock.patch.object(A, "lancer_bench_serie", lambda models, quick: started.append((models, quick)) or {"ok": True, "modeles": models}):
+        with mock.patch.object(A, "start_bench_series", lambda models, quick: started.append((models, quick)) or {"ok": True, "modeles": models}):
             status, answer = V.call("POST", "/api/v1/bench", V.DEVICE, {"models": ["qwen3:8b", "gemma3:4b"], "quick": True})
             self.assertEqual((status, answer), (202, {"models": ["qwen3:8b", "gemma3:4b"]}))
             self.assertEqual(started, [(["qwen3:8b", "gemma3:4b"], True)])

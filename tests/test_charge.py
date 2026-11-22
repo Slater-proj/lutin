@@ -56,11 +56,11 @@ class ReglagesDeCharge(unittest.TestCase):
         Path(_TEMP / "donnees" / "reglages.json").unlink(missing_ok=True)
 
     def test_par_defaut_tout_est_automatique(self):
-        r = A.reglages()
+        r = A.settings()
         self.assertIsNone(r["num_thread"])
         self.assertIsNone(r["garde_min"])
-        self.assertNotIn("num_thread", A.options_modele(r, 0.5))
-        self.assertEqual(A.options_modele(r, 0.5, num_predict=9), {"num_ctx": r["num_ctx"], "temperature": 0.5, "num_predict": 9})
+        self.assertNotIn("num_thread", A.model_options(r, 0.5))
+        self.assertEqual(A.model_options(r, 0.5, num_predict=9), {"num_ctx": r["num_ctx"], "temperature": 0.5, "num_predict": 9})
 
     def test_les_valeurs_sont_bornees_et_les_absurdites_deviennent_automatique(self):
         for brut, attendu in ((4, 4), ("6", 6), (0, 1), (9999, 256), ("", None), (None, None), ("beaucoup", None), (3.7, 3)):
@@ -71,9 +71,9 @@ class ReglagesDeCharge(unittest.TestCase):
 
     def test_les_coeurs_vont_dans_toutes_les_requetes_au_modele(self):
         A.save_settings({"num_thread": 3})
-        r = A.reglages()
+        r = A.settings()
         for temperature in (0, 0.2, 0.3, 0.4, r["temperature"]):
-            self.assertEqual(A.options_modele(r, temperature)["num_thread"], 3)
+            self.assertEqual(A.model_options(r, temperature)["num_thread"], 3)
         source = (Path(__file__).resolve().parent.parent / "src" / "lutin" / "core.py").read_text(encoding="utf-8")
         self.assertEqual(source.count('{"num_ctx": r["num_ctx"]'), 1, "toute requête passe par options_modele (la seule construction du dictionnaire) : un jeu d'options différent ferait recharger le modèle")
 
@@ -89,7 +89,7 @@ class ReglagesDeCharge(unittest.TestCase):
         self.assertEqual(A.avec_garde({"model": "x"})["keep_alive"], "0m", "0 : libéré dès la fin de la réponse")
 
     def test_la_page_propose_les_reglages_et_les_profils(self):
-        page = A.page_web()
+        page = A.web_page()
         for attendu in ('id="iThreads"', 'id="iGarde"', 'id="selProfil"', "ETAT.cpus"):
             self.assertIn(attendu, page)
         self.assertEqual(json.loads(json.dumps({"cpus": os.cpu_count() or 1}))["cpus"], os.cpu_count() or 1)

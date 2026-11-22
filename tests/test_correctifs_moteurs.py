@@ -233,11 +233,11 @@ class PremierLancement(unittest.TestCase):
         engines.CONTEXT["donnees"] = lambda: _TEMP / "donnees-pl"
         try:
             with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: ""):
-                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
+                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.settings(), moteur="colibri"), None)
             self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": True})
             self.assertIn("aucun modèle", pl["raison"])
             with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: str(_TEMP)):
-                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
+                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.settings(), moteur="colibri"), None)
             self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": False})
             self.assertNotIn("Ollama", pl["raison"])
         finally:
@@ -330,7 +330,7 @@ class SanteVideo(unittest.TestCase):
                "vram": {"nom": "RTX 4090", "total": 24 * 1024 ** 3, "utilise": 7 * 1024 ** 3, "libre": 17 * 1024 ** 3}, "comfy": {}, "disques": {}, "donnees_octets": 0}
 
     def item(self, partiel):
-        r = _m.reglages()
+        r = _m.settings()
         return next(i for i in health.assess_health(self.MESURES, r, int(19.5 * 1024 ** 3), None, partiel)["items"] if i["id"] == "vram")
 
     def test_ollama_modele_trop_gros_pour_la_place_libre_reste_bloquant_mais_explique(self):
@@ -345,7 +345,7 @@ class SanteVideo(unittest.TestCase):
         self.assertIn("partie sur le processeur", i["conseil"])
 
     def test_llamacpp_charge_sans_taille_connue_pas_de_zero_pour_cent(self):
-        r = _m.reglages()
+        r = _m.settings()
         i = next(i for i in health.assess_health(self.MESURES, r, 0, {"taille": 0, "vram": 0}, True)["items"] if i["id"] == "vram")
         self.assertEqual(i["niveau"], "ok")
         self.assertNotIn("0 %", i["valeur"])

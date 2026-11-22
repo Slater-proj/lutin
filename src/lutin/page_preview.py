@@ -52,12 +52,12 @@ def address(cible):
     if re.match(r"^https?://", cible, re.I):
         hote = urllib.parse.urlsplit(cible).hostname
         if hote not in ("127.0.0.1", "localhost", "::1"):
-            raise _m.ErreurOutil(_t("Seules les pages de cette machine (127.0.0.1, localhost) ou un fichier du dossier de travail peuvent être ouverts."))
+            raise _m.ToolError(_t("Seules les pages de cette machine (127.0.0.1, localhost) ou un fichier du dossier de travail peuvent être ouverts."))
         return cible
     from . import tools
     f = tools.safe_path(cible)
     if not f.is_file():
-        raise _m.ErreurOutil(_t("Fichier introuvable : {}").format(cible))
+        raise _m.ToolError(_t("Fichier introuvable : {}").format(cible))
     return f.as_uri()
 
 
@@ -78,7 +78,7 @@ def screenshot(url, largeur=1200, hauteur=800, navigateur_=None):
     """(octets PNG, texte affiché, titre, messages de la console). Lève ErreurOutil si le navigateur manque ou ne produit rien."""
     nav = navigateur_ or browser()
     if not nav:
-        raise _m.ErreurOutil(_t("Aucun navigateur (Chrome, Edge ou Chromium) n'est installé sur cette machine : l'aperçu est impossible."))
+        raise _m.ToolError(_t("Aucun navigateur (Chrome, Edge ou Chromium) n'est installé sur cette machine : l'aperçu est impossible."))
     largeur, hauteur = max(WIDTH[0], min(WIDTH[1], int(largeur))), max(HEIGHT[0], min(HEIGHT[1], int(hauteur)))
     tmp = tempfile.mkdtemp(prefix="lutin-apercu-")
     try:
@@ -91,11 +91,11 @@ def screenshot(url, largeur=1200, hauteur=800, navigateur_=None):
             photo = _launch(base + ["--enable-logging=stderr", "--v=0", "--screenshot=" + str(sortie), url], TIMEOUT)
             dom = _launch(base + ["--dump-dom", url], TIMEOUT)
         except subprocess.TimeoutExpired:
-            raise _m.ErreurOutil(_t("La page n'a pas fini de se charger en {} secondes.").format(TIMEOUT))
+            raise _m.ToolError(_t("La page n'a pas fini de se charger en {} secondes.").format(TIMEOUT))
         except OSError as erreur:
-            raise _m.ErreurOutil(_t("Le navigateur n'a pas pu démarrer : {}").format(erreur))
+            raise _m.ToolError(_t("Le navigateur n'a pas pu démarrer : {}").format(erreur))
         if not sortie.is_file() or sortie.stat().st_size < 100:
-            raise _m.ErreurOutil(_t("Le navigateur n'a produit aucune capture : {}").format(photo.stderr.decode("utf-8", "replace").strip()[-300:] or _t("(aucun message)")))
+            raise _m.ToolError(_t("Le navigateur n'a produit aucune capture : {}").format(photo.stderr.decode("utf-8", "replace").strip()[-300:] or _t("(aucun message)")))
         png = sortie.read_bytes()
     finally:
         _clean(tmp)
@@ -120,7 +120,7 @@ def tool_preview(cible, largeur, hauteur, ctx, navigateur_=None):
     try:
         largeur, hauteur = int(largeur), int(hauteur)
     except (TypeError, ValueError):
-        raise _m.ErreurOutil(_t("Largeur et hauteur : des nombres entiers de pixels."))
+        raise _m.ToolError(_t("Largeur et hauteur : des nombres entiers de pixels."))
     if not ctx["accord"](_t("Aperçu de la page"), _t("Ouvre {} dans un navigateur sans fenêtre (profil temporaire) et en prend une capture, {}×{}.").format(cible, largeur, hauteur), "", auto=ctx["auto_commandes"]):
         from . import tools
         return tools.refusal(ctx, _t("Refusé par l'utilisateur : rien n'a été ouvert."))

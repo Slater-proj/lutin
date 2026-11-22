@@ -21,7 +21,7 @@ def setUpModule():
 
 class WebSearch(unittest.TestCase):
     def setUp(self):
-        path = A.DONNEES / "recherche.json"
+        path = A.DATA / "recherche.json"
         path.unlink(missing_ok=True)
         self.addCleanup(lambda: path.unlink(missing_ok=True))
 

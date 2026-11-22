@@ -65,7 +65,7 @@ def clean_query(requete):
 
 def _path():
     from . import core as _m
-    return _m.DONNEES / "sorties.jsonl"
+    return _m.DATA / "sorties.jsonl"
 
 
 def record(service, requete, retire=(), ok=True):

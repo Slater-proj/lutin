@@ -206,7 +206,7 @@ class Execution(Base):
     def test_machine_occupee_la_tache_attend_sans_rien_noter(self):
         t = self.tache()
         P.modify(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
-        with mock.patch.dict(_m.TOURS_ACTIFS, {"autre": threading.Event()}), mock.patch.object(_m, "TOURS_SIMULTANES", 1), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
+        with mock.patch.dict(_m.ACTIVE_TURNS, {"autre": threading.Event()}), mock.patch.object(_m, "CONCURRENT_TURNS", 1), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
             self.assertIsNone(P.run_first_due(LUNDI_8H))
             with self.assertRaises(ValueError):
                 P.execute(t["id"])

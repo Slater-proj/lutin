@@ -33,7 +33,7 @@ class Backup(unittest.TestCase):
     def test_where_the_data_is(self):
         status, answer = V.call("GET", "/api/v1/backup/where", V.DEVICE)
         self.assertEqual((status, sorted(answer)), (200, ["backups", "config", "data", "memory"]))
-        self.assertEqual(answer["data"], str(A.DONNEES))
+        self.assertEqual(answer["data"], str(A.DATA))
 
     def test_a_backup_is_downloaded_then_restored(self):
         c = A.conv_new()

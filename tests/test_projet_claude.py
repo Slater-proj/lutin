@@ -165,15 +165,15 @@ class DansLeMoteur(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.TemporaryDirectory()
         self.depot = fabriquer(Path(self.t.name) / "homelab")
-        self.avant = A.RACINE
-        A.definir_racine(str(self.depot))
+        self.avant = A.ROOT
+        A.set_root(str(self.depot))
 
     def tearDown(self):
-        A.definir_racine(str(self.avant))
+        A.set_root(str(self.avant))
         self.t.cleanup()
 
     def test_les_consignes_du_modele_contiennent_le_projet(self):
-        consignes = A.consignes_systeme(A.reglages())
+        consignes = A.consignes_systeme(A.settings())
         self.assertIn("# PROJET CLAUDE", consignes)
         self.assertIn("Tout tourne sous Proxmox.", consignes)
         self.assertIn("Déployer un service sur le cluster", consignes)
@@ -190,14 +190,14 @@ class DansLeMoteur(unittest.TestCase):
         autre = fabriquer(Path(self.t.name) / "autre")
         r = A.import_claude_project(str(autre), "ici")
         self.assertEqual((r["mode"], r["actif"], Path(r["chemin"]).resolve()), ("ici", True, autre.resolve()))
-        self.assertEqual(Path(A.RACINE).resolve(), autre.resolve())
+        self.assertEqual(Path(A.ROOT).resolve(), autre.resolve())
         self.assertIn("1 skill(s)", r["resume"])
         copie = Path(self.t.name) / "ma-copie"
         r = A.import_claude_project(str(self.depot), "copie", str(copie), "Copie du homelab")
         self.assertEqual(Path(r["chemin"]).resolve(), copie.resolve())
         self.assertTrue((copie / "CLAUDE.md").is_file())
         self.assertIn("Copie du homelab", [t["nom"] for t in r["travaux"]["liste"]])
-        self.assertEqual(Path(A.RACINE).resolve(), copie.resolve(), "le dossier copié devient le dossier actif")
+        self.assertEqual(Path(A.ROOT).resolve(), copie.resolve(), "le dossier copié devient le dossier actif")
 
     def test_refus_de_l_api(self):
         with self.assertRaisesRegex(ValueError, "n'existe pas"):

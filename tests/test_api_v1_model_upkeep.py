@@ -67,10 +67,10 @@ class Upkeep(unittest.TestCase):
         def checker(scope):
             asked.append(scope)
             self.proposals.write_text(json.dumps(dict(PROPOSALS, propositions=PROPOSALS["propositions"][:1], date=1800000000)), encoding="utf-8")
-        with mock.patch.object(A, "VERIFICATEUR", None):
+        with mock.patch.object(A, "MODEL_CHECKER", None):
             status, answer = V.call("POST", "/api/v1/models/check", V.DEVICE, {"scope": "updates"})
             self.assertEqual((status, answer["error"]["code"]), (409, "not_available"))
-        with mock.patch.object(A, "VERIFICATEUR", checker):
+        with mock.patch.object(A, "MODEL_CHECKER", checker):
             status, answer = V.call("POST", "/api/v1/models/check", V.DEVICE, {"scope": "updates"})
             self.assertEqual(status, 200, answer)
             self.assertEqual((asked, len(answer["proposals"]), answer["checked_at"]), (["maj"], 1, 1800000000))

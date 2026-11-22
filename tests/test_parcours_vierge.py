@@ -34,7 +34,7 @@ LECTURES = ["/api/etat", "/api/acces", "/api/addons", "/api/conseil", "/api/cont
 
 def lire(chemin):
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
-    c.request("GET", chemin, headers={"Host": "127.0.0.1:%d" % PORT, "X-Token": A.JETON})
+    c.request("GET", chemin, headers={"Host": "127.0.0.1:%d" % PORT, "X-Token": A.TOKEN})
     r = c.getresponse()
     corps = r.read().decode("utf-8", "replace")
     c.close()
@@ -80,12 +80,12 @@ class DonneesAbimees(unittest.TestCase):
 
     def tearDown(self):
         for f in self.FICHIERS:
-            (A.DONNEES / f).unlink(missing_ok=True)
+            (A.DATA / f).unlink(missing_ok=True)
 
     def test_fichiers_abimes(self):
         for fichier in self.FICHIERS:
             for contenu in self.CONTENUS:
-                (A.DONNEES / fichier).write_text(contenu, encoding="utf-8")
+                (A.DATA / fichier).write_text(contenu, encoding="utf-8")
                 for chemin in self.FICHIERS[fichier]:
                     with self.subTest(fichier=fichier, contenu=contenu, chemin=chemin):
                         statut, corps = lire(chemin)
@@ -95,7 +95,7 @@ class DonneesAbimees(unittest.TestCase):
 class Compression(unittest.TestCase):
     def demander(self, chemin, encodage=None):
         c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
-        en_tetes = {"Host": "127.0.0.1:%d" % PORT, "X-Token": A.JETON}
+        en_tetes = {"Host": "127.0.0.1:%d" % PORT, "X-Token": A.TOKEN}
         if encodage:
             en_tetes["Accept-Encoding"] = encodage
         c.request("GET", chemin, headers=en_tetes)

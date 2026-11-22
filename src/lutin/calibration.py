@@ -37,7 +37,7 @@ def choose(resultats, tolerance=TOLERANCE):
 
 
 def path():
-    return _m.DONNEES / "calibrage.json"
+    return _m.DATA / "calibrage.json"
 
 
 def state():
@@ -63,10 +63,10 @@ def measure_threads(ollama, modele, fils, num_ctx, repetitions=REPEATS):
 def start(mesure=None):
     """Démarre le calibrage en arrière-plan sur le modèle choisi dans Réglages. Un seul à la fois, et pas pendant une réponse ou un banc d'essai (les mesures se fausseraient)."""
     mesure = mesure or measure_threads
-    r = _m.reglages()
+    r = _m.settings()
     modele = r["modele"]
-    with _m.VERROU_TOURS:
-        if _m.TOURS_ACTIFS:
+    with _m.TURNS_LOCK:
+        if _m.ACTIVE_TURNS:
             raise ValueError(_t("Une réponse est en cours : la mesure serait faussée. Attends sa fin."))
         if _m.BENCH["en_cours"] or CALIBRATION["en_cours"]:
             raise ValueError(_t("Une mesure est déjà en cours."))

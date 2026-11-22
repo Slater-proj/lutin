@@ -77,7 +77,7 @@ class Engines(unittest.TestCase):
             if not engine.aptitudes().starts_on_demand:
                 with self.assertRaises(ValueError, msg=identifier):
                     engine.demarrer_sur_demande()
-        with mock.patch.object(_core, "demarrer_ollama", return_value="started") as start:
+        with mock.patch.object(_core, "start_ollama", return_value="started") as start:
             self.assertEqual(engines.ENGINES[engines.OLLAMA].demarrer_sur_demande(), "started")
         start.assert_called_once_with()
 
@@ -107,7 +107,7 @@ class Loop(unittest.TestCase):
         events = []
         r = {"modele": "small", "num_ctx": 4096, "temperature": 0.2}
         body = {"model": "small", "messages": [{"role": "user", "content": "Hello"}], "stream": True, "options": {}, "think": False}
-        with mock.patch.object(agent, "moteur_actuel", lambda r=None: engine), mock.patch.object(_core, "AUTO_DEMARRAGE", True):
+        with mock.patch.object(agent, "moteur_actuel", lambda r=None: engine), mock.patch.object(_core, "AUTO_START", True):
             done, fallback, text, thought, calls = agent._appeler_modele({"id": "c-loop", "messages": []}, r, events.append, {}, threading.Event(), body, body["messages"], [], None, False)
         self.assertEqual((done, fallback, text, calls), (False, False, "", []), "an engine that never answers gives no answer")
         return [event["texte"] for event in events]

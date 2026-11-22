@@ -34,11 +34,11 @@ class Changes(unittest.TestCase):
         for body in ({"path": ""}, {"path": 1}, {"everything": True}):
             self.assertEqual(api("POST", path, body)[1]["error"]["code"], "invalid_request", body)
         self.assertIn("return 2", FILE.read_text(encoding="utf-8"), "refusals change nothing")
-        A.TOURS_ACTIFS[self.conversation] = object()
+        A.ACTIVE_TURNS[self.conversation] = object()
         try:
             self.assertEqual(api("POST", path, {})[1]["error"]["code"], "turn_running")
         finally:
-            A.TOURS_ACTIFS.pop(self.conversation, None)
+            A.ACTIVE_TURNS.pop(self.conversation, None)
         status, answer = api("POST", path, {"path": "appli/moteur/code.py"})
         self.assertEqual((status, answer["restored"], answer["skipped"], answer["undoable"]), (200, ["appli/moteur/code.py"], [], False))
         self.assertEqual(FILE.read_text(encoding="utf-8"), self.before, "as it was before the request")

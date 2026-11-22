@@ -171,38 +171,38 @@ def ensure_comfyui(stop=None):
         return False
     dossier = folder_comfy()
     if not dossier:
-        raise _m.ErreurOutil(_t("Je ne trouve pas ComfyUI : l'utilisateur doit choisir son dossier (Automatisation > Extensions > ComfyUI)."))
+        raise _m.ToolError(_t("Je ne trouve pas ComfyUI : l'utilisateur doit choisir son dossier (Automatisation > Extensions > ComfyUI)."))
     port = addons.settings(IDENT).get("port") or "8188"
     commande = launch_command(dossier, port)
     if not commande:
-        raise _m.ErreurOutil(_t("ComfyUI ne tourne pas et je ne trouve pas son Python pour le lancer : l'utilisateur doit le lancer lui-même."))
+        raise _m.ToolError(_t("ComfyUI ne tourne pas et je ne trouve pas son Python pour le lancer : l'utilisateur doit le lancer lui-même."))
     try:
-        _m.liberer_vram()                                                       # le modèle de langage cède la carte graphique et la mémoire
+        _m.free_vram()                                                       # le modèle de langage cède la carte graphique et la mémoire
     except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("ComfyUI : libération de la mémoire impossible ({!r}).".format(erreur))
-    journal = open(_m.DONNEES / "comfyui.log", "ab")
+        _m.log_event("ComfyUI : libération de la mémoire impossible ({!r}).".format(erreur))
+    journal = open(_m.DATA / "comfyui.log", "ab")
     options = {"creationflags": 0x08000000} if os.name == "nt" else {}          # pas de fenêtre de console
     try:
         processus = subprocess.Popen(commande, cwd=dossier, stdout=journal, stderr=journal, stdin=subprocess.DEVNULL, **options)
     except OSError as erreur:
-        raise _m.ErreurOutil(_t("Impossible de lancer ComfyUI : {}").format(erreur))
+        raise _m.ToolError(_t("Impossible de lancer ComfyUI : {}").format(erreur))
     finally:
         journal.close()
     PROCESS["popen"] = processus
-    _m.journaliser("ComfyUI lancé par Lutin ({}).".format(" ".join(commande[:3])))
+    _m.log_event("ComfyUI lancé par Lutin ({}).".format(" ".join(commande[:3])))
     fin = time.time() + TIMEOUT_STARTUP
     while time.time() < fin:
         if stop is not None and stop.is_set():          # « Arrêter » pendant le démarrage de ComfyUI : on le referme et on rend la main
             stop_comfyui()
-            raise _m.Arret()
+            raise _m.TurnStopped()
         if processus.poll() is not None:
             PROCESS["popen"] = None
-            raise _m.ErreurOutil(_t("ComfyUI s'est arrêté au démarrage (voir donnees/comfyui.log)."))
+            raise _m.ToolError(_t("ComfyUI s'est arrêté au démarrage (voir donnees/comfyui.log)."))
         if running():
             return True
         time.sleep(2)
     stop_comfyui()
-    raise _m.ErreurOutil(_t("ComfyUI n'a pas répondu après {} secondes (voir donnees/comfyui.log).").format(TIMEOUT_STARTUP))
+    raise _m.ToolError(_t("ComfyUI n'a pas répondu après {} secondes (voir donnees/comfyui.log).").format(TIMEOUT_STARTUP))
 
 
 def stop_comfyui():
@@ -215,7 +215,7 @@ def stop_comfyui():
         processus.wait(15)
     except subprocess.TimeoutExpired:
         processus.kill()
-    _m.journaliser("ComfyUI refermé par Lutin.")
+    _m.log_event("ComfyUI refermé par Lutin.")
 
 
 atexit.register(stop_comfyui)
@@ -401,7 +401,7 @@ def _integer(valeur, nom, mini, maxi, defaut):
     try:
         n = int(float(valeur))
     except (TypeError, ValueError):
-        raise _m.ErreurOutil(_t("« {} » doit être un nombre.").format(nom))
+        raise _m.ToolError(_t("« {} » doit être un nombre.").format(nom))
     return max(mini, min(maxi, n))
 
 
@@ -466,7 +466,7 @@ def choose_model(demande="", message="", detail=False):
     demande = str(demande or "").strip()
     checkpoints, diffusion = _installed("checkpoints"), _installed("diffusion_models")
     if not checkpoints and not diffusion:
-        raise _m.ErreurOutil(_t("Je ne vois aucun modèle d'image dans ComfyUI (ni dans checkpoints ni dans diffusion_models) : l'utilisateur doit en installer un."))
+        raise _m.ToolError(_t("Je ne vois aucun modèle d'image dans ComfyUI (ni dans checkpoints ni dans diffusion_models) : l'utilisateur doit en installer un."))
     ecarte = ""
     if reglage and demande:
         proposee = _matches(checkpoints, demande) or _matches(diffusion, demande) or demande
@@ -485,15 +485,15 @@ def choose_model(demande="", message="", detail=False):
         if trouve:
             cle = family_of(trouve)
             if not cle:
-                raise _m.ErreurOutil(_t("Je ne connais pas la famille du modèle « {} » (Flux, Qwen-Image et Z-Image sont gérés) : l'utilisateur peut coller son propre workflow dans « Flux… ».").format(trouve))
+                raise _m.ToolError(_t("Je ne connais pas la famille du modèle « {} » (Flux, Qwen-Image et Z-Image sont gérés) : l'utilisateur peut coller son propre workflow dans « Flux… ».").format(trouve))
             return fin((cle, trouve))
-        raise _m.ErreurOutil(_t("Le modèle « {} » n'est pas installé{}. Disponibles : {}").format(demande, _t(" (c'est le réglage de l'utilisateur)") if source_reglage else "", ", ".join((checkpoints + diffusion)[:25])))
+        raise _m.ToolError(_t("Le modèle « {} » n'est pas installé{}. Disponibles : {}").format(demande, _t(" (c'est le réglage de l'utilisateur)") if source_reglage else "", ", ".join((checkpoints + diffusion)[:25])))
     if checkpoints:
         return fin(("image", checkpoints[0]))
     for n in diffusion:
         if family_of(n):
             return fin((family_of(n), n))
-    raise _m.ErreurOutil(_t("Aucun de tes modèles de diffusion n'est d'une famille que je connais (Flux, Qwen-Image, Z-Image) : {}").format(", ".join(diffusion[:15])))
+    raise _m.ToolError(_t("Aucun de tes modèles de diffusion n'est d'une famille que je connais (Flux, Qwen-Image, Z-Image) : {}").format(", ".join(diffusion[:15])))
 
 
 def resources_for(cle, flux_actuel):
@@ -506,7 +506,7 @@ def resources_for(cle, flux_actuel):
         installes = _installed(genre)
         found = next((n for mot in mots for n in installes if mot.lower() in n.lower().rsplit("/", 1)[-1]), "")
         if not found:
-            raise _m.ErreurOutil(_t("Il me manque un fichier pour ce modèle : {} (dossier {}, nom contenant {}). L'utilisateur doit l'installer.").format({"clip": _t("encodeur de texte"), "clip2": _t("second encodeur de texte"), "vae": "VAE"}[nom], genre, " / ".join(mots)))
+            raise _m.ToolError(_t("Il me manque un fichier pour ce modèle : {} (dossier {}, nom contenant {}). L'utilisateur doit l'installer.").format({"clip": _t("encodeur de texte"), "clip2": _t("second encodeur de texte"), "vae": "VAE"}[nom], genre, " / ".join(mots)))
         trouvees[nom] = found
     return trouvees
 
@@ -516,7 +516,7 @@ def parameters(args, flux_actuel, type_):
     base = dict((flux_actuel.get("parametres") or {}).get(type_) or {})
     prompt = str(args.get("prompt") or "").strip()
     if not prompt:
-        raise _m.ErreurOutil(_t("Il faut une description (« prompt »)."))
+        raise _m.ToolError(_t("Il faut une description (« prompt »)."))
     v = {"prompt": prompt[:2000], "negatif": str(args.get("negatif") if args.get("negatif") is not None else base.get("negatif", ""))[:1000],
          "largeur": _integer(args.get("largeur"), "largeur", 64, 4096, int(base.get("largeur", 1024))), "hauteur": _integer(args.get("hauteur"), "hauteur", 64, 4096, int(base.get("hauteur", 1024))),
          "pas": _integer(args.get("pas"), "pas", 1, 150, int(base.get("pas", 25))), "graine": _integer(args.get("graine"), "graine", 0, 2 ** 53, secrets.randbelow(2 ** 40))}
@@ -524,7 +524,7 @@ def parameters(args, flux_actuel, type_):
     try:
         v["cfg"] = max(1.0, min(30.0, float(args.get("cfg") if args.get("cfg") not in (None, "") else base.get("cfg", 6.5))))
     except (TypeError, ValueError):
-        raise _m.ErreurOutil(_t("« {} » doit être un nombre.").format("cfg"))
+        raise _m.ToolError(_t("« {} » doit être un nombre.").format("cfg"))
     v["guidance"] = float(base.get("guidance", 3.5))
     v["decalage"] = float(base.get("decalage", 3.0))
     v["modele"] = str(args.get("modele") or addons.settings(IDENT).get("modele") or base.get("modele") or "").strip()
@@ -535,7 +535,7 @@ def generate_tool(args, ctx):
     """L'outil « comfy_generer » : image, vidéo ou son. Demande ton accord, libère la carte graphique, envoie le workflow et attend le résultat."""
     type_ = str(args.get("type") or "image").lower()
     if type_ not in TYPES:
-        raise _m.ErreurOutil(_t("Type inconnu : « {} » (image, video ou son).").format(type_))
+        raise _m.ToolError(_t("Type inconnu : « {} » (image, video ou son).").format(type_))
     f = addons.stream(IDENT)
     ecrit = " ".join(str(m.get("content") or "") for m in ((ctx.get("conv") or {}).get("messages") or [])[-40:] if m.get("role") == "user")          # ce que l'utilisateur a écrit : un modèle qu'il nomme lui-même est respecté
     if ctx.get("mission"):
@@ -545,7 +545,7 @@ def generate_tool(args, ctx):
     cle, modele, ignore = choose_model(args.get("modele"), ecrit, detail=True) if type_ == "image" else (type_, "", "")          # image : le modèle choisi décide du workflow (checkpoint, Flux, Qwen-Image, Z-Image)
     wf = (f.get("workflows") or {}).get(cle)
     if not wf:
-        raise _m.ErreurOutil(_t("Aucun workflow « {} » dans le flux de l'addon ComfyUI : l'utilisateur doit en coller un, ou revenir à la version livrée (Extensions > ComfyUI > Flux…).").format(cle))
+        raise _m.ToolError(_t("Aucun workflow « {} » dans le flux de l'addon ComfyUI : l'utilisateur doit en coller un, ou revenir à la version livrée (Extensions > ComfyUI > Flux…).").format(cle))
     v = parameters(args, f, cle)
     if modele:
         v["modele"] = modele
@@ -553,7 +553,7 @@ def generate_tool(args, ctx):
     complet = fill_workflow(wf, v)
     restantes = remaining_markers(complet)
     if restantes:
-        raise _m.ErreurOutil(_t("Le workflow contient des marques que Lutin ne sait pas remplir : {}.").format(", ".join(sorted("{" + x + "}" for x in restantes))))
+        raise _m.ToolError(_t("Le workflow contient des marques que Lutin ne sait pas remplir : {}.").format(", ".join(sorted("{" + x + "}" for x in restantes))))
     detail = _t("Description : {}\nTaille : {}×{} · modèle : {}").format(v["prompt"][:300], v["largeur"], v["hauteur"], v["modele"] or _t("(celui du workflow)"))
     auto = bool(ctx.get("auto_commandes"))          # générer lance ComfyUI et prend la carte graphique : la case « Commandes automatiques » vaut aussi pour cela
     if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, "", auto=auto):
@@ -640,10 +640,10 @@ def _show(fichiers, ctx):
 
 def _submit_and_wait(f, v, complet, type_, ctx):
     try:
-        if _m.reglages().get("liberer_si_comfy", True):
-            _m.liberer_vram()                                                      # le modèle de langage cède la carte graphique à ComfyUI
+        if _m.settings().get("liberer_si_comfy", True):
+            _m.free_vram()                                                      # le modèle de langage cède la carte graphique à ComfyUI
     except Exception as erreur:  # noqa: BLE001  (ne pas échouer pour ça)
-        _m.journaliser("ComfyUI : libération de la carte impossible ({!r}).".format(erreur))
+        _m.log_event("ComfyUI : libération de la carte impossible ({!r}).".format(erreur))
     r = addons.call(IDENT, "soumettre", {"workflow": complet}, delai=30)
     if not r["ok"]:
         return _t("ComfyUI a refusé le travail :\n{}").format(detail_error(r.get("corps")) if r.get("corps") else r["erreur"])
@@ -656,7 +656,7 @@ def _submit_and_wait(f, v, complet, type_, ctx):
     while time.time() < fin:
         if stop is not None and stop.is_set():
             addons.call(IDENT, "interrompre", {}, delai=5)
-            raise _m.Arret()
+            raise _m.TurnStopped()
         h = addons.call(IDENT, "historique", {"id": ident}, delai=15)
         entree = ((h["donnees"] or {}).get(ident) or {}) if h["ok"] else {}
         if entree:

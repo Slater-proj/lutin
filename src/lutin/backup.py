@@ -72,7 +72,7 @@ def _store_entries(dossiers):
     are imported again. Only when the data folder saved is the one in use (the database belongs to it)."""
     from . import core as _m
     from . import store
-    if not dossiers.get("donnees") or Path(dossiers["donnees"]).resolve() != Path(_m.DONNEES).resolve():
+    if not dossiers.get("donnees") or Path(dossiers["donnees"]).resolve() != Path(_m.DATA).resolve():
         return []
     store.ready()                                                   # a 0.x file still waiting is imported first: it is saved once
     entries = []
@@ -159,7 +159,7 @@ def restore(dossiers, archive, dossier_secours=None):
             ecrits += 1
     from . import core as _m
     from . import store
-    if dossiers.get("donnees") and Path(dossiers["donnees"]).resolve() == Path(_m.DONNEES).resolve():
+    if dossiers.get("donnees") and Path(dossiers["donnees"]).resolve() == Path(_m.DATA).resolve():
         store._STATE["replace"] = True                               # the conversations of the archive replace those of the database, as files did in 0.x
         store.ready()
     return {"fichiers": ecrits, "secours": str(secours) if secours else "", "version": manifeste.get("lutin", ""), "date": manifeste.get("date", "")}

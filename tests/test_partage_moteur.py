@@ -120,7 +120,7 @@ class DemarrageSansDoublon(unittest.TestCase):
         try:
             with mock.patch.object(_m, "PORT", port), mock.patch.object(_m, "watch_loop", lambda: lances.append("surveillance")), mock.patch.object(_m, "purge_backups", lambda: lances.append("purge")):
                 with self.assertRaises(SystemExit) as e:
-                    _m.principal()
+                    _m.main()
         finally:
             occupe.close()
             sys.excepthook, threading.excepthook = avant
@@ -129,7 +129,7 @@ class DemarrageSansDoublon(unittest.TestCase):
 
     def test_le_port_est_exclusif_sous_windows_et_les_redemarrages_sont_absorbes(self):
         if os.name == "nt":
-            self.assertFalse(_m.ServeurLutin.allow_reuse_address, "sinon deux Lutin peuvent écouter sur le même port")
+            self.assertFalse(_m.LutinServer.allow_reuse_address, "sinon deux Lutin peuvent écouter sur le même port")
         occupe = socket.socket()
         occupe.bind(("127.0.0.1", 0))
         occupe.listen(1)
@@ -139,12 +139,12 @@ class DemarrageSansDoublon(unittest.TestCase):
             with mock.patch.object(_m, "PORT", port):
                 if os.name == "nt":
                     with self.assertRaises(OSError):
-                        _m.lier_le_port("127.0.0.1", essais=3, dormir=pauses.append)
+                        _m.bind_port("127.0.0.1", essais=3, dormir=pauses.append)
                     self.assertEqual(len(pauses), 2, "quelques essais rapprochés avant de renoncer")
         finally:
             occupe.close()
         with mock.patch.object(_m, "PORT", port):
-            s = _m.lier_le_port("127.0.0.1", essais=1)          # le port s'est libéré : l'ouverture réussit
+            s = _m.bind_port("127.0.0.1", essais=1)          # le port s'est libéré : l'ouverture réussit
             s.server_close()
 
 

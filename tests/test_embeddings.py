@@ -60,13 +60,13 @@ class Sens(unittest.TestCase):
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), FauxOllama)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.vrai_ollama, _m.OLLAMA = _m.OLLAMA, "http://127.0.0.1:%d" % cls.serveur.server_address[1]
-        cls.vrais_reglages = _m.reglages
+        cls.vrais_reglages = _m.settings
         cls.sens = {"recherche_sens": True, "modele_embeddings": "nomic-embed-text"}
-        _m.reglages = lambda: dict(cls.vrais_reglages(), **cls.sens)
+        _m.settings = lambda: dict(cls.vrais_reglages(), **cls.sens)
 
     @classmethod
     def tearDownClass(cls):
-        _m.OLLAMA, _m.reglages = cls.vrai_ollama, cls.vrais_reglages
+        _m.OLLAMA, _m.settings = cls.vrai_ollama, cls.vrais_reglages
         cls.serveur.shutdown()
 
     def setUp(self):

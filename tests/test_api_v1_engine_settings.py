@@ -89,7 +89,7 @@ class ModelsFolder(unittest.TestCase):
         self.assertEqual((copied, chosen), (["D:/IA/ollama"], ["D:/IA/ollama"]))
 
     def test_ollama_is_not_restarted_during_an_answer(self):
-        with mock.patch.dict(A.TOURS_ACTIFS, {"conversation": object()}):
+        with mock.patch.dict(A.ACTIVE_TURNS, {"conversation": object()}):
             status, answer = V.call("POST", "/api/v1/models/folder/restart-ollama", V.OWNER, {})
         self.assertEqual((status, answer["error"]["code"]), (409, "turn_running"))
 

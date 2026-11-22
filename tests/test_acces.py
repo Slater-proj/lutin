@@ -39,7 +39,7 @@ RACINE_TESTS = Path(__file__).resolve().parent.parent
 
 def requete(methode, chemin, en_tetes=None, corps=None, brut=None):
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
-    h = {"Host": "127.0.0.1:%d" % PORT, "X-Token": A.JETON}
+    h = {"Host": "127.0.0.1:%d" % PORT, "X-Token": A.TOKEN}
     h.update(en_tetes or {})
     donnees = brut
     if corps is not None:
@@ -57,19 +57,19 @@ def requete(methode, chemin, en_tetes=None, corps=None, brut=None):
 
 class Base(unittest.TestCase):
     def setUp(self):
-        self.avant = (A.SECURITE, A.APPAREILS)
-        A.SECURITE = S.Security(niveau=S.LOCAL, port=8777)
-        A.APPAREILS = S.Devices()
+        self.avant = (A.SECURITY, A.DEVICES)
+        A.SECURITY = S.Security(niveau=S.LOCAL, port=8777)
+        A.DEVICES = S.Devices()
         CONFIG.write_text(json.dumps({"schema": 1, "installe": True, "securite": {"niveau": "local", "port": 8777}, "emplacements": {"travail": str(_TEMP / "projet"), "travaux": [], "travail_actif": ""}}), encoding="utf-8")
         os.environ.pop("LUTIN_DOCKER", None)
         os.environ.pop("LUTIN_SUPERVISE", None)
 
     def tearDown(self):
-        A.SECURITE, A.APPAREILS = self.avant
+        A.SECURITY, A.DEVICES = self.avant
 
     def session(self):
-        pin = A.APPAREILS.nouveau_pin()
-        jeton = A.APPAREILS.appairer(pin, "Téléphone")
+        pin = A.DEVICES.nouveau_pin()
+        jeton = A.DEVICES.appairer(pin, "Téléphone")
         return {"Cookie": "{}={}".format(S.NAME_COOKIE, jeton)}
 
 
@@ -88,7 +88,7 @@ class NiveauDAcces(Base):
         statut, r = requete("POST", "/api/acces", corps={"niveau": "reseau", "comprend": True})
         self.assertEqual((statut, r), (200, {"redemarrage_necessaire": True}))
         self.assertEqual(json.loads(CONFIG.read_text(encoding="utf-8"))["securite"]["niveau"], "reseau")
-        self.assertEqual(A.SECURITE.niveau, "local", "rien ne change avant le redémarrage")
+        self.assertEqual(A.SECURITY.niveau, "local", "rien ne change avant le redémarrage")
         self.assertTrue(requete("GET", "/api/acces")[1]["redemarrage_necessaire"])
         self.assertTrue(requete("GET", "/api/etat")[1]["redemarrage"]["necessaire"])
         statut, r = requete("POST", "/api/acces", corps={"niveau": "local"})
@@ -114,7 +114,7 @@ class NiveauDAcces(Base):
             self.assertIn("LUTIN_NIVEAU", r["erreur"])
 
     def test_qui_peut_changer_le_niveau(self):
-        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
+        A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
         sur_la_machine = dict(self.session())
         self.assertTrue(requete("GET", "/api/acces", sur_la_machine)[1]["modifiable"], "le navigateur de cette machine, au niveau réseau")
         for intrus in ({"X-Forwarded-For": "192.168.1.50"}, {"Forwarded": "for=192.168.1.50"}, {"Via": "1.1 proxy"}, {"Host": "lutin.maison:8777"}, {"X-Real-IP": "10.0.0.2"}):
@@ -122,7 +122,7 @@ class NiveauDAcces(Base):
             if statut == 200:
                 self.assertFalse(e["modifiable"], intrus)
                 self.assertEqual(requete("POST", "/api/acces", dict(sur_la_machine, **intrus), {"niveau": "local"})[0], 403, intrus)
-        A.SECURITE = S.Security(niveau=S.PROXY, port=8777, url_publique="https://lutin.exemple.fr", proxy_ips=["127.0.0.1"])
+        A.SECURITY = S.Security(niveau=S.PROXY, port=8777, url_publique="https://lutin.exemple.fr", proxy_ips=["127.0.0.1"])
         statut, e = requete("GET", "/api/acces", {"Remote-User": "moi", "Host": "lutin.exemple.fr"})
         if statut == 200:
             self.assertFalse(e["modifiable"], "derrière un proxy installé sur la machine : jamais, le proxy ne prouve rien")
@@ -130,7 +130,7 @@ class NiveauDAcces(Base):
 
 class AppairageEtAppareils(Base):
     def test_pin_et_appareils(self):
-        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
+        A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
         session = self.session()
         statut, r = requete("POST", "/api/nouveau-pin", session, {})
         self.assertEqual((statut, len(r["pin"]), r["valable_s"]), (200, 6, 600))
@@ -147,7 +147,7 @@ class AppairageEtAppareils(Base):
         self.assertEqual(requete("GET", "/api/qr?d=" + "x" * 300)[0], 400)
 
     def test_la_page_de_connexion_lit_le_pin_du_qr_code(self):
-        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
+        A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
         statut, page = requete("GET", "/", {"X-Token": ""})
         self.assertEqual(statut, 200)
         self.assertIn("pin=([0-9]{6})", page)
@@ -156,7 +156,7 @@ class AppairageEtAppareils(Base):
 
 class CommandesDuProjet(Base):
     def test_route_des_commandes_claude(self):
-        c = A.RACINE / ".claude" / "commands"
+        c = A.ROOT / ".claude" / "commands"
         c.mkdir(parents=True, exist_ok=True)
         (c / "bonjour.md").write_text("---\ndescription: Salue\n---\nDis bonjour à $ARGUMENTS", encoding="utf-8")
         try:
@@ -173,7 +173,7 @@ class CommandesDuProjet(Base):
 class Documents(Base):
     def test_rechercher_dans_un_pdf_un_document_word_et_lire_avec_citation(self):
         from test_extraction import ecrire_zip, pdf_simple
-        docs = A.RACINE / "docs"
+        docs = A.ROOT / "docs"
         docs.mkdir(parents=True, exist_ok=True)
         (docs / "panne.pdf").write_bytes(pdf_simple(True))
         ecrire_zip(docs / "guide.docx", {"word/document.xml": "<w:document><w:p><w:r><w:t>La sauvegarde du NAS se lance chaque nuit à trois heures.</w:t></w:r></w:p></w:document>"})
@@ -193,9 +193,9 @@ class Documents(Base):
             self.assertIn("Deuxième ligne : procédure", lu)
             self.assertIn("## Page 1", lu)
             self.assertIn("Page 1", A.recall_tool("déploiement"))
-            with self.assertRaisesRegex(A.ErreurOutil, "illisible"):
+            with self.assertRaisesRegex(A.ToolError, "illisible"):
                 A.read_tool("docs/casse.docx")
-            self.assertTrue(list((A.DONNEES / "cache-documents").glob("*.json")), "le texte extrait est gardé : pas de nouvelle lecture au prochain démarrage")
+            self.assertTrue(list((A.DATA / "cache-documents").glob("*.json")), "le texte extrait est gardé : pas de nouvelle lecture au prochain démarrage")
         finally:
             for n in ("panne.pdf", "guide.docx", "casse.docx"):
                 (docs / n).unlink(missing_ok=True)
@@ -212,10 +212,10 @@ class ConseilPc(Base):
             self._conseil_avec_mesure(bench)
 
     def _conseil_avec_mesure(self, bench):
-        chemin = A.chemin_bench()
+        chemin = A.bench_path()
         existait = chemin.exists()
         avant = chemin.read_bytes() if existait else None
-        modele = A.reglages()["modele"]
+        modele = A.settings()["modele"]
         try:
             chemin.unlink(missing_ok=True)
             self.assertEqual(requete("GET", "/api/conseil"), (200, {"mesure": None, "conseil": []}))
@@ -304,12 +304,12 @@ class Planification(Base):
         self.assertEqual(requete("POST", "/api/notifications-supprimer", corps={"id": liste["canaux"][0]["id"]})[0], 200)
 
     def test_les_notifications_se_reglent_depuis_cette_machine_seulement(self):
-        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
+        A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
         statut, _ = requete("POST", "/api/notifications-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "type": "ntfy", "params": {"sujet": "x"}})
         self.assertEqual(statut, 403)
 
     def test_gestion_reservee_a_cette_machine(self):
-        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
+        A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
         statut, r = requete("POST", "/api/planifie-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "prompt": "x", "heure": "08:00", "jours": [0]})
         self.assertEqual(statut, 403, "un appareil appairé, ou un relais, ne planifie pas")
         self.assertEqual(self.p.read(), [])
@@ -331,7 +331,7 @@ class Planification(Base):
         """Un tour qui fait ce que fait le vrai : ajoute la demande, la réponse (ou rien), et écrit la conversation."""
         def tour(conv, texte, emit, r, stop, depuis, identite="", lecture_seule=False):
             if appels is not None:
-                appels.append((conv["titre"], texte, lecture_seule, A.TOURS_ACTIFS.get(conv["id"]) is stop))
+                appels.append((conv["titre"], texte, lecture_seule, A.ACTIVE_TURNS.get(conv["id"]) is stop))
             conv["messages"].append({"role": "user", "content": texte})
             if reponse:
                 conv["messages"].append({"role": "assistant", "content": reponse})
@@ -348,7 +348,7 @@ class Planification(Base):
         self.assertEqual([(a[0], a[2], a[3]) for a in appels], [("⏰ Matin", True, True)])
         self.assertTrue(appels[0][1].startswith("(Tâche planifiée « Matin » lancée le "), "la demande est datée : le modèle sait quel jour et quelle heure il est")
         self.assertTrue(appels[0][1].endswith("résume le dépôt"))
-        self.assertEqual(A.TOURS_ACTIFS, {}, "la machine est libérée après la tâche")
+        self.assertEqual(A.ACTIVE_TURNS, {}, "la machine est libérée après la tâche")
         fait = self.p.read()[0]
         self.assertEqual((fait["derniere_conv"], fait["derniere_etat"]), (ident, "ok"))
 
@@ -424,13 +424,13 @@ class Planification(Base):
         from datetime import datetime, timedelta
         t = self.p.add("Matin", "x", "00:00", [0, 1, 2, 3, 4, 5, 6])
         self.p.modify(t["id"], cree=(datetime.now() - timedelta(days=2)).isoformat(timespec="seconds"))
-        A.TOURS_ACTIFS["abcdef12"] = threading.Event()
+        A.ACTIVE_TURNS["abcdef12"] = threading.Event()
         try:
             with mock.patch.object(self.p, "execute") as ex:
                 self.assertIsNone(self.p.run_first_due())
                 ex.assert_not_called()
         finally:
-            A.TOURS_ACTIFS.pop("abcdef12", None)
+            A.ACTIVE_TURNS.pop("abcdef12", None)
         with mock.patch.object(self.p, "execute") as ex:
             self.assertEqual(self.p.run_first_due(), t["id"])
             ex.assert_called_once_with(t["id"])
@@ -449,13 +449,13 @@ class Redemarrage(Base):
             args = timer.call_args[0]
             self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [access.RESTART_CODE]))
             timer.return_value.start.assert_called_once()
-            A.TOURS_ACTIFS["abcd1234"] = object()
+            A.ACTIVE_TURNS["abcd1234"] = object()
             try:
                 statut, r = requete("POST", "/api/redemarrer", corps={})
                 self.assertEqual(statut, 400)
                 self.assertIn("réponse est en cours", r["erreur"])
             finally:
-                A.TOURS_ACTIFS.pop("abcd1234", None)
+                A.ACTIVE_TURNS.pop("abcd1234", None)
 
     def test_le_superviseur_relance_sans_compter_une_panne(self):
         from lutin import cli
@@ -469,19 +469,19 @@ class Redemarrage(Base):
 class Restauration(Base):
     def archive(self):
         sortie = io.BytesIO()
-        backup.export({"config": CONFIG.parent, "donnees": A.DONNEES, "memoire": A.MEMOIRE}, sortie)
+        backup.export({"config": CONFIG.parent, "donnees": A.DATA, "memoire": A.MEMORY}, sortie)
         return sortie.getvalue()
 
     def test_restaurer_depuis_la_page(self):
-        (A.MEMOIRE / "NOTE.md").write_text("avant", encoding="utf-8")
+        (A.MEMORY / "NOTE.md").write_text("avant", encoding="utf-8")
         brut = self.archive()
-        (A.MEMOIRE / "NOTE.md").write_text("après", encoding="utf-8")
+        (A.MEMORY / "NOTE.md").write_text("après", encoding="utf-8")
         statut, r = requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=brut)
         self.assertEqual(statut, 200, r)
         self.assertTrue(r["redemarrage_necessaire"])
-        self.assertEqual((A.MEMOIRE / "NOTE.md").read_text(encoding="utf-8"), "avant")
+        self.assertEqual((A.MEMORY / "NOTE.md").read_text(encoding="utf-8"), "avant")
         self.assertTrue(Path(r["secours"]).is_file(), "l'état d'avant est gardé")
-        (A.MEMOIRE / "NOTE.md").unlink()
+        (A.MEMORY / "NOTE.md").unlink()
 
     def test_archives_refusees(self):
         mauvaise = io.BytesIO()
@@ -492,7 +492,7 @@ class Restauration(Base):
         self.assertEqual(statut, 400)
         self.assertEqual(requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=b"pas un zip")[0], 400)
         self.assertEqual(requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=b"")[0], 400)
-        self.assertFalse((A.MEMOIRE.parent / "evil.txt").exists())
+        self.assertFalse((A.MEMORY.parent / "evil.txt").exists())
 
     def test_une_requete_refusee_avec_un_gros_corps_recoit_quand_meme_sa_reponse(self):
         """Un refus répondu sans lire le corps réinitialisait la connexion de l'appelant (il perdait la réponse) : le serveur lit ce qui reste après avoir répondu."""
@@ -501,8 +501,8 @@ class Restauration(Base):
 
     def test_restauration_reservee_a_cette_machine_et_authentifiee(self):
         self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x")[0], 403)
-        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
-        self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": A.JETON}, brut=b"x")[0], 401, "pas de session")
+        A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
+        self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": A.TOKEN}, brut=b"x")[0], 401, "pas de session")
         session = self.session()
         statut, r = requete("POST", "/api/restaurer", dict(session, **{"X-Forwarded-For": "192.168.1.50"}), brut=self.archive())
         self.assertEqual(statut, 403, "un appareil appairé ne restaure pas")

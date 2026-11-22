@@ -119,17 +119,17 @@ class AceStep(unittest.TestCase):
 
     def test_port_invalide(self):
         addons.save_settings(ace.IDENT, {"port": "abc"})
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             ace.music_tool({"description": "jazz"}, self.ctx())
 
     def test_l_outil_est_inutilisable_si_l_addon_est_coupe(self):
         addons.activate(ace.IDENT, False)
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             change_review._call_tool("musique_generer", {"description": "jazz"}, self.ctx())
 
     def test_le_modele_ne_voit_l_outil_que_si_l_addon_est_actif(self):
         from lutin import agent
-        reglages = dict(_m.reglages(), web=True)
+        reglages = dict(_m.settings(), web=True)
         addons.activate(ace.IDENT, False)
         self.assertNotIn("musique_generer", {t["function"]["name"] for t in agent.outils_du_mode(reglages)})
         addons.activate(ace.IDENT, True)
@@ -170,7 +170,7 @@ class AceStep(unittest.TestCase):
 
     def test_garde_fous_avant_tout_envoi(self):
         for args in ({"description": ""}, {"description": "x" * 5000}, {"description": "ok", "paroles": "y" * 5000}, {"description": "ok", "format": "exe"}):
-            with self.assertRaises(_m.ErreurOutil, msg=str(args)[:30]):
+            with self.assertRaises(_m.ToolError, msg=str(args)[:30]):
                 ace.music_tool(args, self.ctx())
         self.assertEqual(self.accords, [])
         self.assertEqual(self.envoyes("/release_task"), [])
@@ -178,13 +178,13 @@ class AceStep(unittest.TestCase):
     # --- échecs
     def test_une_tache_qui_echoue_dit_pourquoi(self):
         SERVICE["echec"] = True
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("CUDA out of memory", str(e.exception))
 
     def test_une_demande_refusee_par_le_serveur_dit_pourquoi(self):
         SERVICE["refus"] = True
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("prompt vide", str(e.exception))
 
@@ -192,13 +192,13 @@ class AceStep(unittest.TestCase):
         SERVICE["en_cours"] = 10 ** 6
         self.addCleanup(lambda: setattr(ace, "WAIT_MAX_S", 1800))
         ace.WAIT_MAX_S = 0.1
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("n'a pas fini", str(e.exception))
 
     def test_un_fichier_a_une_autre_adresse_est_refuse_et_rien_n_est_telecharge(self):
         SERVICE["fichier"] = "http://example.org/evil.mp3"
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("inattendu", str(e.exception))
         self.assertEqual([a for a in SERVICE["appels"] if a["methode"] == "GET" and "evil" in a["chemin"]], [])
@@ -206,7 +206,7 @@ class AceStep(unittest.TestCase):
     def test_une_erreur_deguisee_en_audio_n_est_pas_enregistree_comme_un_fichier(self):
         SERVICE["erreur_deguisee"] = True
         ctx = self.ctx()
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             ace.music_tool({"description": "lofi"}, ctx)
         self.assertIn("fichier effacé", str(e.exception))
         self.assertNotIn("fichiers_joints", ctx)
@@ -214,7 +214,7 @@ class AceStep(unittest.TestCase):
     # --- clé d'API
     def test_la_cle_est_envoyee_et_jamais_affichee(self):
         SERVICE["cle"] = "secret-tres-long-1234"
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             ace.music_tool({"description": "lofi"}, self.ctx())
         self.assertIn("clé API", str(e.exception))
         self.assertNotIn("secret-tres-long-1234", str(e.exception))

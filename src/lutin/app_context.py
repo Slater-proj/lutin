@@ -1,10 +1,10 @@
 """The application context (ADR 0014): what a running Lutin read from its environment, read once, in one place.
 
-Stage 1 holds the settings only. The modules keep their names (`core.RACINE`, `core.OLLAMA`, `web.DDG_URL`…): `bind` gives each of
+Stage 1 holds the settings only. The modules keep their names (`core.ROOT`, `core.OLLAMA`, `web.DDG_URL`…): `bind` gives each of
 those modules a class whose properties read and write the current context, and keeps a copy of each value in the module's own
 dictionary (the mirror). The bare names inside the module read the mirror; `mock.patch.object` reads it to know what to put back.
 A write through the module (`core.OLLAMA = …`, a patch, `install`, `change`) updates the context and the mirror together; a write
-that bypasses them (`global RACINE` in the module) would leave them apart, which is why `Settings` is frozen.
+that bypasses them (`global ROOT` in the module) would leave them apart, which is why `Settings` is frozen.
 
 One context per process at a time, not a `ContextVar`: the server answers each request in a new thread, which would not inherit it.
 """

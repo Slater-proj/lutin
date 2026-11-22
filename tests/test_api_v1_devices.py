@@ -40,30 +40,30 @@ class Devices(unittest.TestCase):
         self.assertEqual(len(answer["qr"]["rows"]), answer["qr"]["size"])
         self.assertTrue(all(len(row) == answer["qr"]["size"] and set(row) <= {"0", "1"} for row in answer["qr"]["rows"]), "a square of 0 and 1")
         self.assertTrue(answer["address"].startswith("http://"))
-        before = len(A.APPAREILS.liste())
-        self.assertIsNone(A.APPAREILS.appairer("000000" if answer["code"] != "000000" else "111111", "Wrong"), "a wrong code pairs nothing")
-        token = A.APPAREILS.appairer(answer["code"], "Phone of the test")
-        self.assertTrue(token and A.APPAREILS.valide(token))
-        self.assertEqual(len(A.APPAREILS.liste()), before + 1)
-        self.assertIsNone(A.APPAREILS.appairer(answer["code"], "Again"), "a code serves once")
+        before = len(A.DEVICES.liste())
+        self.assertIsNone(A.DEVICES.appairer("000000" if answer["code"] != "000000" else "111111", "Wrong"), "a wrong code pairs nothing")
+        token = A.DEVICES.appairer(answer["code"], "Phone of the test")
+        self.assertTrue(token and A.DEVICES.valide(token))
+        self.assertEqual(len(A.DEVICES.liste()), before + 1)
+        self.assertIsNone(A.DEVICES.appairer(answer["code"], "Again"), "a code serves once")
         identifier = next(device["id"] for device in call("GET", "/api/v1/devices")[1]["devices"] if device["name"] == "Phone of the test")
         self.assertEqual(call("DELETE", "/api/v1/devices/" + identifier, who=V.DEVICE)[1]["error"]["code"], "configurator", "a paired device does not revoke another")
         status, answer = call("DELETE", "/api/v1/devices/" + identifier)
         self.assertEqual(status, 200)
         self.assertNotIn(identifier, [device["id"] for device in answer["devices"]])
-        self.assertFalse(A.APPAREILS.valide(token), "revoked: the session is over for real")
+        self.assertFalse(A.DEVICES.valide(token), "revoked: the session is over for real")
         for unknown in ("0000000000", "x", "..%2Fx"):
             self.assertEqual(call("DELETE", "/api/v1/devices/" + unknown)[1]["error"]["code"], "not_found", unknown)
 
     def test_at_the_level_local_no_code_is_made(self):
-        with mock.patch.object(A, "SECURITE", S.Security(niveau=S.LOCAL)):
+        with mock.patch.object(A, "SECURITY", S.Security(niveau=S.LOCAL)):
             self.assertEqual(call("GET", "/api/v1/devices")[1]["pairing_possible"], False)
             status, answer = call("POST", "/api/v1/devices/pairing-code", {})
             self.assertEqual((status, answer["error"]["code"]), (409, "local_only"))
 
     def test_revoking_everything_ends_every_session(self):
         spare = S.Devices()
-        with mock.patch.object(A, "APPAREILS", spare):
+        with mock.patch.object(A, "DEVICES", spare):
             token = spare.appairer(spare.nouveau_pin(), "One")
             self.assertTrue(spare.valide(token))
             spare.revoquer(None)

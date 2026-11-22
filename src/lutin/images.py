@@ -19,7 +19,7 @@ TYPES = {"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "i
 
 
 def folder():
-    return _m.DONNEES / "images"
+    return _m.DATA / "images"
 
 
 def type_of(octets):

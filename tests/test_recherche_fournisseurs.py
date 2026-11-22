@@ -52,7 +52,7 @@ from lutin import web_search, web  # noqa: E402
 class Fournisseurs(unittest.TestCase):
     def setUp(self):
         RECUES.clear()
-        c = _m.DONNEES / "recherche.json"
+        c = _m.DATA / "recherche.json"
         c.unlink(missing_ok=True)
         web_search.CURRENT.v = {}
         self.addCleanup(setattr, web_search.CURRENT, "v", {})
@@ -113,7 +113,7 @@ class Fournisseurs(unittest.TestCase):
 
     def test_sans_cle_une_erreur_claire(self):
         for f in (web_search.results_tavily, web_search.results_exa, web_search.results_perplexity):
-            with self.assertRaises(_m.ErreurOutil) as e:
+            with self.assertRaises(_m.ToolError) as e:
                 f("x")
             self.assertIn("clé", str(e.exception).lower())
 

@@ -72,7 +72,7 @@ def hardline(command):
 
 
 def _path():
-    return _m.DONNEES / FILE
+    return _m.DATA / FILE
 
 
 def _valid(rule, effects=EFFECTS):

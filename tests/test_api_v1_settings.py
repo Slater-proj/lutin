@@ -26,14 +26,14 @@ def invalid(name, expected):
 class Table(unittest.TestCase):
     def test_every_stored_setting_has_one_v1_name(self):
         stored = [key for key, _ in api_v1.SETTINGS.values()]
-        self.assertEqual(sorted(stored), sorted(A.REGLAGES_DEFAUT), "a setting without a v1 name, or a v1 name for a setting that no longer exists")
+        self.assertEqual(sorted(stored), sorted(A.DEFAULT_SETTINGS), "a setting without a v1 name, or a v1 name for a setting that no longer exists")
         self.assertEqual(len(stored), len(set(stored)))
         for name in api_v1.SETTINGS:
             self.assertRegex(name, r"^[a-z][a-z0-9_]*$")
 
     def test_the_declared_kind_is_the_kind_of_the_default_value(self):
         for name, (key, kind) in api_v1.SETTINGS.items():
-            default = A.REGLAGES_DEFAUT[key]
+            default = A.DEFAULT_SETTINGS[key]
             if default is None:
                 self.assertTrue(kind.endswith("?"), "{}: null is its default, the kind must accept it".format(name))
             else:
@@ -43,7 +43,7 @@ class Table(unittest.TestCase):
     def test_the_translated_words_cover_what_the_server_accepts(self):
         words = {name: sorted(table) for name, table in api_v1.SETTING_WORDS.items()}
         self.assertEqual(words, {"mode": sorted(set(modes.mode_ids()) - {"mission"}), "thinking_steps": ["premier", "toujours"], "long_memory": ["demander", "fichier", "resume"],
-                                 "auto_recall": sorted(A.CHOIX_RAPPELS)}, "« mission » is chosen conversation by conversation, never as a setting")
+                                 "auto_recall": sorted(A.REMINDER_CHOICES)}, "« mission » is chosen conversation by conversation, never as a setting")
         for name, table in api_v1.SETTING_WORDS.items():
             self.assertEqual(len(set(table.values())), len(table), name)
             self.assertEqual(api_v1.SETTINGS[name][1], "string", name)
@@ -51,7 +51,7 @@ class Table(unittest.TestCase):
 
 class Settings(unittest.TestCase):
     def setUp(self):
-        self.addCleanup(lambda: (A.DONNEES / "reglages.json").unlink(missing_ok=True))
+        self.addCleanup(lambda: (A.DATA / "reglages.json").unlink(missing_ok=True))
 
     def test_reading_gives_every_setting_under_its_v1_name(self):
         status, answer = V.call("GET", "/api/v1/settings", V.OWNER)
@@ -67,7 +67,7 @@ class Settings(unittest.TestCase):
         self.assertEqual((answer["temperature"], answer["web"], answer["mode"], answer["long_memory"], answer["top_p"], answer["model"], answer["disabled_tools"], answer["thinking_steps"]),
                          (0.4, False, "technical", "file", 0.9, "qwen3:4b", ["calculer"], "first"))
         self.assertEqual(answer["max_steps"], 40, "bounded by the server, as for the French route")
-        stored = A.reglages()
+        stored = A.settings()
         self.assertEqual((stored["temperature"], stored["web"], stored["mode"], stored["memoire_longue"], stored["tours_max"], stored["modele"], stored["reflexion_tours"]),
                          (0.4, False, "technique", "fichier", 40, "qwen3:4b", "premier"))
         self.assertEqual(V.call("GET", "/api/v1/settings", V.OWNER)[1], answer)
@@ -75,7 +75,7 @@ class Settings(unittest.TestCase):
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={})[1]["temperature"], 0.4, "nothing asked, nothing changed")
         for old in ("summary", "ask"):          # ADR 0019: the old words are accepted, and every conversation keeps its thread with the progress sheet
             self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={"long_memory": old})[1]["long_memory"], "file", old)
-            self.assertEqual(A.reglages()["memoire_longue"], "fichier", old)
+            self.assertEqual(A.settings()["memoire_longue"], "fichier", old)
 
     def test_a_paired_device_reads_and_changes_them_as_with_the_french_route(self):
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.DEVICE, body={"web": False})[1]["web"], False)
@@ -112,7 +112,7 @@ class Settings(unittest.TestCase):
 
 class Options(unittest.TestCase):
     def setUp(self):
-        self.addCleanup(lambda: (A.DONNEES / "reglages.json").unlink(missing_ok=True))
+        self.addCleanup(lambda: (A.DATA / "reglages.json").unlink(missing_ok=True))
         status, created = V.call("POST", "/api/v1/conversations", V.OWNER, body={})
         self.assertEqual(status, 201)
         self.path = "/api/v1/conversations/{}/options".format(created["id"])
@@ -151,7 +151,7 @@ class Options(unittest.TestCase):
             for method in ("GET", "PATCH"):
                 status, answer = V.call(method, "/api/v1/conversations/{}/options".format(identifier), V.OWNER, body={} if method == "PATCH" else None)
                 self.assertEqual((status, answer["error"]["code"]), (404, "not_found"), (method, identifier))
-        self.assertFalse((A.DONNEES / "options" / "ffffffff.json").exists())
+        self.assertFalse((A.DATA / "options" / "ffffffff.json").exists())
 
 
 if __name__ == "__main__":

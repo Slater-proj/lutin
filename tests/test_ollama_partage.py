@@ -203,14 +203,14 @@ class ModelesRetrouves(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-retrouves-"))
         self.models = self.tmp / "gros-disque" / "ollama-models"
         ranger(self.models, "registry.ollama.ai", "library/qwen3/8b", [("model", "a", True)])
-        self.avant = (_m.DONNEES, dict(engines.CONTEXT))
-        _m.DONNEES = self.tmp / "donnees"
-        _m.DONNEES.mkdir()
+        self.avant = (_m.DATA, dict(engines.CONTEXT))
+        _m.DATA = self.tmp / "donnees"
+        _m.DATA.mkdir()
         self.addCleanup(self.fin)
         self.mock = mock
 
     def fin(self):
-        _m.DONNEES = self.avant[0]
+        _m.DATA = self.avant[0]
         engines.CONTEXT.update(self.avant[1])
         shutil.rmtree(self.tmp, ignore_errors=True)
 
@@ -235,7 +235,7 @@ class ModelesRetrouves(unittest.TestCase):
         lances = []
         with self.mock.patch.dict("os.environ", {}, clear=False), self.mock.patch.object(_m, "chemin_ollama", lambda: "ollama"), self.mock.patch.object(_m, "etat_ollama", lambda: {"actif": bool(lances)}),                 self.mock.patch.object(locations, "read_models_config", lambda: ""), self.mock.patch("subprocess.Popen", lambda cmd, **kw: lances.append(kw["env"]) or None), self.mock.patch("time.sleep", lambda s: None):
             __import__("os").environ.pop("OLLAMA_MODELS", None)
-            _m.demarrer_ollama()
+            _m.start_ollama()
         self.assertEqual(lances[0].get("OLLAMA_MODELS"), str(self.models), "pas le dossier par défaut, vide")
 
     def test_la_mise_a_jour_d_ollama_garde_le_dossier_des_modeles(self):
@@ -243,7 +243,7 @@ class ModelesRetrouves(unittest.TestCase):
         mo = agent.MoteurOllama()
         appels = []
         possibles = {k: {"possible": True, "raison": "ok"} for k in engines.ACTIONS}
-        with self.mock.patch.object(mo, "actions", lambda: possibles), self.mock.patch.object(_m, "arreter_ollama", lambda: appels.append("arreter")), self.mock.patch.object(_m, "demarrer_ollama", lambda: appels.append("demarrer")),                 self.mock.patch.object(ollama_client, "uninstall_windows", lambda: appels.append("desinstaller")), self.mock.patch.object(ollama_client, "install_windows", lambda c, p, **k: appels.append("installer")),                 self.mock.patch.object(locations, "models_folder", lambda: self.models), self.mock.patch.object(locations, "set_models_folder", lambda d: appels.append("dossier:" + str(d))):
+        with self.mock.patch.object(mo, "actions", lambda: possibles), self.mock.patch.object(_m, "stop_ollama", lambda: appels.append("arreter")), self.mock.patch.object(_m, "start_ollama", lambda: appels.append("demarrer")),                 self.mock.patch.object(ollama_client, "uninstall_windows", lambda: appels.append("desinstaller")), self.mock.patch.object(ollama_client, "install_windows", lambda c, p, **k: appels.append("installer")),                 self.mock.patch.object(locations, "models_folder", lambda: self.models), self.mock.patch.object(locations, "set_models_folder", lambda d: appels.append("dossier:" + str(d))):
             mo.faire("mettre_a_jour", lambda *x: None)
         self.assertEqual(appels, ["arreter", "installer", "dossier:" + str(self.models), "demarrer"], "par-dessus, sans désinstaller, et le dossier des modèles est rétabli avant le redémarrage")
         self.assertEqual(locations.seen_folder(), str(self.models))

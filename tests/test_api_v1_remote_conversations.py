@@ -22,7 +22,7 @@ PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
 
 
 def raw(method, path, data, content_type="application/octet-stream", headers=None):
-    request = urllib.request.Request(T.BASE + path, method=method, data=data, headers=dict({"Content-Type": content_type, "X-Token": A.JETON}, **(headers or {})))
+    request = urllib.request.Request(T.BASE + path, method=method, data=data, headers=dict({"Content-Type": content_type, "X-Token": A.TOKEN}, **(headers or {})))
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             return response.status, dict(response.headers), response.read()
@@ -33,7 +33,7 @@ def raw(method, path, data, content_type="application/octet-stream", headers=Non
 def stream(path, body, scenario):
     """(status, events) of a relayed turn, or (status, error) when it is refused before the stream."""
     T.SCENARIO[:] = scenario
-    request = urllib.request.Request(T.BASE + path, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
+    request = urllib.request.Request(T.BASE + path, data=json.dumps(body).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.TOKEN})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             return response.status, [json.loads(line) for line in response if line.strip()]
@@ -48,7 +48,7 @@ class RemoteConversations(unittest.TestCase):
             kept.clear()
         machines.CARTES.update(t=-999.0, v=None)
         machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
-        A.LIMITEUR_PIN.evenements.clear()
+        A.PIN_LIMITER.evenements.clear()
         machines.noeud_activer(True)
         self.host = machines.ajouter(T.BASE, machines.noeud_nouveau_code()["code"], "Bureau")
         machines.noeud_autoriser_piloter(True)
@@ -76,7 +76,7 @@ class RemoteConversations(unittest.TestCase):
         self.assertEqual(len(listed), 1, "the host lists it once « lead » is granted")
         self.assertEqual((sorted(listed[0]), listed[0]["machine"], listed[0]["machine_name"], listed[0]["title"]),
                          (["id", "machine", "machine_name", "message_count", "title", "updated_at"], self.host["id"], "Bureau", "Rapport du bureau"))
-        before = A.reglages().get("cluster")
+        before = A.settings().get("cluster")
         A.save_settings({"cluster": False})
         self.addCleanup(lambda: A.save_settings({"cluster": before}))
         self.assertEqual(api("GET", "/api/v1/machines/conversations")[1]["conversations"], [], "the multi-machine mode is off")
@@ -125,7 +125,7 @@ class RemoteConversations(unittest.TestCase):
         call = T.appel_outil("modifier", chemin="appli/moteur/code.py", ancien="return 1", nouveau="return 2")
         T.SCENARIO[:] = [[call], [{"content": "Understood."}]]
         request = urllib.request.Request(T.BASE + self.base + "/turns", data=json.dumps({"message": "Change it"}).encode("utf-8"),
-                                         headers={"Content-Type": "application/json", "X-Token": A.JETON})
+                                         headers={"Content-Type": "application/json", "X-Token": A.TOKEN})
         asked = []
         with urllib.request.urlopen(request, timeout=60) as response:
             for line in response:
@@ -172,7 +172,7 @@ class RemoteConversations(unittest.TestCase):
 
     def test_a_file_a_tool_produced_on_the_host_is_downloaded_from_it(self):
         from lutin import produced_files
-        report = A.RACINE / "rapport du bureau.pdf"
+        report = A.ROOT / "rapport du bureau.pdf"
         report.write_bytes(b"%PDF-1.4 host")
         self.addCleanup(report.unlink)
         entry = produced_files.entry(report)

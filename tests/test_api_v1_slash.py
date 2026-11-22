@@ -25,7 +25,7 @@ class Slash(unittest.TestCase):
         with mock.patch.object(A, "compacter_conversation", lambda identifier: {"ok": True, "avant": 30, "apres": 8, "jauge": {}, "fiche": False}):
             status, answer = V.call("POST", base, V.DEVICE, {})
             self.assertEqual((status, answer), (200, {"before": 30, "after": 8, "sheet": False}))
-            with mock.patch.dict(A.TOURS_ACTIFS, {conversation["id"]: object()}):
+            with mock.patch.dict(A.ACTIVE_TURNS, {conversation["id"]: object()}):
                 self.assertEqual(V.call("POST", base, V.DEVICE, {})[1]["error"]["code"], "turn_running")
         self.assertEqual(V.call("POST", "/api/v1/conversations/0123456789ab/compact", V.DEVICE, {})[0], 404)
 

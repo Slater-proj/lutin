@@ -43,7 +43,7 @@ class Projects(unittest.TestCase):
         self.assertEqual(sorted(answer), ["current", "projects"])
         status, answer = call("POST", "/api/v1/projects/%s/select" % identifier, {})
         self.assertEqual((status, answer["current"]), (200, identifier))
-        self.assertEqual(Path(A.RACINE).resolve(), Path(path).resolve(), "the working folder of the next conversations is the one chosen")
+        self.assertEqual(Path(A.ROOT).resolve(), Path(path).resolve(), "the working folder of the next conversations is the one chosen")
         status, answer = call("DELETE", "/api/v1/projects/" + identifier)
         self.assertEqual(status, 200)
         self.assertNotIn(Path(path).resolve(), [Path(entry["path"]).resolve() for entry in answer["projects"]])

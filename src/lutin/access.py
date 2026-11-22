@@ -27,7 +27,7 @@ def can_restart():
 
 
 def saved_security():
-    return _sec.Security.depuis_dict(_m.config_lue().get("securite"))
+    return _sec.Security.depuis_dict(_m.read_config().get("securite"))
 
 
 RESTAURE = {"fait": False}          # une sauvegarde remise pendant cette exécution : elle n'est entièrement prise en compte qu'au prochain démarrage
@@ -36,12 +36,12 @@ RESTAURE = {"fait": False}          # une sauvegarde remise pendant cette exécu
 def restart_needed():
     """Vrai quand un changement attend le prochain démarrage : niveau d'accès enregistré différent de celui en cours, sauvegarde remise, ou mise à
     jour installée sans superviseur pour relancer Lutin (état « fini »)."""
-    return saved_security() != _m.SECURITE or RESTAURE["fait"] or UPDATE["etat"] == "fini"
+    return saved_security() != _m.SECURITY or RESTAURE["fait"] or UPDATE["etat"] == "fini"
 
 
 def state(configurateur, strict=None, admin_distance=False):
     """Tout ce que la page Accès affiche."""
-    s = _m.SECURITE
+    s = _m.SECURITY
     sur_disque = saved_security()
     return {
         "niveau": s.niveau, "port": s.port, "url_publique": s.url_publique, "proxy_ips": list(s.proxy_ips), "ecoute": s.ecoute,
@@ -49,8 +49,8 @@ def state(configurateur, strict=None, admin_distance=False):
         "redemarrage_necessaire": sur_disque != s,
         "modifiable": bool(configurateur) and not in_docker(), "docker": in_docker(),
         "admin_distance": {"actif": bool(admin_distance), "docker": in_docker(), "modifiable": bool(configurateur if strict is None else strict) and not in_docker()}, "peut_redemarrer": can_restart(),
-        "adresse": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), s.port),
-        "appareils": _m.APPAREILS.liste(),
+        "adresse": "http://{}:{}/".format(_m.IP_LAN or _m.local_ip(), s.port),
+        "appareils": _m.DEVICES.liste(),
         "avertissements": {"reseau": _t(setup_wizard.WARNING_NETWORK), "proxy": _t(setup_wizard.WARNING_PROXY)},
         "niveaux": {n: {"titre": _t(t), "detail": _t(d)} for n, (_, t, d) in setup_wizard.LEVELS_TEXT.items()},
     }
@@ -65,7 +65,7 @@ def apply(donnees, configurateur):
     niveau = str(donnees.get("niveau", ""))
     if niveau not in _sec.LEVELS:
         raise ValueError(_t("Niveau inconnu : {}").format(niveau))
-    actuel = _m.SECURITE
+    actuel = _m.SECURITY
     nouveau = _sec.Security(niveau=niveau, port=actuel.port, ecoute=actuel.ecoute if niveau != _sec.LOCAL else "",
                             url_publique=str(donnees.get("url_publique", "")).strip() if niveau == _sec.PROXY else "",
                             proxy_ips=[x for x in str(" ".join(donnees.get("proxy_ips") or [])).replace(",", " ").split() if x] if niveau == _sec.PROXY else [])
@@ -74,10 +74,10 @@ def apply(donnees, configurateur):
     problemes = nouveau.valider()
     if problemes:
         raise ValueError(_t("Sécurité : ") + " ; ".join(problemes))
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     cfg["securite"] = dict(vars(nouveau), proxy_ips=list(nouveau.proxy_ips))
-    _m.config_ecrire(cfg)
-    _m.journaliser("Niveau d'accès enregistré : {} (actif au prochain démarrage)".format(niveau))
+    _m.write_config(cfg)
+    _m.log_event("Niveau d'accès enregistré : {} (actif au prochain démarrage)".format(niveau))
     return {"redemarrage_necessaire": nouveau != actuel}
 
 
@@ -85,9 +85,9 @@ def restart():
     """Quitte avec le code « relance-moi » après avoir répondu. Refuse pendant une réponse du modèle."""
     if not can_restart():
         raise ValueError(_t("Lutin n'a pas été lancé par la commande « lutin » : relance-le toi-même."))
-    if _m.TOURS_ACTIFS:
+    if _m.ACTIVE_TURNS:
         raise ValueError(_t("Une réponse est en cours : attends la fin avant de redémarrer."))
-    _m.journaliser("Redémarrage demandé depuis la page.")
+    _m.log_event("Redémarrage demandé depuis la page.")
     threading.Timer(0.8, os._exit, [RESTART_CODE]).start()
     return {"ok": True}
 
@@ -103,7 +103,7 @@ def update():
         raise ValueError(_t("Dans Docker, la mise à jour se fait en récupérant la nouvelle image : docker compose pull && docker compose up -d"))
     if offline.is_active():
         raise ValueError(_t("Mode hors ligne strict : Lutin n'est pas mis à jour."))
-    if _m.TOURS_ACTIFS:
+    if _m.ACTIVE_TURNS:
         raise ValueError(_t("Une réponse est en cours : attends la fin avant de mettre à jour."))
     with _update_lock:
         if UPDATE["etat"] == "en cours":
@@ -149,8 +149,8 @@ def restore_stream(flux, taille):
     """Restaure une sauvegarde (.zip) reçue en flux : vérifiée en entier avant d'écrire, état actuel gardé dans un zip avant."""
     if taille <= 0 or taille > MAX_RESTORE:
         raise ValueError(_t("Archive vide ou trop grande."))
-    c = _m.chemin_config()
-    dossiers = {"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}
+    c = _m.config_path()
+    dossiers = {"config": c.parent if c else None, "donnees": _m.DATA, "memoire": _m.MEMORY}
     with tempfile.TemporaryDirectory(prefix="lutin-restauration-") as tmp:
         fichier = Path(tmp) / "sauvegarde.zip"
         with open(fichier, "wb") as sortie:
@@ -163,8 +163,8 @@ def restore_stream(flux, taille):
                 restant -= len(morceau)
         if restant:
             raise ValueError(_t("Envoi interrompu."))
-        r = backup.restore(dossiers, fichier, dossier_secours=_m.DONNEES / "import")
-    _m.journaliser("Sauvegarde restaurée : {} fichiers".format(r["fichiers"]))
+        r = backup.restore(dossiers, fichier, dossier_secours=_m.DATA / "import")
+    _m.log_event("Sauvegarde restaurée : {} fichiers".format(r["fichiers"]))
     RESTAURE["fait"] = True
     return dict(r, redemarrage_necessaire=True)
 

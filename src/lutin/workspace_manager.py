@@ -18,7 +18,7 @@ from .i18n import t as _t
 def activate_work(conv, demande=""):
     """Dossier de travail de cette conversation : le sien s'il en a un, sinon celui demandé, sinon le dossier actif. Appelé avec VERROU_TOURS tenu.
     Une seule racine à la fois : si une autre réponse travaille dans un autre dossier, celle-ci attend. Sans dossier configuré (tests, usage direct), la racine ne change pas."""
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     t = _trav.by_id(cfg, conv["travail"]) if conv.get("travail") else None
     if conv.get("travail") and t is None:
         raise ValueError("Le dossier de travail de cette conversation (« {} ») n'est plus dans la liste. Ajoute-le de nouveau, ou ouvre une nouvelle conversation.".format(conv["travail"]))
@@ -31,64 +31,64 @@ def activate_work(conv, demande=""):
     raison = _trav.diagnostic(chemin)
     if raison:
         raise ValueError(raison)
-    if any(r != str(chemin.resolve()) for r in _m.RACINE_TOURS.values()):
+    if any(r != str(chemin.resolve()) for r in _m.TURNS_ROOT.values()):
         raise ValueError("Une réponse est en cours dans un autre dossier de travail : attends sa fin, ou arrête-la.")
-    _m.definir_racine(chemin)
+    _m.set_root(chemin)
     conv["travail"] = t["id"]
     return t
 
 
 def works_state():
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     liste = _trav.entries(cfg)
-    courant = next((t["id"] for t in liste if _trav.key(t["chemin"]) == _trav.key(_m.RACINE)), "")
+    courant = next((t["id"] for t in liste if _trav.key(t["chemin"]) == _trav.key(_m.ROOT)), "")
     return {"liste": liste, "actif": courant or (_trav.active(cfg) or {}).get("id", "")}
 
 
 def choose_work(ident):
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     t = _trav.by_id(cfg, ident)
     if not t:
         raise ValueError("Dossier de travail inconnu.")
     raison = _trav.diagnostic(Path(t["chemin"]))
     if raison:
         raise ValueError(raison)
-    with _m.VERROU_TOURS:
-        if any(r != str(Path(t["chemin"]).resolve()) for r in _m.RACINE_TOURS.values()):
+    with _m.TURNS_LOCK:
+        if any(r != str(Path(t["chemin"]).resolve()) for r in _m.TURNS_ROOT.values()):
             raise ValueError("Une réponse est en cours dans un autre dossier de travail : attends sa fin pour changer.")
-        _m.definir_racine(t["chemin"])
+        _m.set_root(t["chemin"])
     _trav.choose(cfg, ident)
-    if _m.chemin_config():
-        _m.config_ecrire(cfg)
+    if _m.config_path():
+        _m.write_config(cfg)
     return works_state()
 
 
 def add_work(chemin, nom):
-    cfg = _m.config_lue()
-    _trav.add(cfg, chemin, nom, _m.dossiers_de_lutin())
-    _m.config_ecrire(cfg)
+    cfg = _m.read_config()
+    _trav.add(cfg, chemin, nom, _m.lutin_folders())
+    _m.write_config(cfg)
     return works_state()
 
 
 def remove_work(ident, nettoyer=False):
     """Retire le dossier de la liste. `nettoyer` : supprime aussi ce que Lutin y a créé lui-même (le sous-dossier des copies de conversations) ; jamais un autre fichier."""
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     t = _trav.by_id(cfg, ident)
     supprimes = 0
     if nettoyer and t:
         supprimes = clean_copies(Path(t["chemin"]))
-    with _m.VERROU_TOURS:
-        if t and str(Path(t["chemin"]).resolve()) in _m.RACINE_TOURS.values():
+    with _m.TURNS_LOCK:
+        if t and str(Path(t["chemin"]).resolve()) in _m.TURNS_ROOT.values():
             raise ValueError("Une réponse travaille dans ce dossier : attends sa fin.")
     _trav.remove(cfg, ident)
-    _m.config_ecrire(cfg)
-    with _m.VERROU_TOURS:
-        if t and str(Path(t["chemin"]).resolve()) == str(_m.RACINE):          # le dossier qu'on retire était le courant : on bascule tout de suite
+    _m.write_config(cfg)
+    with _m.TURNS_LOCK:
+        if t and str(Path(t["chemin"]).resolve()) == str(_m.ROOT):          # le dossier qu'on retire était le courant : on bascule tout de suite
             suivant = _trav.active(cfg)
             defaut = Path.home() / "Lutin"
             if not suivant:
                 defaut.mkdir(parents=True, exist_ok=True)
-            _m.definir_racine(suivant["chemin"] if suivant else defaut)
+            _m.set_root(suivant["chemin"] if suivant else defaut)
     return dict(works_state(), copies_supprimees=supprimes)
 
 
@@ -117,7 +117,7 @@ def count_files(dossier, maximum=20000, delai=3.0):
 def work_preview(ident):
     """Ce que Lutin trouve et utilise dans un dossier de travail, pour le dire clairement après l'ajout : fichiers, consignes et skills lus, copies de conversations, et surtout un ANCIEN
     ASSISTANT (dossiers donnees/ et memoire/ avec des conversations) qu'on peut reprendre. Rien n'est écrit."""
-    t = _trav.by_id(_m.config_lue(), ident)
+    t = _trav.by_id(_m.read_config(), ident)
     if not t:
         raise ValueError(_t("Dossier de travail inconnu."))
     p = Path(t["chemin"])
@@ -148,10 +148,10 @@ def _preview(p):
     copies = sum(1 for f in (p / storage.COPIES_FOLDER).glob("*.md")) if (p / storage.COPIES_FOLDER).is_dir() else 0
     ancien = None
     try:
-        if _trav.key(p) != _trav.key(_m.DONNEES.parent):
+        if _trav.key(p) != _trav.key(_m.DATA.parent):
             with _rep.open_source(p) as d:
                 if d["conversations"] or d["memoire"]:
-                    nouvelles = _rep.to_migrate(d, _m.DONNEES, _m.MEMOIRE, [p / "skills", _m.RACINE / "skills"])
+                    nouvelles = _rep.to_migrate(d, _m.DATA, _m.MEMORY, [p / "skills", _m.ROOT / "skills"])
                     ancien = dict(_rep.describe(d), dossier=d["dossier_utilise"], nouvelles=nouvelles, a_reprendre=any(nouvelles.values()))
     except _rep.MigrationError:
         ancien = None
@@ -160,36 +160,36 @@ def _preview(p):
 
 def move_work(ident, nouveau_parent, nom=""):
     """Déplace un dossier de travail (ses fichiers aussi) ailleurs et met à jour la liste. Refusé tant qu'une réponse y travaille ; les nouvelles réponses attendent la fin du déplacement."""
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     t = _trav.by_id(cfg, ident)
     if not t:
         raise ValueError(_t("Dossier de travail inconnu."))
-    with _m.VERROU_TOURS:
+    with _m.TURNS_LOCK:
         ancien = Path(t["chemin"])
-        if str(ancien.resolve()) in _m.RACINE_TOURS.values():
+        if str(ancien.resolve()) in _m.TURNS_ROOT.values():
             raise ValueError(_t("Une réponse travaille dans ce dossier : attends sa fin."))
-        courant = _trav.key(ancien) == _trav.key(_m.RACINE)
-        nouveau, restes = _trav.move(cfg, ident, nouveau_parent, nom, _m.dossiers_de_lutin())
-        _m.config_ecrire(cfg)
+        courant = _trav.key(ancien) == _trav.key(_m.ROOT)
+        nouveau, restes = _trav.move(cfg, ident, nouveau_parent, nom, _m.lutin_folders())
+        _m.write_config(cfg)
         if courant:
-            _m.definir_racine(nouveau["chemin"])
+            _m.set_root(nouveau["chemin"])
     return dict(works_state(), restes=restes, ancien=str(ancien), nouveau=nouveau["chemin"])
 
 
 def change_work_path(ident, nouveau):
     """Le dossier a été déplacé à la main : on lui donne son nouveau chemin (rien n'est déplacé)."""
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     t = _trav.by_id(cfg, ident)
     if not t:
         raise ValueError(_t("Dossier de travail inconnu."))
-    with _m.VERROU_TOURS:
-        if str(Path(t["chemin"]).resolve()) in _m.RACINE_TOURS.values():
+    with _m.TURNS_LOCK:
+        if str(Path(t["chemin"]).resolve()) in _m.TURNS_ROOT.values():
             raise ValueError(_t("Une réponse travaille dans ce dossier : attends sa fin."))
-        courant = _trav.key(t["chemin"]) == _trav.key(_m.RACINE)
-        modifie = _trav.change_path(cfg, ident, nouveau, _m.dossiers_de_lutin())
-        _m.config_ecrire(cfg)
+        courant = _trav.key(t["chemin"]) == _trav.key(_m.ROOT)
+        modifie = _trav.change_path(cfg, ident, nouveau, _m.lutin_folders())
+        _m.write_config(cfg)
         if courant:
-            _m.definir_racine(modifie["chemin"])
+            _m.set_root(modifie["chemin"])
     return works_state()
 
 
@@ -279,24 +279,24 @@ def import_claude_project(chemin, mode, vers="", nom=""):
 def resume_detect(chemin, dossier_skills=""):
     """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit. Avec les dossiers de travail où poser les skills."""
     with _rep.open_source(chemin, dossier_skills or None) as d:
-        cfg = _m.config_lue()
+        cfg = _m.read_config()
         liste = [dict(t, claude=_rep.is_claude_project(t["chemin"])) for t in _trav.entries(cfg)]
         actif = _trav.active(cfg)
-        cible = Path(actif["chemin"]) if actif else _m.RACINE
+        cible = Path(actif["chemin"]) if actif else _m.ROOT
         return dict(_rep.describe(d), dossier_skills=d["dossier_skills"], dossier_utilise=d["dossier_utilise"], travaux=liste, actif=works_state()["actif"], cible_skills=str(cible / "skills"))
 
 
 def resume_import(chemin, choix, dossier_skills="", ecraser=False, cible=""):
     """Reprend les catégories choisies (conversations, memoire, skills, reglages) ; l'état actuel est gardé dans un zip avant. `cible` : identifiant du dossier de travail où poser les skills (défaut : l'actif)."""
-    racine = _m.RACINE
+    racine = _m.ROOT
     if cible:
-        t = _trav.by_id(_m.config_lue(), cible)
+        t = _trav.by_id(_m.read_config(), cible)
         if not t:
             raise ValueError(_t("Dossier de travail inconnu."))
         racine = Path(t["chemin"])
-    c = _m.chemin_config()
-    dossiers = {"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}
+    c = _m.config_path()
+    dossiers = {"config": c.parent if c else None, "donnees": _m.DATA, "memoire": _m.MEMORY}
     with _rep.open_source(chemin, dossier_skills or None) as d:
-        rapport = _rep.import_all(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.entries(_m.config_lue())])
+        rapport = _rep.import_all(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.entries(_m.read_config())])
     rapport["resume"] = _rep.summary(rapport)
     return rapport

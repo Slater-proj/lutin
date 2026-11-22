@@ -91,7 +91,7 @@ class VoiceStudio(unittest.TestCase):
                 f.unlink()
         addons.save_settings(vs.IDENT, {"port": str(self.port), "cle": "", "format": "wav"})
         addons.activate(vs.IDENT, True)
-        self.projet = _m.RACINE
+        self.projet = _m.ROOT
         (self.projet / "voix.wav").write_bytes(b"RIFFxxxx")
 
     def ctx(self, accord=True, **plus):
@@ -112,7 +112,7 @@ class VoiceStudio(unittest.TestCase):
 
     def test_port_invalide(self):
         addons.save_settings(vs.IDENT, {"port": "abc"})
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             vs.list_voices()
 
     def test_les_deux_formes_de_liste_de_voix(self):
@@ -124,7 +124,7 @@ class VoiceStudio(unittest.TestCase):
     def test_outils_inutilisables_si_l_addon_est_coupe(self):
         addons.activate(vs.IDENT, False)
         for nom in ("voix_liste", "voix_parler", "voix_transcrire", "voix_cloner"):
-            with self.assertRaises(_m.ErreurOutil, msg=nom):
+            with self.assertRaises(_m.ToolError, msg=nom):
                 change_review._call_tool(nom, {"texte": "x"}, self.ctx())
 
     # --- lire à voix haute
@@ -152,25 +152,25 @@ class VoiceStudio(unittest.TestCase):
 
     def test_parler_garde_fous(self):
         for args in ({"texte": ""}, {"texte": "x" * 5000}, {"texte": "ok", "format": "exe"}):
-            with self.assertRaises(_m.ErreurOutil, msg=str(args)[:30]):
+            with self.assertRaises(_m.ToolError, msg=str(args)[:30]):
                 vs.speak_tool(args, self.ctx())
         self.assertEqual(self.accords, [])
 
     def test_parler_erreurs_du_service_sont_lisibles(self):
         SERVICE["refus"] = True
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             vs.speak_tool({"texte": "Salut", "voix": "inconnue"}, self.ctx())
         self.assertIn("voix inconnue", str(e.exception))
         SERVICE["refus"] = False
         SERVICE["erreur_deguisee"] = True
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             vs.speak_tool({"texte": "Salut"}, self.ctx())
         self.assertIn("moteur non chargé", str(e.exception), "une erreur en JSON n'est pas enregistrée comme un fichier audio")
 
     # --- clé d'API
     def test_cle_envoyee_et_jamais_affichee(self):
         SERVICE["cle"] = "secret-tres-long-1234"
-        with self.assertRaises(_m.ErreurOutil) as e:
+        with self.assertRaises(_m.ToolError) as e:
             vs.list_voices()
         self.assertIn("clé API", str(e.exception))
         self.assertNotIn("secret-tres-long", str(e.exception))
@@ -194,7 +194,7 @@ class VoiceStudio(unittest.TestCase):
         self.assertIn("rien entendu", vs.transcribe_tool({"chemin": "voix.wav"}, self.ctx()))
         (self.projet / "notes.txt").write_text("x", encoding="utf-8")
         for chemin in ("notes.txt", "absent.wav", "", "../../etc/passwd.wav"):
-            with self.assertRaises(_m.ErreurOutil, msg=chemin):
+            with self.assertRaises(_m.ToolError, msg=chemin):
                 vs.transcribe_tool({"chemin": chemin}, self.ctx())
 
     def test_transcrire_un_audio_genere_plus_tot(self):
@@ -205,7 +205,7 @@ class VoiceStudio(unittest.TestCase):
     # --- clonage
     def test_cloner_exige_la_base_et_l_accord_meme_en_automatique(self):
         for args in ({"nom": "Moi", "chemin": "voix.wav"}, {"nom": "Moi", "chemin": "voix.wav", "base": "peut-etre"}, {"nom": "", "chemin": "voix.wav", "base": "ma_voix"}):
-            with self.assertRaises(_m.ErreurOutil, msg=str(args)):
+            with self.assertRaises(_m.ToolError, msg=str(args)):
                 vs.clone_tool(args, self.ctx())
         self.assertEqual(self.accords, [])
         self.assertEqual([a for a in SERVICE["appels"] if a["chemin"] == "/profiles"], [])
@@ -239,7 +239,7 @@ class VoiceStudio(unittest.TestCase):
         gros = self.projet / "gros.wav"
         with open(gros, "wb") as f:
             f.truncate(vs.REF_MAX_BYTES + 1)
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             vs.clone_tool({"nom": "Moi", "chemin": "gros.wav", "base": "ma_voix"}, self.ctx())
 
     def test_le_nom_du_fichier_ne_peut_pas_casser_l_envoi(self):

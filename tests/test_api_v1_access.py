@@ -19,13 +19,13 @@ def setUpModule():
 
 class Access(unittest.TestCase):
     def setUp(self):
-        path = A.chemin_config()
+        path = A.config_path()
         before = path.read_bytes() if path.is_file() else None
         self.addCleanup(lambda: path.write_bytes(before) if before is not None else path.unlink(missing_ok=True))
-        cfg = A.config_lue()
-        cfg["securite"] = dict(vars(A.SECURITE), proxy_ips=list(A.SECURITE.proxy_ips))          # the level saved is the one running
+        cfg = A.read_config()
+        cfg["securite"] = dict(vars(A.SECURITY), proxy_ips=list(A.SECURITY.proxy_ips))          # the level saved is the one running
         cfg.pop("admin_a_distance", None)
-        A.config_ecrire(cfg)
+        A.write_config(cfg)
 
     def view(self, who=None):
         status, answer = V.call("GET", "/api/v1/access", who or V.OWNER)
@@ -67,7 +67,7 @@ class Access(unittest.TestCase):
     def test_the_remote_administration_opens_configuration_but_not_access(self):
         status, answer = V.call("PATCH", "/api/v1/access/remote-admin", V.OWNER, {"active": True})
         self.assertEqual((status, answer["remote_admin"]["active"]), (200, True))
-        self.assertTrue(A.config_lue()["admin_a_distance"])
+        self.assertTrue(A.read_config()["admin_a_distance"])
         self.assertTrue(V.call("GET", "/api/v1/status", V.DEVICE)[1]["access"]["can_configure"], "an admitted device may now configure")
         status, answer = V.call("PATCH", "/api/v1/access/remote-admin", V.DEVICE, {"active": False})
         self.assertEqual(status, 403, "but never take it back or widen it through itself")

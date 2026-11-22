@@ -72,19 +72,19 @@ class Mission(unittest.TestCase):
         cls.vrai_ollama, _m.OLLAMA = _m.OLLAMA, "http://127.0.0.1:%d" % cls.serveur.server_address[1]
         cls.dossier = _TEMP / "travail"
         cls.dossier.mkdir()
-        cls.vrai_config = _m.config_lue
-        _m.config_lue = lambda: {"emplacements": {"travail": str(cls.dossier)}}
+        cls.vrai_config = _m.read_config
+        _m.read_config = lambda: {"emplacements": {"travail": str(cls.dossier)}}
 
     @classmethod
     def tearDownClass(cls):
-        _m.OLLAMA, _m.config_lue = cls.vrai_ollama, cls.vrai_config
+        _m.OLLAMA, _m.read_config = cls.vrai_ollama, cls.vrai_config
         cls.serveur.shutdown()
 
     def setUp(self):
         MODE["v"] = "normal"
         RECUES.clear()
-        _m.TOURS_ACTIFS.clear()
-        _m.RACINE_TOURS.clear()
+        _m.ACTIVE_TURNS.clear()
+        _m.TURNS_ROOT.clear()
         for m in mission.read():
             mission.action("supprimer", {"id": m["id"]})
         for f in self.dossier.glob("*"):
@@ -145,7 +145,7 @@ class Mission(unittest.TestCase):
         self.assertTrue({"mission_terminer", "mission_bloquee", "suivi", "executer"} <= outils)
         self.assertIn("MISSION LONGUE", RECUES[0]["messages"][0]["content"])
         from lutin import agent
-        self.assertNotIn("mission_terminer", {t["function"]["name"] for t in agent.outils_du_mode(_m.reglages())})
+        self.assertNotIn("mission_terminer", {t["function"]["name"] for t in agent.outils_du_mode(_m.settings())})
 
     def test_sans_autonomie_rien_n_est_ecrit(self):
         m = self.creer(autonome=False)
@@ -171,13 +171,13 @@ class Mission(unittest.TestCase):
 
     def test_sans_place_libre_la_mission_attend_au_lieu_de_tourner_a_vide(self):
         self.creer()
-        for i in range(_m.TOURS_SIMULTANES):
-            _m.TOURS_ACTIFS["occupe%d" % i] = __import__("threading").Event()
+        for i in range(_m.CONCURRENT_TURNS):
+            _m.ACTIVE_TURNS["occupe%d" % i] = __import__("threading").Event()
         try:
             self.assertFalse(mission.one_step(), "aucune place : pas de tour, et un_pas() le dit pour que la boucle attende")
             self.assertEqual(mission.read()[0]["tours"], 0)
         finally:
-            _m.TOURS_ACTIFS.clear()
+            _m.ACTIVE_TURNS.clear()
         self.assertTrue(mission.one_step(), "une place se libère : le tour a lieu")
 
     def test_une_mission_dont_le_dossier_est_occupe_ne_bloque_pas_la_suivante(self):

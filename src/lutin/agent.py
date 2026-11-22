@@ -56,7 +56,7 @@ GABARIT_SANS_OUTILS = set()          # modèles dont le gabarit refuse les outil
 
 
 def _fichier_gabarits():
-    return _m.DONNEES / "gabarits.json"
+    return _m.DATA / "gabarits.json"
 
 
 def gabarits_connus():
@@ -175,7 +175,7 @@ def memoire_longue(conv, r):
 def reformuler_recherche(texte, r):
     """La demande de l'utilisateur transformée en requête de recherche web (3 à 8 mots-clés, fautes corrigées) par un appel court au modèle des petites tâches. '' si le modèle ne répond pas : l'appelant nettoie alors la demande lui-même."""
     try:
-        rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "options": _m.options_modele(r, 0.1),
+        rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "options": _m.model_options(r, 0.1),
                                      "messages": [{"role": "system", "content": "Tu transformes une demande en requête pour un moteur de recherche web. Réponds par la requête seulement : 3 à 8 mots-clés, sans phrase, sans ponctuation, sans date, fautes corrigées, dans la langue de la demande. Garde le sujet précis demandé."},
                                                   {"role": "user", "content": str(texte)[:300]}]}, 30)
         return (rep.get("message", {}).get("content") or "").strip()
@@ -369,7 +369,7 @@ def _scribe_de_fond(ident, r, travail):
         if not travail["annule"].is_set():
             scribe(_m.conv_read(ident), r, travail=travail)
     except (OSError, ValueError) as erreur:
-        _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
+        _m.log_event("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
     finally:
         with VERROU_SCRIBE:
             if SCRIBES.get(ident) is travail:
@@ -386,9 +386,9 @@ def _scribe_appel(r, ident, echange):
     try:
         moteur = moteur_actuel(r)
         schema = _aptitudes.of(moteur).grammar == _aptitudes.YES          # Ollama et llama.cpp contraignent la sortie par un schéma (ADR 0019, décision 4)
-        corps_scribe = {"model": modele_annexe(r), "stream": False, "think": False, "format": SCHEMA_SCRIBE if schema else "json", "options": _m.options_modele(r, 0.1),
+        corps_scribe = {"model": modele_annexe(r), "stream": False, "think": False, "format": SCHEMA_SCRIBE if schema else "json", "options": _m.model_options(r, 0.1),
                         "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialize(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}
-        with _m.tache_de_fond("fiche:" + str(ident), _t("Mise à jour de la fiche de suivi")):          # montré dans la barre d'état de la page
+        with _m.background_task("fiche:" + str(ident), _t("Mise à jour de la fiche de suivi")):          # montré dans la barre d'état de la page
             try:
                 rep = moteur.chat(corps_scribe, 300)
             except urllib.error.HTTPError:
@@ -397,7 +397,7 @@ def _scribe_appel(r, ident, echange):
                 rep = moteur.chat(dict(corps_scribe, format="json"), 300)          # un moteur qui refuse le schéma (Ollama ancien, serveur compatible) : du JSON libre, comme avant
         ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
     except (urllib.error.URLError, OSError, ValueError) as erreur:
-        _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
+        _m.log_event("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
         return None
     return ops if isinstance(ops, dict) else {}
 
@@ -426,8 +426,8 @@ def _scribe_appliquer(ident, ops):
         for question in lignes("resolu")[:SCRIBE_AJOUTS_MAX]:                         # une question ouverte n'est retirée que si le modèle la recopie vraiment (jamais une décision)
             if len(question) >= 12 and any(question.lower() in x.lower() for x in sections["ouvert"]):
                 _suivi.modify(ident, "ouvert", question, "retirer")
-    except (ValueError, _m.ErreurOutil) as erreur:
-        _m.journaliser("Scribe : consigne refusée (conversation {}) : {!r}".format(ident, erreur))
+    except (ValueError, _m.ToolError) as erreur:
+        _m.log_event("Scribe : consigne refusée (conversation {}) : {!r}".format(ident, erreur))
     return n
 
 
@@ -441,7 +441,7 @@ def outils_du_mode(r):
         exclus |= OUTILS_WEB
     exclus |= set(r.get("outils_desactives") or [])                     # outils coupés par l'utilisateur (Réglages > Outils)
     exclus |= _tool_table.spare_tools(r.get("num_ctx"))                 # petite fenêtre : les outils qu'un autre couvre laissent leur place à la conversation ; à 4 096 jetons, un noyau seulement (ADR 0018)
-    if not _m.OUTIL:
+    if not _m.TOOL_URL:
         exclus |= _modes.IMAGE_TOOLS
     if not r.get("fiche_active"):
         exclus.add("suivi")                                             # conversation courte : pas encore de fiche de suivi (fiche_active)
@@ -461,13 +461,13 @@ def outils_du_mode(r):
         try:
             outils += _mcp.exposed_tools(_modes.read_only(r.get("mode")))          # connecteurs MCP : seulement les outils autorisés un par un (voir mcp.py)
         except Exception as erreur:  # noqa: BLE001  (un connecteur en panne ne doit pas empêcher de répondre)
-            _m.journaliser("Connecteurs MCP : liste impossible ({!r}).".format(erreur))
+            _m.log_event("Connecteurs MCP : liste impossible ({!r}).".format(erreur))
     if any(t["function"]["name"] == "comfy_generer" for t in outils):
         try:
             from . import addons_comfyui
             outils = [addons_comfyui.adapt_tool(t) if t["function"]["name"] == "comfy_generer" else t for t in outils]
         except Exception as erreur:  # noqa: BLE001  (l'outil reste utilisable avec sa description générale)
-            _m.journaliser("Outil d'images : description adaptée impossible ({!r}).".format(erreur))
+            _m.log_event("Outil d'images : description adaptée impossible ({!r}).".format(erreur))
     return outils
 
 
@@ -523,8 +523,8 @@ def extraire_appels_texte(contenu, autorises=None, sources=""):
 def modele_qui_voit(courant):
     """Un modèle déjà installé qui comprend les images (rôle « vision » du catalogue d'abord), ou None."""
     installes = etat_moteur()["installes"]
-    candidats = [m["id"] for m in _m.MODELES if m["id"] in installes and "vision" in (m.get("capacites") or [])]
-    candidats.sort(key=lambda i: next((0 for m in _m.MODELES if m["id"] == i and m["role"] == "vision"), 1))
+    candidats = [m["id"] for m in _m.MODELS if m["id"] in installes and "vision" in (m.get("capacites") or [])]
+    candidats.sort(key=lambda i: next((0 for m in _m.MODELS if m["id"] == i and m["role"] == "vision"), 1))
     return next((i for i in candidats if i != courant), None)
 
 
@@ -533,7 +533,7 @@ def modele_de_repli(courant, genre):
     installes = etat_moteur()["installes"]
     ordre = ("rapide", "leger") if genre == "outil" else ("leger", "rapide")
     for role in ordre:
-        for m in _m.MODELES:
+        for m in _m.MODELS:
             if m["role"] == role and m["id"] != courant and m["id"] in installes:
                 return m["id"]
     return None
@@ -556,7 +556,7 @@ def capacites_ollama(modele):
 def duree_garde():
     """Combien de temps Ollama garde le modèle en mémoire après une réponse. Avec « Décharger le modèle quand ComfyUI génère », on peut le garder longtemps (pas de rechargement
     de 30 s à 2 min entre deux questions) : la surveillance le décharge d'elle-même dès que ComfyUI a besoin de la carte. Sinon, le réglage d'Ollama (5 minutes)."""
-    r = _m.reglages()
+    r = _m.settings()
     if r.get("garde_min") is not None:
         return "{}m".format(r["garde_min"])          # réglé à la main : 0 = déchargé dès la fin de la réponse
     return "30m" if r.get("liberer_si_comfy", True) else None
@@ -693,7 +693,7 @@ class MoteurOllama(_moteurs.Engine):
             from . import locations
             locations.set_models_folder(dossier)
         except (OSError, ValueError) as erreur:
-            _m.journaliser("Dossier des modèles d'Ollama non rétabli après l'installation ({!r}).".format(erreur))
+            _m.log_event("Dossier des modèles d'Ollama non rétabli après l'installation ({!r}).".format(erreur))
 
     def statut(self):
         actif = etat_ollama()["actif"]
@@ -748,28 +748,28 @@ class MoteurOllama(_moteurs.Engine):
         try:
             if action == "demarrer":
                 progression(_t("Démarrage d'Ollama…"), 0, 0)
-                _m.demarrer_ollama()
+                _m.start_ollama()
             elif action == "arreter":
-                _m.arreter_ollama()
+                _m.stop_ollama()
             elif action == "mettre_a_jour":
                 progression(_t("Arrêt d'Ollama…"), 0, 0)
-                _m.arreter_ollama()
+                _m.stop_ollama()
                 ollama_client.install_windows(cache, progression)          # par-dessus l'existant : le même dossier, rien n'est désinstallé
                 self._rendre_dossier_modeles(dossier_modeles)
-                _m.demarrer_ollama()
+                _m.start_ollama()
             elif action in ("desinstaller", "reinstaller"):
                 progression(_t("Arrêt d'Ollama…"), 0, 0)
-                _m.arreter_ollama()
+                _m.stop_ollama()
                 progression(_t("Désinstallation…"), 0, 0)
                 ollama_client.uninstall_windows()
                 if action == "reinstaller":
                     ollama_client.install_windows(cache, progression, dossier=self.dossier_installation())
                     self._rendre_dossier_modeles(dossier_modeles)
-                    _m.demarrer_ollama()
+                    _m.start_ollama()
             elif action == "installer":
                 ollama_client.install_windows(cache, progression, dossier=self.dossier_installation())
                 self._rendre_dossier_modeles(dossier_modeles)
-                _m.demarrer_ollama()
+                _m.start_ollama()
         except ollama_client.OllamaError as e:
             raise ValueError(str(e))
         CAPACITES.clear()
@@ -805,7 +805,7 @@ class MoteurOllama(_moteurs.Engine):
                                              experts_in_ram=True)          # Ollama ≥ 0.30 lance llama-server, dont `--fit` place les experts ; avant, il répartit par couches
 
     def demarrer_sur_demande(self):
-        return _m.demarrer_ollama()
+        return _m.start_ollama()
 
     def grille(self):
         natif = ("natif", "")
@@ -831,7 +831,7 @@ class MoteurOllama(_moteurs.Engine):
 
 
 _moteurs.save(MoteurOllama())
-_moteurs.CONTEXT.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.is_active(),
+_moteurs.CONTEXT.update(donnees=lambda: _m.DATA, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.is_active(),
                          profil=lambda: __import__("lutin.model_fit", fromlist=["x"]).ready_profile(),
                          profil_attendu=lambda: __import__("lutin.model_fit", fromlist=["x"]).awaited_profile(),
                          dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.locations", fromlist=["x"]).models_folder()))
@@ -858,7 +858,7 @@ def etat_moteur():
 
 def moteur_local(r=None):
     """Le moteur de CETTE machine (celui des réglages), jamais une machine prêtée : c'est lui qu'on mesure, qu'on décharge, dont on lit la mémoire."""
-    r = r if r is not None else _m.reglages()
+    r = r if r is not None else _m.settings()
     return _moteurs.by_id(r.get("moteur") or _moteurs.OLLAMA)
 
 
@@ -871,7 +871,7 @@ def client_banc(r=None):
 
 def moteur_actuel(r=None):
     """Le moteur choisi dans les réglages (Ollama par défaut, et si le réglage est inconnu)."""
-    r = r if r is not None else _m.reglages()
+    r = r if r is not None else _m.settings()
     local = _moteurs.by_id(r.get("moteur") or _moteurs.OLLAMA)
     if r.get("machine"):          # une machine est choisie : ses demandes de conversation partent chez elle quand elle est opérationnelle, sinon ce moteur répond (en silence)
         from . import machines
@@ -912,7 +912,7 @@ RE_NOM_MODELE = re.compile(r"^[A-Za-z0-9_./:-]{1,100}$")
 
 def lire_registre_modeles():
     """donnees/modeles.json : les modèles ajoutés par l'utilisateur (« perso ») et ceux du catalogue qu'il a retirés de la liste (« masques »)."""
-    d = _m.read_json(_m.DONNEES / "modeles.json", {})
+    d = _m.read_json(_m.DATA / "modeles.json", {})
     d = d if isinstance(d, dict) else {}
 
     def propre(liste):
@@ -921,7 +921,7 @@ def lire_registre_modeles():
 
 
 def ecrire_registre_modeles(registre):
-    _m.write_atomic(_m.DONNEES / "modeles.json", json.dumps(registre, ensure_ascii=False, indent=1))
+    _m.write_atomic(_m.DATA / "modeles.json", json.dumps(registre, ensure_ascii=False, indent=1))
 
 
 def modeles_connus(installes, tailles=None):
@@ -929,14 +929,14 @@ def modeles_connus(installes, tailles=None):
     sans figurer ici (installés à la main) : tous ont les mêmes boutons (utiliser, supprimer...). Un modèle retiré mais installé reste affiché : on ne perd jamais l'option de le désinstaller."""
     tailles = tailles or {}
     reg = lire_registre_modeles()
-    catalogue = {m["id"] for m in _m.MODELES}
-    avance = bool(_m.reglages().get("avance"))
-    liste = [dict(m, origine="catalogue") for m in _m.MODELES if (m["id"] not in reg["masques"] and (avance or not m["avance"])) or m["id"] in installes]
+    catalogue = {m["id"] for m in _m.MODELS}
+    avance = bool(_m.settings().get("avance"))
+    liste = [dict(m, origine="catalogue") for m in _m.MODELS if (m["id"] not in reg["masques"] and (avance or not m["avance"])) or m["id"] in installes]
     vus = set(catalogue)
     a_lire = []
     for entree in liste:                                                                   # la précision installée (4 bits, 8 bits…) de chaque modèle du catalogue qui est installé
         if entree["id"] in installes:
-            infos = _infos.already_known(entree["id"], _m.DONNEES)
+            infos = _infos.already_known(entree["id"], _m.DATA)
             if infos is None:
                 a_lire.append(entree["id"])
             elif infos.get("quantification"):
@@ -947,7 +947,7 @@ def modeles_connus(installes, tailles=None):
         vus.add(nom)
         entree = {"id": nom, "nom": nom, "go": round(tailles.get(nom, 0) / 1e9, 1), "role": "perso", "origine": "perso" if nom in reg["perso"] else "installe"}
         if nom in installes:
-            infos = _infos.already_known(nom, _m.DONNEES)
+            infos = _infos.already_known(nom, _m.DATA)
             if infos is None:
                 a_lire.append(nom)
             elif infos:
@@ -959,7 +959,7 @@ def modeles_connus(installes, tailles=None):
                 entree["phrase"] = _infos.sentence(infos)
         liste.append(entree)
     if a_lire:
-        _infos.ask(a_lire, _m.DONNEES, lambda n: ollama_json("/api/show", {"model": n}, 8))          # en arrière-plan : la liste s'améliore au rafraîchissement suivant
+        _infos.ask(a_lire, _m.DATA, lambda n: ollama_json("/api/show", {"model": n}, 8))          # en arrière-plan : la liste s'améliore au rafraîchissement suivant
     return liste
 
 
@@ -973,12 +973,12 @@ def oublier_modele(modele):
         raise ValueError("Ollama ne répond pas : je ne peux pas vérifier que ce modèle n'est pas installé. Démarre Ollama d'abord.")
     if modele in o["installes"]:
         raise ValueError("Ce modèle est installé : désinstalle-le d'abord (sinon tu perdrais le bouton de nettoyage). Tu pourras ensuite le retirer de la liste.")
-    if _m.reglages()["modele"] == modele:
+    if _m.settings()["modele"] == modele:
         raise ValueError("C'est le modèle actif : choisis-en un autre avant de le retirer.")
     if PULLS.get(modele, {}).get("statut") == "en cours":
         raise ValueError("Un téléchargement de ce modèle est en cours.")
     reg = lire_registre_modeles()
-    if modele in [m["id"] for m in _m.MODELES]:
+    if modele in [m["id"] for m in _m.MODELS]:
         if modele not in reg["masques"]:
             reg["masques"].append(modele)
     elif modele in reg["perso"]:
@@ -988,7 +988,7 @@ def oublier_modele(modele):
     ecrire_registre_modeles(reg)
     PULLS.pop(modele, None)
     CAPACITES.pop(modele, None)
-    _m.journaliser("Modèle retiré de la liste : " + modele)
+    _m.log_event("Modèle retiré de la liste : " + modele)
     return {"ok": True, "modele": modele}
 
 
@@ -1004,7 +1004,7 @@ def installer_modele(modele):
     _hl.require_online("télécharger un modèle")
     if moteur_actuel().id != _moteurs.OLLAMA and not hasattr(moteur_actuel(), "telecharger_ollama"):
         raise ValueError(_t("Ce moteur gère ses modèles lui-même : installe-les depuis le moteur."))
-    if modele not in [m["id"] for m in _m.MODELES] and not RE_NOM_MODELE.match(modele):
+    if modele not in [m["id"] for m in _m.MODELS] and not RE_NOM_MODELE.match(modele):
         raise ValueError("Nom de modèle invalide.")
     catalogue_m = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), None)
     if catalogue_m is not None:          # un modèle du catalogue que ce moteur ne sait pas faire tourner n'est jamais installé
@@ -1015,7 +1015,7 @@ def installer_modele(modele):
     if PULLS.get(modele, {}).get("statut") == "en cours":
         return PULLS[modele]
     reg = lire_registre_modeles()                       # le modèle entre dans la liste dès le début du téléchargement (et y reste, pour pouvoir le suivre, le supprimer ou le retirer)
-    if modele in [m["id"] for m in _m.MODELES]:
+    if modele in [m["id"] for m in _m.MODELS]:
         if modele in reg["masques"]:
             reg["masques"].remove(modele)
             ecrire_registre_modeles(reg)
@@ -1069,11 +1069,11 @@ def installer_modele(modele):
 
 
 def supprimer_modele(modele):
-    if modele not in [m["id"] for m in _m.MODELES] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", modele):
+    if modele not in [m["id"] for m in _m.MODELS] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", modele):
         raise ValueError("Nom de modèle invalide.")
     if moteur_actuel().id != _moteurs.OLLAMA:
         mo = moteur_actuel()
-        actif = _m.reglages()["modele"] == modele
+        actif = _m.settings()["modele"] == modele
         try:
             mo.supprimer_modele(modele)
         except Exception as erreur:  # noqa: BLE001  (le message du moteur est montré tel quel)
@@ -1085,7 +1085,7 @@ def supprimer_modele(modele):
                 nouveau = restants[0]
                 _m.save_settings({"modele": nouveau})
         return {"ok": True, "modele": modele, "nouveau_actif": nouveau}
-    suppression_active = _m.reglages()["modele"] == modele          # permis : sinon impossible de supprimer son seul modèle (pour déplacer le dossier, par exemple) ; on bascule sur un autre s'il y en a un
+    suppression_active = _m.settings()["modele"] == modele          # permis : sinon impossible de supprimer son seul modèle (pour déplacer le dossier, par exemple) ; on bascule sur un autre s'il y en a un
     req = urllib.request.Request(_m.OLLAMA + "/api/delete", data=json.dumps({"model": modele}).encode("utf-8"), headers={"Content-Type": "application/json"}, method="DELETE")
     try:
         with urllib.request.urlopen(req, timeout=300) as r:
@@ -1135,9 +1135,9 @@ def consignes_systeme(r):
             + ("" if r.get("mode") in ("discussion", "recherche") else _t("\n\n# CRÉER UN FICHIER\nQuand on te demande de créer ou d'écrire un fichier (docker-compose, script, configuration, document), appelle l'outil « ecrire » avec le chemin et le contenu complet, y compris après une recherche web. Ne te contente pas de montrer le contenu dans ta réponse."))
             + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Ce que tu simules n'existe PAS ensuite : un fichier « créé » ici ne se relira pas, une commande « lancée » n'a rien produit. Ne dis jamais que c'est fait : conclus par « voici ce que je ferais ». Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
             + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
-            + _pc.prompt_block(_m.RACINE)
+            + _pc.prompt_block(_m.ROOT)
             + bloc_plan(r)
-            + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(_m.RACINE)
+            + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(_m.ROOT)
             + ligne_moteur(r))
 
 
@@ -1178,7 +1178,7 @@ def calculer_vitesse(e):
 
 def jauge_contexte(conv, r=None):
     """Place prise dans la fenêtre de contexte : le chiffre réel d'Ollama s'il existe (dernière réponse), sinon une estimation."""
-    r = r or _m.reglages()
+    r = r or _m.settings()
     if conv.get("jetons"):
         return {"utilise": int(conv["jetons"]["utilise"]), "total": r["num_ctx"], "reel": True}
     msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv) + _m.text_tasks(conv)}]
@@ -1357,7 +1357,7 @@ def document_de_reprise(conv, r):
                   "Sois précis, concis, sans répétition. Pas de blabla. Le document doit être directement collable comme contexte system/user message.\n"
                   "Réponds UNIQUEMENT avec le document markdown, sans préambule.\n\n"
                   "CONVERSATION :\n") + texte
-    rep = moteur_actuel(r).chat({"model": r["modele"], "stream": False, "messages": [{"role": "user", "content": consigne}], "options": _m.options_modele(r, 0.3)}, 300)
+    rep = moteur_actuel(r).chat({"model": r["modele"], "stream": False, "messages": [{"role": "user", "content": consigne}], "options": _m.model_options(r, 0.3)}, 300)
     sortie = (rep.get("message", {}).get("content") or "").strip()
     if not sortie:
         raise ValueError(_t("Le modèle n'a pas répondu."))
@@ -1378,7 +1378,7 @@ def titre_propose(conv, r):
                    "Pas de ponctuation finale, pas de guillemets, pas de préambule. Réponds UNIQUEMENT avec le titre.\n\n"
                    "CONVERSATION :\n") + "\n".join(morceaux)[:6000])
     rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "messages": [{"role": "user", "content": consigne}],
-                                 "options": _m.options_modele(r, 0.4)}, 120)
+                                 "options": _m.model_options(r, 0.4)}, 120)
     sortie = re.sub(r"(?s)<think>.*?</think>", "", rep.get("message", {}).get("content") or "")          # un modèle qui réfléchit à voix haute malgré think=false
     titre = " ".join(sortie.strip().strip('"«»').strip().split())[:60]
     if not titre:
@@ -1484,13 +1484,13 @@ def elaguer(conv, r, emit, forcer=False, place=None):
 def compacter_conversation(ident):
     """Commande /compact : le début de la conversation sort maintenant du contexte, la fiche de suivi mise à jour d'abord (le modèle est sollicité
     par le scribe, comptez quelques secondes). « fiche » reste dans la réponse pour les anciennes pages : toujours vrai (ADR 0019)."""
-    if ident in _m.TOURS_ACTIFS:
+    if ident in _m.ACTIVE_TURNS:
         raise ValueError("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")
     annuler_scribe(ident)                                                       # le retrait relit ce qui sort lui-même, avec la conversation à jour
     conv = _m.conv_read(ident)
     avant = len(conv["messages"])
     info = []
-    r = _m.reglages()
+    r = _m.settings()
     if not elaguer(conv, r, info.append, forcer=True):
         raise ValueError(_t("Rien à retirer : la conversation est encore courte."))
     _m.conv_write(conv)
@@ -1542,7 +1542,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     remplacer_depuis : indice d'un message de l'utilisateur à remplacer (modifier un message / régénérer) ; ce message et tout ce qui le suit sont retirés d'abord.
     images : identifiants d'images jointes à ce message (voir images.py). pieces : documents et fichiers texte joints, [{id, nom}] (voir attachments.py).
     lecture_seule : tâches planifiées, où personne ne peut accepter : lecture et recherche seulement, tout le reste est simulé comme dans l'essai à blanc."""
-    r = dict(r or _m.reglages())
+    r = dict(r or _m.settings())
     if lecture_seule:
         r["essai_a_blanc"] = True
     stop = stop if stop is not None else threading.Event()
@@ -1589,7 +1589,7 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
 
     def accord(titre, detail, diff, auto=False):
         if stop.is_set():
-            raise _m.Arret()
+            raise _m.TurnStopped()
         if ctx.get("essai"):
             # Essai à blanc : on montre ce qui aurait été fait, rien n'est écrit ni lancé, personne n'a à répondre.
             emit({"type": "essai", "titre": titre, "detail": detail, "diff": diff})
@@ -1621,7 +1621,7 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
             emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu, "retenir": bool(sujet.get("retenir"))})
             ok = a.attendre(stop=stop)
         if stop.is_set():
-            raise _m.Arret()
+            raise _m.TurnStopped()
         if ok and a.retenir != "once" and sujet.get("retenir") and sujet.get("commande"):
             from . import approval_rules
             try:
@@ -1665,11 +1665,11 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
         # alors retenue), un ancien résumé, ou un historique qui déborde. Avant ADR 0019, le mode fiche l'allumait dès le premier message.
         r["rappel_ici"] = bool(conv.get("depart") or conv.get("resume")) or deborde(conv, r, place)
         boucle_agent(conv, r, emit, ctx, stop)
-    except _m.Arret:
-        _m.journaliser("Tour arrêté par l'utilisateur (conversation {}).".format(conv["id"]))
+    except _m.TurnStopped:
+        _m.log_event("Tour arrêté par l'utilisateur (conversation {}).".format(conv["id"]))
         emit({"type": "info", "texte": "Arrêté. Ce qui était déjà fait est gardé dans la conversation ; écris « continue » pour reprendre."})
     except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("Erreur inattendue dans le tour (conversation {}) : {!r}".format(conv["id"], erreur))
+        _m.log_event("Erreur inattendue dans le tour (conversation {}) : {!r}".format(conv["id"], erreur))
         emit({"type": "erreur", "texte": _t("Erreur inattendue : {} (détail dans donnees/lutin.log). Ta demande est gardée.").format(str(erreur)[:300])})
     scribe_ensuite = False
     try:
@@ -1682,7 +1682,7 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
                 else:
                     scribe_ensuite = len(messages_non_lus(conv)) >= SCRIBE_MESSAGES
     except (OSError, ValueError) as erreur:
-        _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
+        _m.log_event("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
     try:
         if _boucles.repeats_last_answer(conv):
             conv["boucle"] = int(conv.get("boucle") or 0) + 1
@@ -1690,15 +1690,15 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
         else:
             conv.pop("boucle", None)
     except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("Détection de boucle impossible : {!r}".format(erreur))
+        _m.log_event("Détection de boucle impossible : {!r}".format(erreur))
     if conv.get("taches") and not ctx.get("taches_maj") and not lecture_seule:
         conv["taches_age"] = int(conv.get("taches_age") or 0) + 1
-        if conv["taches_age"] >= _m.AGE_TACHES_MAX:               # le modèle est parti sur autre chose : la liste n'est plus vraie, elle ne doit pas rester là pour toujours
+        if conv["taches_age"] >= _m.MAX_TASK_AGE:               # le modèle est parti sur autre chose : la liste n'est plus vraie, elle ne doit pas rester là pour toujours
             conv["taches"], conv["taches_age"] = [], 0
             emit({"type": "taches", "liste": []})
-            emit({"type": "info", "texte": _t("La liste de tâches n'était plus mise à jour depuis {} réponses : je la ferme.").format(_m.AGE_TACHES_MAX)})
+            emit({"type": "info", "texte": _t("La liste de tâches n'était plus mise à jour depuis {} réponses : je la ferme.").format(_m.MAX_TASK_AGE)})
     if not parle["texte"] and not stop.is_set() and not lecture_seule and not r.get("_mission"):
-        _m.journaliser("Demande terminée sans aucune réponse écrite (conversation {}, modèle {}).".format(conv["id"], r["modele"]))
+        _m.log_event("Demande terminée sans aucune réponse écrite (conversation {}, modèle {}).".format(conv["id"], r["modele"]))
         emit({"type": "erreur", "texte": _t("Aucune réponse n'a été écrite. Causes fréquentes : la fenêtre de contexte est pleine (jauge en haut de la page : écris /compact ou ouvre une nouvelle conversation), ou le modèle manque de mémoire (ComfyUI occupe la carte graphique). Ta demande est gardée : écris « continue » pour réessayer.")})
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
         conv["annulable"] = {"id": ctx["tour"]["id"], "fichiers": sorted(ctx["tour"]["fichiers"])}
@@ -1709,7 +1709,7 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
         try:
             _m.purge_data()
         except OSError as erreur:
-            _m.journaliser("Purge impossible : {!r}".format(erreur))
+            _m.log_event("Purge impossible : {!r}".format(erreur))
     emit({"type": "fin", "conversation": {"id": conv["id"], "titre": conv["titre"]}})
 
 
@@ -1748,7 +1748,7 @@ def verifier_arguments(nom, args, parametres=None):
         parties.append(_t("argument obligatoire manquant : {}").format(", ".join("« {} »".format(k) for k in manquants)))
     if illisibles:
         parties.append(_t("nombre entier attendu pour {}").format(", ".join("« {} »".format(k) for k in illisibles)))
-    raise _m.ErreurOutil(_t("Appel de « {} » non lancé : {}. Rappelle l'outil avec ses arguments, par exemple {}.").format(nom, " ; ".join(parties), forme))
+    raise _m.ToolError(_t("Appel de « {} » non lancé : {}. Rappelle l'outil avec ses arguments, par exemple {}.").format(nom, " ; ".join(parties), forme))
 
 
 def normaliser_arguments(nom, args, parametres=None):
@@ -1796,7 +1796,7 @@ def contexte_routage():
         budget = (vram["total"] / 1024 ** 3) if vram else ((ram["total"] / 1024 ** 3) * 0.6 if ram else 0)
     except Exception:  # noqa: BLE001  (une mesure qui échoue ne doit pas empêcher de répondre)
         budget = 0
-    trop_gros = {n for n in installes if budget and (_routeur.size_gb(n, _m.MODELES) or 0) > budget * 0.95}
+    trop_gros = {n for n in installes if budget and (_routeur.size_gb(n, _m.MODELS) or 0) > budget * 0.95}
     try:
         distants = machines.modeles_distants()
     except Exception:  # noqa: BLE001
@@ -1818,12 +1818,12 @@ def router_la_demande(r, demande, images, emit, conv_id):
         if not r.get("routage") or r.get("_mission") or r.get("essai_a_blanc"):
             return False
         installes, trop_gros, distants = contexte_routage()
-        choix = _routeur.choose(demande, installes, r["modele"], _m.MODELES, images, trop_gros, distants)
+        choix = _routeur.choose(demande, installes, r["modele"], _m.MODELS, images, trop_gros, distants)
         if choix:
             appliquer_choix(r, choix, emit, conv_id, choix["raison"])
             return True
     except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("Routeur de modèles : {!r}".format(erreur))
+        _m.log_event("Routeur de modèles : {!r}".format(erreur))
     return False
 
 
@@ -1833,7 +1833,7 @@ def monter_en_gamme(r, corps, emit, conv_id, motif):
         if not r.get("routage") or r.get("_mission") or r.get("_monte"):
             return False
         installes, trop_gros, distants = contexte_routage()
-        choix = _routeur.biggest(r["modele"], installes, _m.MODELES, trop_gros, distants, exiger_reflexion=False)
+        choix = _routeur.biggest(r["modele"], installes, _m.MODELS, trop_gros, distants, exiger_reflexion=False)
         if not choix:
             return False
         r["_monte"] = True
@@ -1841,7 +1841,7 @@ def monter_en_gamme(r, corps, emit, conv_id, motif):
         corps["model"] = r["modele"]
         return True
     except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("Routeur de modèles (reprise) : {!r}".format(erreur))
+        _m.log_event("Routeur de modèles (reprise) : {!r}".format(erreur))
         return False
 
 
@@ -1890,10 +1890,10 @@ def _preparer_boucle(conv, r, emit, ctx):
     """Contexte du tour, lu UNE fois : les outils du mode, la fiche de suivi, les extraits du fil, les rappels tirés des documents, la consigne d'exécution, la recherche guidée.
     Rien de ce qui est lu ici ne change d'une étape à l'autre du tour : le début de la requête reste identique, et le moteur le garde en cache.
     Les passages rappelés (fil et documents) se partagent une part de la fenêtre, le fil servi d'abord (prompt_layout, ADR 0013)."""
-    tours_max = max(4, int(r.get("tours_max", _m.TOURS_MAX)))
+    tours_max = max(4, int(r.get("tours_max", _m.MAX_TURNS)))
     outils = outils_du_mode(r)                                      # seulement les outils utiles dans ce mode : moins de jetons, moins de confusion
     ctx["outils_autorises"] = {t["function"]["name"] for t in outils}
-    ctx["plafond_resultat"] = _disposition.result_budget(r["num_ctx"], _m.LECTURE_MAX + 2000)          # un résultat d'outil prend au plus un dixième de la fenêtre (ADR 0019)
+    ctx["plafond_resultat"] = _disposition.result_budget(r["num_ctx"], _m.READ_MAX + 2000)          # un résultat d'outil prend au plus un dixième de la fenêtre (ADR 0019)
     ctx["plafond_lecture"] = ctx["plafond_resultat"] - 200          # « lire » s'arrête avant, et dit où reprendre : son en-tête et sa dernière ligne tiennent dans le plafond
     masquer = fiche_active(conv, r)                                   # conversation longue : les résultats des demandes finies ne sont plus qu'une ligne (ADR 0019)
     fiche, consigne = "", ""
@@ -1916,7 +1916,7 @@ def _preparer_boucle(conv, r, emit, ctx):
                 DITS["rappel"][conv["id"]] = nb_extraits
                 emit({"type": "info", "texte": _t("📎 {} passage(s) retrouvé(s) plus tôt dans cette conversation.").format(nb_extraits)})
         except Exception as erreur:  # noqa: BLE001  (la recherche ne doit jamais empêcher de répondre)
-            _m.journaliser("Rappel du fil impossible : {!r}".format(erreur))
+            _m.log_event("Rappel du fil impossible : {!r}".format(erreur))
     rappels_texte, rappels_sources = "", []
     place_documents = min(_disposition.documents_budget(r["num_ctx"], extraits), place - len(extraits))          # ce que le fil a laissé de la part des rappels
     place_documents = place_documents if place_documents >= _disposition.RECALL_MIN else 0
@@ -1924,7 +1924,7 @@ def _preparer_boucle(conv, r, emit, ctx):
         try:
             rappels_texte, rappels_sources = _m.automatic_recalls(conv, r, place_documents)
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Rappels automatiques impossibles : {!r}".format(erreur))
+            _m.log_event("Rappels automatiques impossibles : {!r}".format(erreur))
     if rappels_sources:
         emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
     try:
@@ -1943,8 +1943,8 @@ def _preparer_boucle(conv, r, emit, ctx):
         try:                                                              # actualités, recherche demandée, adresse collée : Lutin cherche et lit lui-même, le modèle ne fait que répondre d'après ce qu'on lui montre
             consigne = _actualites.prepare(conv, derniere_demande, ctx, emit, reformuler=lambda t: reformuler_recherche(t, r), mode=guide) or ""
             forcer_fin = bool(consigne)
-        except (_m.ErreurOutil, OSError) as erreur:
-            _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
+        except (_m.ToolError, OSError) as erreur:
+            _m.log_event("Actualités guidées impossibles : {!r}".format(erreur))
             emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
     return types.SimpleNamespace(tours_max=tours_max, outils=outils, rappels_texte=rappels_texte, fiche=fiche, extraits=extraits, consigne=consigne, derniere_demande=derniere_demande, garde=garde, forcer_fin=forcer_fin,
                                  masquer=masquer)
@@ -1981,7 +1981,7 @@ def _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli
 def _preparer_requete(conv, r, emit, ctx, msgs, outils, idx_tour, dernier_tour, derniere_demande):
     """La requête d'une étape : options, ce que le modèle sait faire (réflexion, images, outils), modèle choisi par le routeur, contexte ajusté à la fenêtre.
     Peut changer `r["modele"]` (un modèle qui voit, le choix du routeur). Renvoie (corps, caps, plat) : la requête, les capacités du modèle, et si son gabarit refuse les outils."""
-    options = _m.options_modele(r, r["temperature"])
+    options = _m.model_options(r, r["temperature"])
     if r.get("num_predict", 0) > 0:
         options["num_predict"] = r["num_predict"]
     caps = moteur_actuel(r).capacites(r["modele"])
@@ -1990,7 +1990,7 @@ def _preparer_requete(conv, r, emit, ctx, msgs, outils, idx_tour, dernier_tour, 
         reflechit = False
         if idx_tour == 0:
             emit({"type": "info", "texte": "Ce modèle n'a pas de mode réflexion : je le désactive pour cette demande."})
-    options.update(_m.options_echantillonnage(r, reflechit))
+    options.update(_m.sampling_options(r, reflechit))
     if idx_tour == 0 and any(m.get("images") for m in conv["messages"][-_images.RECENT:]):
         voit = caps is None or "vision" in caps
         if not voit:
@@ -2044,7 +2044,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
                     if stop.is_set():
                         if contenu.strip():
                             conv["messages"].append({"role": "assistant", "content": contenu, "ts": horodatage()})
-                        raise _m.Arret()
+                        raise _m.TurnStopped()
                     if e.get("error"):
                         raise RuntimeError(e["error"])
                     m = e.get("message") or {}
@@ -2092,7 +2092,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
                     contenu += morceau
                     emit({"type": "texte", "texte": morceau})
             if rond:
-                _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
+                _m.log_event("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
                 _observatoire.record("relance", conv["id"], motif="texte répété", modele=r["modele"])
                 if tentative < 2:
                     relance_repetition = True
@@ -2102,7 +2102,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
                     continue
                 emit({"type": "info", "texte": _t("Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.")})
             if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
-                _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, raison de fin : {!r}, essai {}, outils : {})".format(r["modele"], len(pensee), raison_fin, tentative + 1, "tools" in corps_t))
+                _m.log_event("Réponse vide du modèle {} (pensée : {} caractères, raison de fin : {!r}, essai {}, outils : {})".format(r["modele"], len(pensee), raison_fin, tentative + 1, "tools" in corps_t))
                 _observatoire.record("relance", conv["id"], motif="réponse vide", modele=r["modele"])
                 if tentative < 2:
                     relance_vide = True
@@ -2120,7 +2120,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
                     emit({"type": "erreur", "texte": _t("Le modèle n'a rien produit, même après trois essais (dont un sans outils), alors que la fenêtre de contexte n'est pas pleine ({} / {} jetons). Ce n'est pas ta conversation : ce modèle ne répond pas correctement ici. Essaie un autre modèle (Réglages), ou écris « continue ».").format(utilise, r["num_ctx"])})
             fini = True
             break
-        except _m.Arret:
+        except _m.TurnStopped:
             raise
         except (urllib.error.URLError, OSError, RuntimeError) as erreur:
             http = isinstance(erreur, urllib.error.HTTPError)
@@ -2128,7 +2128,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
                 detail = erreur.read().decode("utf-8", "replace")[:300]
             else:
                 detail = str(erreur)[:300]
-            _m.journaliser("Ollama ({}, essai {}) : {}".format("HTTP {}".format(erreur.code) if http else type(erreur).__name__, tentative + 1, detail))
+            _m.log_event("Ollama ({}, essai {}) : {}".format("HTTP {}".format(erreur.code) if http else type(erreur).__name__, tentative + 1, detail))
             # Une erreur d'Ollama qu'on peut réessayer (HTTP 500, ou erreur arrivée dans le flux) : le genre dit quoi changer au prochain essai.
             if (not http or erreur.code in (400, 500)) and RE_GABARIT.search(detail) and not plat:
                 genre = "gabarit"
@@ -2140,7 +2140,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
             if not _aptitudes.of(moteur_actuel(r)).spills_to_cpu and manque_de_memoire_video(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
                 emit({"type": "erreur", "texte": _t("{} n'a pas pu charger « {} » : la mémoire de la carte graphique ne suffit pas pour le modèle ET sa mémoire de conversation. Choisis une quantification plus légère (onglet Modèles), ou une fenêtre de contexte plus petite (Réglages > Conversation), puis redémarre {} (Réglages > Moteur). Détail : {}").format(nom_mo, r["modele"], nom_mo, detail[:160])})
                 break
-            if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance") and _aptitudes.of(moteur_actuel(r)).starts_on_demand:
+            if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_START and tentative < 2 and not ctx.get("ollama_relance") and _aptitudes.of(moteur_actuel(r)).starts_on_demand:
                 ctx["ollama_relance"] = True                        # Ollama est arrêté (ou a planté) : on le démarre et on réessaie, une seule fois par demande
                 emit({"type": "info", "texte": "Ollama ne répond pas : je le démarre (quelques secondes)..."})
                 try:
@@ -2174,7 +2174,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
                     emit({"type": "info", "texte": _t("Ollama a planté ou manque de mémoire vidéo ({}). J'attends quelques secondes et je relance avec moins de contexte, ta demande est gardée.").format(detail[:100])})
                     for _ in range(6):                  # le temps qu'Ollama relance son moteur (3 s), en restant interruptible
                         if stop.wait(0.5):
-                            raise _m.Arret()
+                            raise _m.TurnStopped()
                 continue
             if genre == "outil":
                 emit({"type": "erreur", "texte": _t("Le modèle écrit mal ses appels d'outils ({}). Reformule en une demande plus simple, ou choisis un autre modèle dans Réglages (gemma4:26b).").format(detail[:200])})
@@ -2212,7 +2212,7 @@ def borner_resultat(conv, ctx, nom, resultat):
     """Le résultat d'un outil tel qu'il entre dans la conversation : au plus la part de la fenêtre que lui laisse le tour (ADR 0019, décision 5), coupé au
     milieu avec un en-tête qui dit comment avoir le reste. Le texte complet d'un résultat coupé va à l'archive, où « rappeler » (ici=true) le retrouve ;
     un fichier se relit avec « lire »."""
-    plafond = ctx.get("plafond_resultat") or _m.LECTURE_MAX + 2000
+    plafond = ctx.get("plafond_resultat") or _m.READ_MAX + 2000
     if _disposition.json_length(resultat) <= plafond:
         return resultat
     if nom in ("lire", "lire_plusieurs"):
@@ -2238,7 +2238,7 @@ def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
         if stop.is_set():                        # arrêt demandé : les appels restants reçoivent une réponse, pour garder une conversation cohérente
             for b in appels[position:]:
                 conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
-            raise _m.Arret()
+            raise _m.TurnStopped()
         f = a.get("function") or {}
         nom = f.get("name", "")
         args = normaliser_arguments(nom, f.get("arguments"), schema(nom))
@@ -2252,19 +2252,19 @@ def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
                 emit({"type": "info", "texte": _t("↻ Le modèle refait le même appel ({} fois) : je lui dis de passer à autre chose.").format(repetitions)})
                 resultat = _boucles.Guard.message(repetitions)
             elif nom not in ctx["outils_autorises"]:
-                raise _m.ErreurOutil("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
+                raise _m.ToolError("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
             elif position in avance:
                 resultat = avance[position].result()          # lu en même temps que les lectures voisines ; l'ordre des évènements reste celui des appels
             else:
                 resultat = lancer(nom, args)
-        except _m.Arret:
+        except _m.TurnStopped:
             for b in appels[position:]:
                 conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
             raise
-        except _m.ErreurOutil as erreur:
+        except _m.ToolError as erreur:
             resultat = "Erreur : " + str(erreur)
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
+            _m.log_event("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
             resultat = "Erreur inattendue : " + str(erreur)[:300]
         if repetitions >= _boucles.CALL_THRESHOLD:
             garde.refuser(nom, args)
@@ -2280,7 +2280,7 @@ def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
         try:
             _fichiers.save([dict(e, genre="fichier") for e in joints] + [_fichiers.image_entry(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
         except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
-            _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
+            _m.log_event("Registre des fichiers créés : {!r}".format(erreur))
         affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.is_tool(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARKER in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
         emit(dict({"type": "resultat", "nom": nom, "texte": affiche}, **extra))
         conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": borner_resultat(conv, ctx, nom, resultat)}, **extra))
@@ -2336,7 +2336,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                                                                               or ("" if r.get("essai_a_blanc") else _affirmations.wrongful_refusal(derniere_demande, contenu, conv["messages"], ctx["outils_autorises"])))
         if rappel_faux:
             corrige_affirmation, faux_accompli = True, (contenu, rappel_faux)
-            _m.journaliser("Le modèle {} affirme avoir agi sans appeler d'outil : je le lui fais remarquer.".format(r["modele"]))
+            _m.log_event("Le modèle {} affirme avoir agi sans appeler d'outil : je le lui fais remarquer.".format(r["modele"]))
             _observatoire.record("relance", conv["id"], motif="affirme sans agir", modele=r["modele"])
             emit({"type": "info", "texte": _t("Le modèle dit avoir agi (fichier, commande, recherche…) sans appeler d'outil : je lui demande de le faire pour de vrai.")})
             continue

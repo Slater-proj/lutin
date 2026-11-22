@@ -64,7 +64,7 @@ OPENER = urllib.request.build_opener(_NoRedirect)
 
 # --------------------------------------------------------------------------- manifestes et flux
 def folder_data():
-    return _m.DONNEES / "addons"
+    return _m.DATA / "addons"
 
 
 def ids():
@@ -112,7 +112,7 @@ def stream(ident):
             validate_stream(propre, m)
             return propre
         except (OSError, ValueError, AddonError):
-            _m.journaliser("Flux de l'addon {} illisible ou invalide : version livrée utilisée.".format(ident))
+            _m.log_event("Flux de l'addon {} illisible ou invalide : version livrée utilisée.".format(ident))
     return shipped_stream(ident)
 
 
@@ -257,7 +257,7 @@ def describe(ident):
             try:
                 dyn = module.choices(r["cle"]) if module is not None and hasattr(module, "choices") else None
             except Exception as erreur:  # noqa: BLE001  (une liste introuvable ne casse pas la page)
-                _m.journaliser("Addon {} : liste « {} » indisponible ({!r}).".format(ident, r["cle"], erreur))
+                _m.log_event("Addon {} : liste « {} » indisponible ({!r}).".format(ident, r["cle"], erreur))
                 dyn = None
             if dyn is not None:
                 actuel = valeurs.get(r["cle"], "")
@@ -366,7 +366,7 @@ def call(ident, nom, variables=None, delai=TIMEOUT_CALL):
         from . import web
         try:
             web.check_host_web(url)                                          # même garde-fou que l'accès web : jamais une adresse du réseau local
-        except _m.ErreurOutil as e:
+        except _m.ToolError as e:
             return {"ok": False, "donnees": None, "extrait": {}, "erreur": str(e)}
     auth = m.get("auth") or {}
     if auth.get("type") == "oauth1":
@@ -446,7 +446,7 @@ def activate(ident, actif):
         try:
             (module.start if actif else module.stop)()
         except Exception as e:  # noqa: BLE001  (un addon qui plante ne doit pas faire tomber Lutin)
-            _m.journaliser("Addon {} : {} impossible ({!r}).".format(ident, "démarrage" if actif else "arrêt", e))
+            _m.log_event("Addon {} : {} impossible ({!r}).".format(ident, "démarrage" if actif else "arrêt", e))
             if actif:
                 with LOCK_STATE:
                     etat = read_state()
@@ -471,7 +471,7 @@ def loop_verification():
         try:
             check_if_due()
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Vérification des addons : {!r}".format(erreur))
+            _m.log_event("Vérification des addons : {!r}".format(erreur))
 
 
 def start_active():
@@ -485,7 +485,7 @@ def start_active():
                 try:
                     module.start()
                 except Exception as erreur:  # noqa: BLE001
-                    _m.journaliser("Addon {} : démarrage impossible ({!r}).".format(ident, erreur))
+                    _m.log_event("Addon {} : démarrage impossible ({!r}).".format(ident, erreur))
 
 
 def check_if_due(maintenant=None):
@@ -578,7 +578,7 @@ def propose_fix(ident, demander_au_modele=None, lire_doc=None):
             else:
                 from . import web
                 doc = web.tool_web_read(m["doc"], 0, {"web": True})
-        except (_m.ErreurOutil, OSError) as e:
+        except (_m.ToolError, OSError) as e:
             doc = _t("(documentation illisible : {})").format(e)
     consigne = (_t("Le flux d'un addon ne marche plus : le service a peut-être changé. Voici la vérification qui échoue, le flux actuel (JSON) et la documentation du service. "
                    "Propose un flux corrigé : même structure, mêmes noms d'appels, seules les adresses, méthodes, champs et réponses attendues peuvent changer. "
@@ -595,9 +595,9 @@ def propose_fix(ident, demander_au_modele=None, lire_doc=None):
 
 def _ask_json(consigne):
     from . import agent
-    r = _m.reglages()
+    r = _m.settings()
     try:
-        rep = agent.ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+        rep = agent.ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.model_options(r, 0.1),
                                                  "messages": [{"role": "system", "content": "Réponds uniquement en JSON : {\"flux\": {...}, \"explication\": \"...\"}."}, {"role": "user", "content": consigne}]}, 300)
         return json.loads(rep.get("message", {}).get("content") or "{}")
     except (urllib.error.URLError, OSError, ValueError) as e:

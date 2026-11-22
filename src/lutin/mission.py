@@ -41,7 +41,7 @@ ALIVE = {"fil": None, "stop": threading.Event(), "arrets": {}}
 
 # --------------------------------------------------------------------------- stockage
 def path():
-    return _m.DONNEES / "missions.json"
+    return _m.DATA / "missions.json"
 
 
 def read():
@@ -78,7 +78,7 @@ def create(nom, cahier, travail, duree_h=DURATION_DEFAULT_H, autonome=True, conv
         duree_h = max(1, min(DURATION_MAX_H, int(duree_h)))
     except (TypeError, ValueError):
         duree_h = DURATION_DEFAULT_H
-    t = _trav.by_id(_m.config_lue(), str(travail or ""))
+    t = _trav.by_id(_m.read_config(), str(travail or ""))
     if t is None:
         raise ValueError(_t("Choisis un de tes dossiers de travail (onglet Dossiers de travail)."))
     with LOCK:
@@ -125,7 +125,7 @@ def notify(m, texte):
             from . import addons_telegram
             addons_telegram.notify_owners("🎯 " + m["nom"] + " — " + texte)
     except Exception as erreur:  # noqa: BLE001  (une notification ratée ne doit jamais gêner la mission)
-        _m.journaliser("Mission « {} » : notification impossible ({!r}).".format(m.get("nom", "?"), erreur))
+        _m.log_event("Mission « {} » : notification impossible ({!r}).".format(m.get("nom", "?"), erreur))
 
 
 def summary(m):
@@ -239,7 +239,7 @@ def _turn(m):
         return False
     stop = siege.stop
     autonome = bool(m["autonome"])
-    base = _m.reglages()
+    base = _m.settings()
     if m.get("lie"):                                                       # mission menée dans une conversation : ses options font foi (autonome = Fichiers auto ET Commandes auto cochés, relu à chaque tour)
         o = _d.options_read(m["conv"])
         autonome = bool(o.get("auto_ecriture") and o.get("auto_commandes"))
@@ -254,7 +254,7 @@ def _turn(m):
         siege.run(turn_prompt(m), follow_turn(m["id"]), r, identite="mission", lecture_seule=not autonome)
     except Exception as erreur:  # noqa: BLE001
         echec = erreur
-        _m.journaliser("Mission « {} » : tour en erreur : {!r}".format(m["nom"], erreur))
+        _m.log_event("Mission « {} » : tour en erreur : {!r}".format(m["nom"], erreur))
     finally:
         siege.release()
         ALIVE["arrets"].pop(m["id"], None)
@@ -299,7 +299,7 @@ def one_step():
             continue
         if _turn(m):
             return True
-        if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+        if len(_m.ACTIVE_TURNS) >= _m.CONCURRENT_TURNS:
             return False                                                    # plus de place pour personne : la boucle attend au lieu de tourner à vide
     return False                                                            # (un dossier occupé n'empêche pas d'essayer la mission suivante)
 
@@ -310,7 +310,7 @@ def loop():
             if not one_step():
                 ALIVE["stop"].wait(PERIOD)
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Missions : {!r}".format(erreur))
+            _m.log_event("Missions : {!r}".format(erreur))
             ALIVE["stop"].wait(PERIOD)
 
 

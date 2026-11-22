@@ -229,14 +229,14 @@ class Chat(unittest.TestCase):
         p = self.page
         p.evaluer("location.hash = '#/settings/data'")
         p.attendre("!!document.querySelector('.backup dl')")
-        self.assertIn(str(T.A.DONNEES), p.evaluer("document.querySelector('.backup dl').innerText"), "where the data is")
+        self.assertIn(str(T.A.DATA), p.evaluer("document.querySelector('.backup dl').innerText"), "where the data is")
         p.evaluer("window.__saved = []; HTMLAnchorElement.prototype.click = function () { window.__saved.push(this.download); };")
         p.evaluer("[...document.querySelectorAll('.backup button')].find(b => b.innerText === 'Télécharger une sauvegarde').click()")
         p.attendre("window.__saved.length === 1")
         self.assertRegex(p.evaluer("window.__saved[0]"), r"^lutin-backup-\d{8}-\d{6}\.zip$", "saved under the name the server gives")
         archive = Path(tempfile.mkdtemp(prefix="lutin-backup-")) / "backup.zip"
         from lutin import backup
-        backup.export({"config": None, "donnees": T.A.DONNEES, "memoire": T.A.MEMOIRE}, archive)
+        backup.export({"config": None, "donnees": T.A.DATA, "memoire": T.A.MEMORY}, archive)
         root = p.commande("DOM.getDocument")["root"]["nodeId"]
         node = p.commande("DOM.querySelector", nodeId=root, selector="#backup-file")["nodeId"]
         p.commande("DOM.setFileInputFiles", files=[str(archive)], nodeId=node)
@@ -267,11 +267,11 @@ class Chat(unittest.TestCase):
         if AXE.is_file():
             self.axe("on the search of the conversations")
         p.evaluer("(() => { const box = document.querySelector('#conversation-search'); box.value = ''; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
-        T.A.TOURS_ACTIFS[c["id"]] = threading.Event()
+        T.A.ACTIVE_TURNS[c["id"]] = threading.Event()
         try:
             p.attendre("[...document.querySelectorAll('.list .entry')].some(e => e.innerText.includes('Recette de cuisine') && e.querySelector('.mark.working'))", 15)
         finally:
-            T.A.TOURS_ACTIFS.pop(c["id"], None)
+            T.A.ACTIVE_TURNS.pop(c["id"], None)
         p.attendre("![...document.querySelectorAll('.list .mark.working')].length", 15)
         self.assertEqual(p.erreurs, [])
 
@@ -304,7 +304,7 @@ class Chat(unittest.TestCase):
         The system's « open » is replaced: no application is launched."""
         from lutin import images, produced_files
         p = self.page
-        report = T.A.RACINE / "rapport 3p.pdf"
+        report = T.A.ROOT / "rapport 3p.pdf"
         report.write_bytes(b"%PDF-1.4 3p")
         self.addCleanup(lambda: report.unlink(missing_ok=True))
         picture = images.save(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
@@ -645,8 +645,8 @@ class Chat(unittest.TestCase):
     def test_3g_an_answer_still_being_written_elsewhere_is_waited_for_after_a_reload(self):
         p = self.page
         conversation = T.lire("/api/etat")["conversations"][0]["id"]
-        T.A.TOURS_ACTIFS[conversation] = threading.Event()          # as if another page (or a page before the reload) had sent a message and the answer was not finished
-        self.addCleanup(T.A.TOURS_ACTIFS.pop, conversation, None)
+        T.A.ACTIVE_TURNS[conversation] = threading.Event()          # as if another page (or a page before the reload) had sent a message and the answer was not finished
+        self.addCleanup(T.A.ACTIVE_TURNS.pop, conversation, None)
         p.aller(T.BASE + "/app/")
         p.attendre("!!document.querySelector('.list .entry')")
         p.evaluer("document.querySelector('.list .entry').click()")
@@ -657,14 +657,14 @@ class Chat(unittest.TestCase):
             self.axe("while an answer is written elsewhere")
         # This page did not start that turn, so it will never receive its approval card: when the turn waits for one, the page says so instead of promising an answer.
         from lutin import turn_state
-        turn = turn_state.begin(conversation, T.A.TOURS_ACTIFS[conversation])
+        turn = turn_state.begin(conversation, T.A.ACTIVE_TURNS[conversation])
         self.addCleanup(turn_state.end, turn)
         waits = turn_state.waiting(conversation, "Write notes.txt")
         waits.__enter__()
         self.addCleanup(waits.__exit__, None, None, None)
         p.attendre("document.querySelector('.elsewhere').innerText.includes(\"demande d'accord\")", 10)
         self.assertTrue(p.evaluer("!!document.querySelector('.composer .stop')"), "and it can still be stopped from here")
-        T.A.TOURS_ACTIFS.pop(conversation)
+        T.A.ACTIVE_TURNS.pop(conversation)
         p.attendre("!document.querySelector('.elsewhere') && !!document.querySelector('.composer button[type=submit]')", 10)
         self.assertEqual(p.erreurs, [])
 
@@ -687,7 +687,7 @@ class Chat(unittest.TestCase):
             release.wait(20)
             return 0, "1.0", "1.1"
         for patch in (mock.patch.dict(os.environ, {"LUTIN_VERSION_CACHE": str(cache)}),
-                      mock.patch.object(access, "saved_security", lambda: T.A.SECURITE),
+                      mock.patch.object(access, "saved_security", lambda: T.A.SECURITY),
                       mock.patch.dict(access.RESTAURE, {"fait": False}),
                       mock.patch.dict(access.UPDATE, {"etat": "", "lignes": [], "avant": "", "apres": ""}),
                       mock.patch.object(access, "can_restart", lambda: supervised[0]),
@@ -799,7 +799,7 @@ class Chat(unittest.TestCase):
         """PARITY.md item 8: « Web search » in Settings › Knowledge, on /api/v1/web-search. Hermetic: recherche.json is in the temporary data folder,
         and the test of the engines is replaced (nothing reaches the network)."""
         p = self.page
-        kept = T.A.DONNEES / "recherche.json"
+        kept = T.A.DATA / "recherche.json"
         kept.unlink(missing_ok=True)
         self.addCleanup(lambda: kept.unlink(missing_ok=True))
         tried = [{"nom": "searxng", "ok": True, "nombre": 9, "ms": 80, "erreur": "", "exemple": "Un titre trouvé"},
@@ -842,7 +842,7 @@ class Chat(unittest.TestCase):
         from lutin import security as S
         config = Path(tempfile.mkdtemp(prefix="lutin-access-")) / "config.json"
         spare = S.Devices()
-        for patch in (mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(config)}), mock.patch.object(T.A, "APPAREILS", spare)):
+        for patch in (mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(config)}), mock.patch.object(T.A, "DEVICES", spare)):
             patch.start()
             self.addCleanup(patch.stop)
         reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
@@ -863,7 +863,7 @@ class Chat(unittest.TestCase):
         self.press(save)
         p.attendre("%s.querySelector('.notice').innerText.includes('redémarrage')" % section)
         self.assertEqual(json.loads(config.read_text(encoding="utf-8"))["securite"]["niveau"], S.RESEAU, "saved for the next start")
-        self.assertEqual(T.A.SECURITE.niveau, S.LOCAL, "and not applied now")
+        self.assertEqual(T.A.SECURITY.niveau, S.LOCAL, "and not applied now")
         p.attendre("!!document.querySelector('.lutin-banner.restart-needed')")          # the shell read its status again
         self.picture("3t-access")
         p.evaluer("%s.click()" % radio("local"))
@@ -910,12 +910,12 @@ class Chat(unittest.TestCase):
         variants = {"defaut": {"id": "qwen3:8b", "go": 5.2}, "variantes": [{"precision": "q4_K_M", "id": "qwen3:8b-q4_K_M", "go": 5.2, "defaut": True},
                                                                           {"precision": "fp16", "id": "qwen3:8b-fp16", "go": 16.4, "defaut": False}]}
         library = {"suite": False, "modeles": [{"nom": "gemma3", "description": "A model that sees.", "capacites": ["vision"], "tailles": ["4b", "27b"], "maj": "", "telechargements": 1200}]}
-        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
+        installed, model = list(T.INSTALLES), T.A.settings()["modele"]
         self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.save_settings({"modele": model})))
         T.INSTALLES[:] = ["qwen3:8b", "old:7b"]
         T.A.save_settings({"modele": "qwen3:8b"})
         for patch in (mock.patch.dict(os.environ, {"LUTIN_PROPOSITIONS": str(proposals), "LUTIN_CONFIG": str(config), "LUTIN_HORS_LIGNE": ""}),
-                      mock.patch.object(T.A, "VERIFICATEUR", asked.append), mock.patch.object(model_variants, "list_variants", lambda name: variants),
+                      mock.patch.object(T.A, "MODEL_CHECKER", asked.append), mock.patch.object(model_variants, "list_variants", lambda name: variants),
                       mock.patch.object(model_discovery, "search", lambda *args, **kwargs: library)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -988,7 +988,7 @@ class Chat(unittest.TestCase):
         installed = list(T.INSTALLES)
         self.addCleanup(lambda: T.INSTALLES.__setitem__(slice(None), installed))
         T.INSTALLES[:] = ["qwen3:8b", "gemma3:4b"]
-        for patch in (mock.patch.dict(os.environ, {"LUTIN_BENCH": str(path)}), mock.patch.object(T.A, "lancer_bench_serie", measure),
+        for patch in (mock.patch.dict(os.environ, {"LUTIN_BENCH": str(path)}), mock.patch.object(T.A, "start_bench_series", measure),
                       mock.patch.object(engine_bench, "view", lambda *args: seen), mock.patch.object(engine_bench, "launch", lambda *args: launched.append(args[1]))):
             patch.start()
             self.addCleanup(patch.stop)
@@ -1298,7 +1298,7 @@ class Chat(unittest.TestCase):
                       mock.patch.object(change_review, "git_state", lambda: {"dispo": True, "branche": "main", "total": 1, "modifies": [{"chemin": "a.py", "etat": " M"}]}),
                       mock.patch.object(change_review, "git_message_of", lambda files: {"message": "fix: billing"}),
                       mock.patch.object(change_review, "git_commit", lambda message, files: committed.append((message, files)) or {"ok": True, "sortie": "1 file changed"}),
-                      mock.patch.object(T.A, "lire_journal", lambda n: [{"ts": "2026-11-18T10:00:00", "outil": "ecrire", "cible": "a.py", "issue": "ok", "accord": "manuel"}])):
+                      mock.patch.object(T.A, "read_log", lambda n: [{"ts": "2026-11-18T10:00:00", "outil": "ecrire", "cible": "a.py", "issue": "ok", "accord": "manuel"}])):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/chat/%s'; location.reload()" % c["id"])
@@ -1425,7 +1425,7 @@ class Chat(unittest.TestCase):
         search model are replaced."""
         p = self.page
         from lutin import embeddings, recall
-        memory = T.A.MEMOIRE / "MEMOIRE.md"
+        memory = T.A.MEMORY / "MEMOIRE.md"
         before = memory.read_bytes() if memory.is_file() else None
         self.addCleanup(lambda: memory.write_bytes(before) if before is not None else memory.unlink(missing_ok=True))
         found = [{"source": "documents/contrat.pdf", "titre": "contrat.pdf", "extrait": "… le taux de TVA est de 20 % …", "conversation": False}]
@@ -1578,7 +1578,7 @@ class Chat(unittest.TestCase):
 
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
-        with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):
+        with mock.patch.object(T.A, "CONCURRENT_TURNS", 0):
             self.write("Too many at once")
             p.evaluer("document.querySelector('.composer button[type=submit]').click()")
             p.attendre("!!document.querySelector('.dock .problem')")
@@ -1605,7 +1605,7 @@ class Chat(unittest.TestCase):
 
     def test_5b_the_models_screen_lists_uses_downloads_and_deletes(self):
         p = self.page
-        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
+        installed, model = list(T.INSTALLES), T.A.settings()["modele"]
         self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.save_settings({"modele": model})))
         T.INSTALLES[:] = ["qwen3.8:27b", "other:7b"]
         T.A.save_settings({"modele": "qwen3.8:27b"})
@@ -1615,7 +1615,7 @@ class Chat(unittest.TestCase):
         self.assertIn("tourne", p.evaluer("document.querySelector('.models .engine').innerText"))
         self.picture("5b-models")
         p.evaluer("[...document.querySelectorAll('.models .card')].find(c => c.innerText.includes('other:7b')).querySelector('.button:not(.danger)').click()")
-        self.eventually(lambda: T.A.reglages()["modele"] == "other:7b", "the model in use was changed on the server")
+        self.eventually(lambda: T.A.settings()["modele"] == "other:7b", "the model in use was changed on the server")
         p.attendre("document.querySelector('.models .card.current strong').innerText === 'other:7b'")
         # A model by its name is in Search, the same block for every engine (2026-11-22, the screen unified); it waits for a second click, as every download.
         tab = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === %s)"
@@ -1755,7 +1755,7 @@ class Chat(unittest.TestCase):
 
     def first_launch(self):
         """A machine that looks new: no history, no model, no flag. The engine is the fake one, which runs."""
-        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
+        installed, model = list(T.INSTALLES), T.A.settings()["modele"]
         flag = api_v1._setup_path()
         flag.unlink(missing_ok=True)
         self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.save_settings({"modele": model}), flag.unlink(missing_ok=True)))
@@ -1777,41 +1777,41 @@ class Chat(unittest.TestCase):
         self.assertIn("RTX 4070", p.evaluer("document.querySelector('.engine-models .machine .summary').innerText"))
         p.evaluer("(() => { const box = document.querySelector('#budget'); box.value = '2'; box.dispatchEvent(new Event('input', {bubbles: true})); box.form.requestSubmit(); })()")
         p.attendre("[...document.querySelectorAll('.engine-models .machine .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
-        self.eventually(lambda: T.A.reglages()["budget_go"] == 2.0, "the figure is kept by the server")
+        self.eventually(lambda: T.A.settings()["budget_go"] == 2.0, "the figure is kept by the server")
         if AXE.is_file():
             self.axe("with the memory correction open")
         p.evaluer("[...document.querySelectorAll('.engine-models .machine .correct .button')].find(b => b.innerText.startsWith('Revenir')).click()")
         p.attendre("![...document.querySelectorAll('.engine-models .machine .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
-        self.eventually(lambda: T.A.reglages()["budget_go"] == 0.0, "back to the detection")
+        self.eventually(lambda: T.A.settings()["budget_go"] == 0.0, "back to the detection")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
     def test_5h_a_setting_is_changed_kept_by_the_server_and_refused_out_of_range(self):
         p = self.page
-        before = T.A.reglages()
+        before = T.A.settings()
         keys = ("temperature", "web", "mode", "memoire_longue", "fiche_part", "fiche_scribe")
         self.addCleanup(lambda: T.A.save_settings({key: before[key] for key in keys}))
         p.evaluer("location.hash = '#/settings/general'")
         p.attendre("!!document.querySelector('#setting-temperature')")
         change = "(() => { const box = document.querySelector('#%s'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()"
         p.evaluer(change % ("setting-temperature", js("0.9")))
-        self.eventually(lambda: T.A.reglages()["temperature"] == 0.9, "a number is kept")
+        self.eventually(lambda: T.A.settings()["temperature"] == 0.9, "a number is kept")
         p.attendre("document.querySelector('.settings .saved').innerText.includes('Enregistré')")
         p.evaluer(change % ("setting-temperature", js("5")))
         p.attendre("!!document.querySelector('#setting-temperature').closest('.row').querySelector('.error')")
-        self.assertEqual(T.A.reglages()["temperature"], 0.9, "a value out of its range is refused before it is sent")
+        self.assertEqual(T.A.settings()["temperature"], 0.9, "a value out of its range is refused before it is sent")
         p.evaluer(change % ("setting-mode", js("technical")))
-        self.eventually(lambda: T.A.reglages()["mode"] == "technique", "a choice is stored under the word the engine knows")
+        self.eventually(lambda: T.A.settings()["mode"] == "technique", "a choice is stored under the word the engine knows")
         p.evaluer("location.hash = '#/settings/knowledge'")
         p.attendre("!!document.querySelector('#setting-web')")
         wanted = not before["web"]
         p.evaluer("document.querySelector('#setting-web').click()")
-        self.eventually(lambda: T.A.reglages()["web"] == wanted, "a switch is kept as soon as it is clicked")
+        self.eventually(lambda: T.A.settings()["web"] == wanted, "a switch is kept as soon as it is clicked")
         p.evaluer(change % ("setting-progress_sheet_share", js("15")))          # PARITY.md item 16: settings v1 had without a control
-        self.eventually(lambda: T.A.reglages()["fiche_part"] == 15, "the share of the progress sheet is kept")
+        self.eventually(lambda: T.A.settings()["fiche_part"] == 15, "the share of the progress sheet is kept")
         scribe = not before.get("fiche_scribe", True)
         p.evaluer("document.querySelector('#setting-progress_sheet_scribe').click()")
-        self.eventually(lambda: T.A.reglages()["fiche_scribe"] == scribe, "the scribe is turned on or off")
+        self.eventually(lambda: T.A.settings()["fiche_scribe"] == scribe, "the scribe is turned on or off")
         p.evaluer("location.hash = '#/settings/general'")
         p.attendre("!!document.querySelector('#setting-auxiliary_model')")
         p.evaluer("location.hash = '#/settings/safety'")
@@ -1885,10 +1885,10 @@ class Chat(unittest.TestCase):
         """ADR 0016, stage 4. The server pairs with itself (as tests/test_api_v1_machines.py does): it is both this machine and the other one, so each
         action reaches the real node code. Nothing reaches the computer: the shutdown is replaced."""
         p = self.page
-        before = {key: T.A.reglages().get(key) for key in ("cluster", "machine", "modele")}
+        before = {key: T.A.settings().get(key) for key in ("cluster", "machine", "modele")}
         for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES):
             kept.clear()
-        T.A.LIMITEUR_PIN.evenements.clear()          # the pairing counts against the limit of the node, which is this server
+        T.A.PIN_LIMITER.evenements.clear()          # the pairing counts against the limit of the node, which is this server
 
         def restore():
             machines._ecrire_registre([])
@@ -1925,9 +1925,9 @@ class Chat(unittest.TestCase):
             self.axe("on the Machines tab, multi-machine mode off")
         p.evaluer("document.querySelector('.machines .turn-on').click()")
         p.attendre("!!document.querySelector('#machine-address')")
-        self.assertTrue(T.A.reglages()["cluster"], "the button turns the multi-machine mode on")
+        self.assertTrue(T.A.settings()["cluster"], "the button turns the multi-machine mode on")
         p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher').click()")
-        self.eventually(lambda: not T.A.reglages()["cluster"], "turned on then left with no machine paired: turned off again")
+        self.eventually(lambda: not T.A.settings()["cluster"], "turned on then left with no machine paired: turned off again")
         p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
         p.attendre("!!document.querySelector('.machines .turn-on')")
         p.evaluer("document.querySelector('.machines .turn-on').click()")
@@ -1960,7 +1960,7 @@ class Chat(unittest.TestCase):
         self.assertEqual(asked, ["shutdown"])
 
         p.evaluer("(() => { const box = document.querySelector('#machine-answering'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()" % js(identifier))
-        self.eventually(lambda: T.A.reglages()["machine"] == identifier, "who answers by default is kept")
+        self.eventually(lambda: T.A.settings()["machine"] == identifier, "who answers by default is kept")
         if AXE.is_file():
             self.axe("on the Machines tab with a paired machine")
         self.picture("5h3-machines")
@@ -1972,7 +1972,7 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("[...document.querySelectorAll('header select optgroup')].map(g => g.label)"), ["Cette machine", "Bureau"], "the models of each machine under its name")
         choice = identifier + "|" + T.INSTALLES[0]
         p.evaluer("(() => { const box = document.querySelector('header select'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()" % js(choice))
-        self.eventually(lambda: (T.A.reglages()["machine"], T.A.reglages()["modele"]) == (identifier, T.INSTALLES[0]), "a model of the other machine makes it answer")
+        self.eventually(lambda: (T.A.settings()["machine"], T.A.settings()["modele"]) == (identifier, T.INSTALLES[0]), "a model of the other machine makes it answer")
 
         machines._ecrire_registre([dict(machines.lire()[0], adresse="http://127.0.0.1:9")])          # the other machine goes off
         for kept in (machines.SONDES, machines.DERNIER_ETAT):
@@ -1996,7 +1996,7 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.machines .machine .confirm .primary').click()")
         p.attendre("!!document.querySelector('.machines .empty')")
         self.assertEqual(machines.lire(), [])
-        self.assertEqual(T.A.reglages()["machine"], "", "the machine that answered is gone: this one answers again")
+        self.assertEqual(T.A.settings()["machine"], "", "the machine that answered is gone: this one answers again")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
@@ -2134,12 +2134,12 @@ class Chat(unittest.TestCase):
         an image (kept by that machine), renames it and deletes it, all through the relayed routes. The server is paired with itself, so « the other
         machine » is the real node code; what it reads of this computer is replaced."""
         p = self.page
-        before = {key: T.A.reglages().get(key) for key in ("cluster", "machine")}
+        before = {key: T.A.settings().get(key) for key in ("cluster", "machine")}
         for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.INFOS_NOEUD):
             kept.clear()
         machines.CARTES.update(t=-999.0, v=None)
         machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
-        T.A.LIMITEUR_PIN.evenements.clear()
+        T.A.PIN_LIMITER.evenements.clear()
         for patch in (mock.patch.object(power, "network_adapters", lambda **k: []),
                       mock.patch.object(power, "wake_state", lambda *a, **k: {"mac": "", "carte": "", "pret": None, "avertissements": []}),
                       mock.patch.object(power, "startup_state", lambda *a, **k: {"installe": True, "possible": True, "limites": ""}),
@@ -2225,8 +2225,8 @@ class Chat(unittest.TestCase):
         p = self.page
         folder = tempfile.mkdtemp(prefix="lutin-projects-")
         self.addCleanup(shutil.rmtree, folder, True)
-        root = T.A.RACINE
-        self.addCleanup(lambda: T.A.definir_racine(root))
+        root = T.A.ROOT
+        self.addCleanup(lambda: T.A.set_root(root))
         configuration = Path(tempfile.mkdtemp(prefix="lutin-projects-config-"))
         self.addCleanup(shutil.rmtree, configuration, True)
         (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
@@ -2256,7 +2256,7 @@ class Chat(unittest.TestCase):
         self.assertTrue(p.evaluer("!!document.querySelector('.projects .card.current')"), "one folder is in use")
         p.evaluer("[...document.querySelectorAll('.projects .card')].find(c => c.innerText.includes('Demo folder')).querySelector('.button.primary').click()")
         p.attendre("document.querySelector('.projects .card.current strong').innerText === 'Demo folder'")
-        self.assertEqual(Path(T.A.RACINE).resolve(), Path(folder).resolve(), "the folder of the next conversations is the chosen one")
+        self.assertEqual(Path(T.A.ROOT).resolve(), Path(folder).resolve(), "the folder of the next conversations is the chosen one")
         p.evaluer("[...document.querySelectorAll('.projects .card')].find(c => c.innerText.includes('Demo folder')).querySelector('.button:not(.primary)').click()")
         p.attendre("!!document.querySelector('.projects .confirm')")
         self.assertTrue(Path(folder).is_dir())
@@ -2272,8 +2272,8 @@ class Chat(unittest.TestCase):
         p = self.page
         base = Path(tempfile.mkdtemp(prefix="lutin-projects-details-"))
         self.addCleanup(shutil.rmtree, base, True)
-        root = T.A.RACINE
-        self.addCleanup(lambda: T.A.definir_racine(root))
+        root = T.A.ROOT
+        self.addCleanup(lambda: T.A.set_root(root))
         configuration = Path(tempfile.mkdtemp(prefix="lutin-projects-config-"))
         self.addCleanup(shutil.rmtree, configuration, True)
         (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
@@ -2389,7 +2389,7 @@ class Chat(unittest.TestCase):
         p = self.page
         from lutin import security as S
         spare = S.Devices()
-        patch = mock.patch.object(T.A, "APPAREILS", spare)          # the test server is at the level « this machine only »: the page reaches it without a session
+        patch = mock.patch.object(T.A, "DEVICES", spare)          # the test server is at the level « this machine only »: the page reaches it without a session
         patch.start()
         self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/settings/devices'")
@@ -2565,8 +2565,8 @@ class Chat(unittest.TestCase):
         (skill / "SKILL.md").write_text("---\nname: review\ndescription: Review a change\n---\nLook.\n", encoding="utf-8")
         copy = str(Path(tempfile.mkdtemp(prefix="lutin-claude-copy-"), "copy"))
         self.addCleanup(shutil.rmtree, str(Path(copy).parent), True)
-        root = T.A.RACINE
-        self.addCleanup(lambda: T.A.definir_racine(root))
+        root = T.A.ROOT
+        self.addCleanup(lambda: T.A.set_root(root))
         configuration = Path(tempfile.mkdtemp(prefix="lutin-claude-config-"))
         self.addCleanup(shutil.rmtree, configuration, True)
         (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
@@ -2597,7 +2597,7 @@ class Chat(unittest.TestCase):
         self.assertTrue((Path(copy) / "CLAUDE.md").is_file() and (Path(copy) / ".claude" / "skills" / "review" / "SKILL.md").is_file(), "the project was copied")
         self.assertEqual((Path(folder) / "CLAUDE.md").read_text(encoding="utf-8"), "# Notes\n", "the original is untouched")
         p.attendre("[...document.querySelectorAll('.projects .card strong')].some(e => e.innerText === 'Claude copy')")
-        self.assertEqual(Path(T.A.RACINE).resolve(), Path(copy).resolve(), "the copy is now the folder of the next conversations")
+        self.assertEqual(Path(T.A.ROOT).resolve(), Path(copy).resolve(), "the copy is now the folder of the next conversations")
         self.assertEqual(p.evaluer("document.querySelector('.projects .card.current strong').innerText"), "Claude copy")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
@@ -2645,8 +2645,8 @@ class Chat(unittest.TestCase):
         from lutin import mission
         folder = tempfile.mkdtemp(prefix="lutin-mission-folder-")
         self.addCleanup(shutil.rmtree, folder, True)
-        root = T.A.RACINE
-        self.addCleanup(lambda: T.A.definir_racine(root))
+        root = T.A.ROOT
+        self.addCleanup(lambda: T.A.set_root(root))
         configuration = Path(tempfile.mkdtemp(prefix="lutin-mission-config-"))
         self.addCleanup(shutil.rmtree, configuration, True)
         (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
@@ -2862,15 +2862,15 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: skills._sources_file().unlink(missing_ok=True))
         folder = tempfile.mkdtemp(prefix="lutin-skills-ui-")
         self.addCleanup(shutil.rmtree, folder, True)
-        root = T.A.RACINE
-        self.addCleanup(lambda: T.A.definir_racine(root))
+        root = T.A.ROOT
+        self.addCleanup(lambda: T.A.set_root(root))
         configuration = Path(tempfile.mkdtemp(prefix="lutin-skills-config-"))
         self.addCleanup(shutil.rmtree, configuration, True)
         (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": folder}}), encoding="utf-8")
         environment = mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(configuration / "config.json")})
         environment.start()
         self.addCleanup(environment.stop)
-        T.A.definir_racine(folder)
+        T.A.set_root(folder)
         installed = Path(folder, ".claude", "skills", "pdf")
         fill = "(() => { const box = document.querySelector(%s); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
         press = "[...document.querySelectorAll('.tps .button')].find(b => b.innerText === %s).click()"
@@ -2924,7 +2924,7 @@ class Chat(unittest.TestCase):
 
     def test_5s_a_skill_is_written_changed_and_deleted_and_the_notes_are_kept(self):
         p = self.page
-        folder = Path(T.A.RACINE) / "skills"
+        folder = Path(T.A.ROOT) / "skills"
         self.addCleanup(lambda: [f.unlink() for f in folder.glob("*.md")] if folder.is_dir() else None)
         saved = {name: T.A.read_memory(name) for name in ("CONTEXTE.md", "MEMOIRE.md")}
         self.addCleanup(lambda: [T.A.write_memory(name, text) for name, text in saved.items()])
@@ -2995,7 +2995,7 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.setup .guide .ok[role=status]')")
         self.eventually(lambda: len(T.INSTALLES) == len(before) + 1, "the confirmed download reached the engine", 10)
         downloaded = [name for name in T.INSTALLES if name not in before][0]
-        self.eventually(lambda: T.A.reglages().get("modele") == downloaded, "the model of the first launch becomes the one in use (it stayed the old default)")
+        self.eventually(lambda: T.A.settings().get("modele") == downloaded, "the model of the first launch becomes the one in use (it stayed the old default)")
         p.attendre("!!document.querySelector('.setup .downloads li')")
         p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => ['Continuer', 'Choisir plus tard'].includes(b.innerText)).click()")
         p.attendre("document.querySelector('.setup h1') && document.querySelector('.setup h1').innerText === 'Tout est prêt'")
@@ -3150,7 +3150,7 @@ class Chat(unittest.TestCase):
         """Maintainer's request (2026-11-20): « a status of the model loaded in RAM or not, around the selector »."""
         p = self.page
         self.addCleanup(lambda: T.PS.clear())
-        model = T.A.reglages()["modele"]          # what the server asks the engine about; the selector may still show a list an earlier test emptied
+        model = T.A.settings()["modele"]          # what the server asks the engine about; the selector may still show a list an earlier test emptied
         T.PS.clear()
         p.evaluer("location.hash = '#/chat'")
         p.evaluer("location.reload()")

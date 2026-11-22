@@ -28,7 +28,7 @@ class PageMachines(T.Base):
     def setUp(self):
         super().setUp()
         self.p_reglages.stop()          # le mode multi-machines est actif dans cette page
-        self.p_reglages = mock.patch.object(srv._m, "reglages", lambda: dict(A.REGLAGES_DEFAUT, cluster=True))
+        self.p_reglages = mock.patch.object(srv._m, "settings", lambda: dict(A.DEFAULT_SETTINGS, cluster=True))
         self.p_reglages.start()
         self.noeud.en_memoire = lambda nom: None          # l'état de la page interroge le moteur (ici un faux)
 

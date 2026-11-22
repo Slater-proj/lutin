@@ -89,7 +89,7 @@ class Choisir(unittest.TestCase):
 
 class BrancheeDansLeDialogue(unittest.TestCase):
     def test_le_routage_est_desactive_par_defaut_et_ne_change_pas_le_reglage(self):
-        self.assertFalse(A.REGLAGES_DEFAUT["routage"])
+        self.assertFalse(A.DEFAULT_SETTINGS["routage"])
         r = {"modele": "qwen3:8b", "machine": ""}
         evenements = []
         self.assertFalse(agent.router_la_demande(r, "écris une fonction python", False, evenements.append, "c1"))
@@ -99,7 +99,7 @@ class BrancheeDansLeDialogue(unittest.TestCase):
     def test_le_routage_actif_change_le_modele_de_cette_demande_et_le_dit(self):
         r = {"modele": "qwen3:8b", "machine": "", "routage": True}
         evenements = []
-        with mock.patch.object(agent, "contexte_routage", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELES", CATALOGUE):
+        with mock.patch.object(agent, "contexte_routage", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELS", CATALOGUE):
             self.assertTrue(agent.router_la_demande(r, "écris une fonction python", False, evenements.append, "c1"))
         self.assertEqual(r["modele"], "qwen3-coder:30b")
         self.assertIn("Modèle choisi pour cette demande", evenements[0]["texte"])
@@ -117,7 +117,7 @@ class BrancheeDansLeDialogue(unittest.TestCase):
         r = {"modele": "qwen3:1.7b", "machine": "", "routage": True}
         corps = {"model": "qwen3:1.7b"}
         evenements = []
-        with mock.patch.object(agent, "contexte_routage", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELES", CATALOGUE):
+        with mock.patch.object(agent, "contexte_routage", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELS", CATALOGUE):
             self.assertTrue(agent.monter_en_gamme(r, corps, evenements.append, "c1", "le modèle n'a rien écrit"))
             self.assertEqual((r["modele"], corps["model"]), ("qwen3:32b", "qwen3:32b"))
             self.assertFalse(agent.monter_en_gamme(r, corps, evenements.append, "c1", "encore"), "une seule montée par demande")
@@ -211,17 +211,17 @@ class Api(unittest.TestCase):
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
-        cls.avant = A.SECURITE
-        A.SECURITE = S.Security(niveau=S.LOCAL)
+        cls.avant = A.SECURITY
+        A.SECURITY = S.Security(niveau=S.LOCAL)
 
     @classmethod
     def tearDownClass(cls):
-        A.SECURITE = cls.avant
+        A.SECURITY = cls.avant
         cls.serveur.shutdown()
 
     def appel(self, methode, chemin, corps=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
-        h = {"Host": "127.0.0.1:%d" % self.port, "X-Token": A.JETON}
+        h = {"Host": "127.0.0.1:%d" % self.port, "X-Token": A.TOKEN}
         donnees = json.dumps(corps).encode() if corps is not None else None
         if donnees:
             h["Content-Type"] = "application/json"
@@ -243,7 +243,7 @@ class Api(unittest.TestCase):
         self.assertEqual(self.appel("GET", "/api/observatoire")[1]["resume"]["modeles"], [])
 
     def test_historique_des_mesures_par_l_api(self):
-        chemin = A.chemin_bench()
+        chemin = A.bench_path()
         bench.path_history(chemin).unlink(missing_ok=True)
         l = Laboratoire()
         bench.save(chemin, l.mesure(40))

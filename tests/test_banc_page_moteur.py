@@ -49,17 +49,17 @@ class BancDeLaPage(unittest.TestCase):
         self.assertIsInstance(agent.client_banc(), bench.AdaptateurMoteur)
 
     def test_la_mesure_rapide_passe_par_le_moteur_choisi(self):
-        A._mesurer_un("m1", True)
+        A._measure_one("m1", True)
         self.assertEqual(A.BENCH["erreur"], "")
         self.assertTrue(self.moteur.demandes, "le moteur choisi a reçu la demande de mesure")
-        mesure = bench.read(A.chemin_bench())["m1"]
+        mesure = bench.read(A.bench_path())["m1"]
         self.assertEqual(mesure["resultats"]["vitesse"]["tok_s"], 50.0)
 
     def test_la_serie_demande_les_modeles_du_moteur_choisi(self):
         with self.assertRaises(ValueError) as e:
-            A.lancer_bench_serie(["absent-de-ce-moteur"])
+            A.start_bench_series(["absent-de-ce-moteur"])
         self.assertIn("absent-de-ce-moteur", str(e.exception))
-        self.assertEqual(A.lancer_bench_serie(["m1"], True)["modeles"], ["m1"])
+        self.assertEqual(A.start_bench_series(["m1"], True)["modeles"], ["m1"])
 
 
 class AvecOllama(unittest.TestCase):

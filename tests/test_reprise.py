@@ -215,12 +215,12 @@ class DansLeMoteurEtLaLigneDeCommande(Base):
     def test_fonctions_du_moteur(self):
         trouve = A.resume_detect(str(self.assistant))
         self.assertEqual((trouve["conversations"], trouve["skills"]), (4, 2))
-        avant = A.RACINE
+        avant = A.ROOT
         try:
-            A.definir_racine(str(self.travail))
+            A.set_root(str(self.travail))
             r = A.resume_import(str(self.assistant), ["skills", "conversations"])
         finally:
-            A.definir_racine(str(avant))
+            A.set_root(str(avant))
         self.assertEqual(len(r["skills"]["importes"]), 2)
         self.assertEqual(r["conversations"]["importees"], 2)
         self.assertTrue(any("Conversations" in ligne for ligne in r["resume"]))

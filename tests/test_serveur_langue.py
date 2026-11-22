@@ -30,7 +30,7 @@ def requete(methode, chemin, corps=None, jeton=True):
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
     h = {"Host": "127.0.0.1:%d" % PORT}
     if jeton:
-        h["X-Token"] = A.JETON
+        h["X-Token"] = A.TOKEN
     donnees = None
     if corps is not None:
         donnees = json.dumps(corps).encode("utf-8")
@@ -106,15 +106,15 @@ class LangueDuServeur(unittest.TestCase):
         (_TEMP / "projet" / "a.txt").write_text("un\ndeux\n", encoding="utf-8")
         os.environ["LUTIN_LANGUE"] = "en"
         try:
-            with self.assertRaisesRegex(A.ErreurOutil, "Path refused: outside the project"):
+            with self.assertRaisesRegex(A.ToolError, "Path refused: outside the project"):
                 A.safe_path("../x")
-            with self.assertRaisesRegex(A.ErreurOutil, "File not found: absent.txt"):
+            with self.assertRaisesRegex(A.ToolError, "File not found: absent.txt"):
                 A.read_tool("absent.txt")
             self.assertIn("lines 1 to 2 of 2", A.read_tool("a.txt"))
             self.assertEqual(A.search_tool("introuvable_xyz"), "No result.")
         finally:
             os.environ["LUTIN_LANGUE"] = "fr"
-        with self.assertRaisesRegex(A.ErreurOutil, "Fichier introuvable : absent.txt"):
+        with self.assertRaisesRegex(A.ToolError, "Fichier introuvable : absent.txt"):
             A.read_tool("absent.txt")
         self.assertEqual(A.search_tool("introuvable_xyz"), "Aucun résultat.")
 

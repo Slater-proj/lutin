@@ -40,7 +40,7 @@ class Produced(unittest.TestCase):
     def setUp(self):
         self.conversation = A.conv_new()["id"]
         self.addCleanup(lambda: A.conv_delete(self.conversation))
-        self.report = A.RACINE / "rapport été.pdf"
+        self.report = A.ROOT / "rapport été.pdf"
         self.report.write_bytes(b"%PDF-1.4 the report")
         self.addCleanup(lambda: self.report.unlink(missing_ok=True))
         self.image = images.save(PNG)
@@ -86,7 +86,7 @@ class Produced(unittest.TestCase):
             self.assertEqual(send("POST", path, V.DEVICE, {})[0], 403, "a paired phone opens nothing on this machine")
             self.assertEqual(send("POST", path, V.OWNER, {})[:2], (200, {"opened": True}))
             self.assertEqual(launched, [self.report.resolve()])
-            script = A.RACINE / "outil.py"
+            script = A.ROOT / "outil.py"
             script.write_text("print(1)", encoding="utf-8")
             self.addCleanup(script.unlink)
             stored = A.conv_read(self.conversation)
@@ -103,7 +103,7 @@ class Produced(unittest.TestCase):
     def test_a_produced_file_is_deleted_from_the_conversation_and_the_disk(self):
         path = "{}/files/{}".format(self.base, self.entry["id"])
         self.assertEqual(send("DELETE", path, V.DEVICE)[0], 403)
-        with mock.patch.dict(A.TOURS_ACTIFS, {self.conversation: object()}):
+        with mock.patch.dict(A.ACTIVE_TURNS, {self.conversation: object()}):
             status, answer, _ = send("DELETE", path, V.OWNER)
         self.assertEqual((status, answer["error"]["code"]), (409, "turn_running"))
         self.assertTrue(self.report.is_file(), "nothing is deleted while an answer runs")

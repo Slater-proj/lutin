@@ -12,7 +12,7 @@ MAX_SIZE = 20_000_000                 # au-delà, l'archive n'est plus agrandie 
 
 
 def folder():
-    return _m.DONNEES / "archives"
+    return _m.DATA / "archives"
 
 
 def path_of(ident):
@@ -40,7 +40,7 @@ def add(ident, messages):
             sortie.write("\n".join(lignes) + "\n")
         return len(lignes)
     except (OSError, ValueError) as erreur:
-        _m.journaliser("Archive non écrite (conversation {}) : {!r}".format(ident, erreur))
+        _m.log_event("Archive non écrite (conversation {}) : {!r}".format(ident, erreur))
         return 0
 
 
@@ -62,7 +62,7 @@ def add_result(ident, tool_name, text):
             out.write(json.dumps({"role": "result", "tool_name": str(tool_name or ""), "content": text[:RESULT_MAX]}, ensure_ascii=False) + "\n")
         return True
     except (OSError, ValueError) as error:
-        _m.journaliser("Archive non écrite (conversation {}) : {!r}".format(ident, error))
+        _m.log_event("Archive non écrite (conversation {}) : {!r}".format(ident, error))
         return False
 
 

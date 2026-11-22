@@ -231,10 +231,10 @@ def dispatch(handler, method):
     except ValueError as invalid:                          # the functions underneath say what is wrong with a ValueError written for the user
         status, payload = 400, error("invalid_request", str(invalid))
     except (urllib.error.URLError, TimeoutError, ConnectionError) as gone:          # an engine or a service that does not answer (socket.timeout is TimeoutError)
-        _m.journaliser("{} {} : le moteur ou le service ne répond pas : {!r}".format(method, path, gone))
+        _m.log_event("{} {} : le moteur ou le service ne répond pas : {!r}".format(method, path, gone))
         status, payload = 502, error("engine_unavailable", _t("Le moteur ou le service appelé ne répond pas ({}). Vérifie qu'il tourne (Modèles > Moteurs), puis réessaie.").format(str(gone)[:200]))
     except Exception as bug:  # noqa: BLE001  (any other failure gets an answer that says it: a dropped connection made the page say « Lutin does not answer »)
-        _m.journaliser("{} {} : erreur interne : {}".format(method, path, "".join(traceback.format_exception(bug))[-2000:]))
+        _m.log_event("{} {} : erreur interne : {}".format(method, path, "".join(traceback.format_exception(bug))[-2000:]))
         status, payload = 500, error("internal", _t("Erreur interne de Lutin : {}. Le détail est dans le journal.").format(str(bug)[:200] or type(bug).__name__))
     if binary is not None:
         return handler._envoyer(200, binary.data, binary.content_type, binary.headers)
@@ -247,7 +247,7 @@ def dispatch(handler, method):
 @route("GET", "/status", SESSION)
 def status(request):
     """What the page needs to draw itself: who is asking, which engine and model answer, what is running. Deliberately small: each area has its own routes."""
-    settings = _m.reglages()
+    settings = _m.settings()
     engine = _m.moteur_actuel(settings)
     state = _m.etat_moteur()
     from . import access as _access
@@ -256,14 +256,14 @@ def status(request):
         "new_version": _new_version(),          # a newer Lutin announced by the launch check, for the banner (null: none, or ignored)
         "restart": {"needed": bool(_access.restart_needed()), "possible": bool(_access.can_restart())},          # a change waits for the next start
         "language": _i18n.language(),
-        "access": {"level": ACCESS_LEVELS.get(_m.SECURITE.niveau, _m.SECURITE.niveau), "can_configure": bool(request.handler._configurateur())},
+        "access": {"level": ACCESS_LEVELS.get(_m.SECURITY.niveau, _m.SECURITY.niveau), "can_configure": bool(request.handler._configurateur())},
         "offline": bool(_offline.is_active()),
         "engine": {"id": engine.id, "name": engine.nom, "running": bool(state["actif"])},
         "model": str(settings.get("modele") or ""),
         "installed_models": list(state["installes"]),
-        "workspace": {"path": str(_m.RACINE)},
+        "workspace": {"path": str(_m.ROOT)},
         "can_open_files": bool(request.handler._configurateur() and _produced.opening_possible()),          # « Open » asks this machine's system to open a file
-        "active_turns": sorted(_m.TOURS_ACTIFS),
+        "active_turns": sorted(_m.ACTIVE_TURNS),
         "turns": _turn_state.snapshot(),          # where each running turn is: running, waiting_approval, stalled or cancelled, and in which part of the loop (turn_state.py)
         "pending_approvals": sorted({a.conv for a in _m.PendingApproval.EN_COURS.values() if a.conv}),
     }
@@ -331,7 +331,7 @@ def set_language(request):
 
 @route("GET", "/settings", SESSION)
 def settings(request):
-    return _settings(_m.reglages())
+    return _settings(_m.settings())
 
 
 @route("PATCH", "/settings", SESSION)
@@ -343,7 +343,7 @@ def update_settings(request):
     if unknown:
         raise ApiError(400, "invalid_request", _t("Réglage inconnu : {}.").format(", ".join(unknown)))
     if not body:
-        return _settings(_m.reglages())
+        return _settings(_m.settings())
     for name, value in body.items():
         key, kind = SETTINGS[name]
         words = {v1: stored for stored, v1 in SETTING_WORDS.get(name, {}).items()}
@@ -371,7 +371,7 @@ def models(request):
     """What the model selector needs: the models of the chosen engine, the one in use, and the downloads started since Lutin was launched."""
     state = _m.etat_moteur()
     sizes = state.get("tailles") or {}
-    return {"engine": _m.moteur_actuel().id, "running": bool(state["actif"]), "current": str(_m.reglages().get("modele") or ""),
+    return {"engine": _m.moteur_actuel().id, "running": bool(state["actif"]), "current": str(_m.settings().get("modele") or ""),
             "models": [{"name": name, "size_bytes": sizes.get(name)} for name in state["installes"]],
             "downloads": [_download(name, stored) for name, stored in sorted(_m.PULLS.items())],
             "remote": _remote_models()}
@@ -383,7 +383,7 @@ def models_loaded(request):
     say (a server Lutin only connects to, a model of another machine): the page then shows nothing rather than a « not loaded » that may be wrong. A model that is not loaded is loaded by the first
     message (the engines load on demand), which waits for it. `state`: loaded, loading (a turn waits for it; `loading_bytes` is what the graphics card took since), not_loaded, unknown."""
     engine = _m.moteur_actuel()
-    settings = _m.reglages()
+    settings = _m.settings()
     model = str(settings.get("modele") or "")
     answer = {"engine": engine.id, "model": model, "known": False, "loaded": False, "state": "unknown", "loading_bytes": 0, "size_bytes": 0, "vram_bytes": 0}
     if not model or settings.get("machine") or not engine.charge_connue():
@@ -395,9 +395,9 @@ def models_loaded(request):
         _SEEN_LOADED.add(key)
         _LOADING.pop(key, None)
         answer.update(loaded=True, state="loaded", size_bytes=int(held.get("taille") or 0), vram_bytes=int(held.get("vram") or 0))
-    elif _m.TOURS_ACTIFS and key in _SEEN_LOADED:
+    elif _m.ACTIVE_TURNS and key in _SEEN_LOADED:
         answer.update(loaded=True, state="loaded")          # a server busy generating (TabbyAPI) is late to say it holds the model it was seen holding
-    elif _m.TOURS_ACTIFS:
+    elif _m.ACTIVE_TURNS:
         answer.update(state="loading", loading_bytes=_loading_bytes(key))          # a turn waits for it: the engines load on the first request
     else:
         _SEEN_LOADED.discard(key)
@@ -432,7 +432,7 @@ MACHINE_RIGHTS = {"piloter": "lead", "maj": "update", "extinction": "shutdown"}
 
 
 def _multi_machine():
-    return _machines.cluster_actif(_m.reglages().get("cluster"))
+    return _machines.cluster_actif(_m.settings().get("cluster"))
 
 
 def _remote_models():
@@ -470,7 +470,7 @@ def _machine(stored):
 def paired_machines(request):
     """The paired machines and who answers. Never waits for the network: each machine comes with its last known state, and a stale one is probed
     again in the background (`unknown` until a first answer). `answering` is the machine of the setting `machine` ("" for this one)."""
-    settings = _m.reglages()
+    settings = _m.settings()
     answering = str(settings.get("machine") or "")
     return {"enabled": _multi_machine(), "answering": answering,
             "machines": [_machine(stored) for stored in _machines.etats_sans_attente(settings.get("modele", ""), answering)],
@@ -500,7 +500,7 @@ def _on_machine(action, *args, **kwargs):
 
 def _paired(identifier):
     """One machine as `GET /machines` shows it."""
-    settings = _m.reglages()
+    settings = _m.settings()
     found = next((stored for stored in _machines.etats_sans_attente(settings.get("modele", ""), str(settings.get("machine") or "")) if stored["id"] == identifier), None)
     if found is None:
         raise ApiError(404, "not_found", _t("Machine inconnue."))
@@ -533,7 +533,7 @@ def unpair_machine(request):
     """Forgets the machine (its token included). If it was the one answering by default, this machine answers again. Answers `GET /machines`."""
     identifier = request.params["id"]
     _on_machine(_machines.retirer, identifier)
-    if str(_m.reglages().get("machine") or "") == identifier:
+    if str(_m.settings().get("machine") or "") == identifier:
         _m.save_settings({"machine": ""})
     return paired_machines(request)
 
@@ -628,7 +628,7 @@ def update_node(request):
     if set(request.body) != {"lending"} or not isinstance(lending, bool):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("lending"))
     try:
-        _machines.noeud_activer(lending, niveau_local=_m.SECURITE.niveau == _sec.LOCAL)          # raises before writing anything
+        _machines.noeud_activer(lending, niveau_local=_m.SECURITY.niveau == _sec.LOCAL)          # raises before writing anything
     except ValueError as refused:
         raise ApiError(409, "local_only", str(refused)) from None
     return _node()
@@ -1005,7 +1005,7 @@ def delete_model(request):
     """Deletes an installed model. The model in use may be deleted: `current` is the one Lutin switched to, or the same name when there is no other."""
     with _operations.track("model", request.params["name"], "remove"):          # seen by the activity bar of every screen
         _m.supprimer_modele(request.params["name"])
-    return {"deleted": True, "current": str(_m.reglages().get("modele") or "")}
+    return {"deleted": True, "current": str(_m.settings().get("modele") or "")}
 
 
 # --------------------------------------------------------------------------------------------------------- model upkeep
@@ -1034,7 +1034,7 @@ def _proposals_view(found):
 def model_proposals(request):
     """The proposals found by the last check (at launch, at most once a day, or asked with POST /models/check): read from the cache, never the network.
     `{proposals: [{key, kind: update | new | obsolete, model, role, replaces, replaced_by, size_gb, summary, reason}], errors, checked_at, catalogue}`."""
-    return _proposals_view(_m.lire_propositions())
+    return _proposals_view(_m.read_proposals())
 
 
 @route("POST", "/models/check", SESSION)
@@ -1045,18 +1045,18 @@ def model_check(request):
     scope = CHECK_SCOPES.get(str(request.body.get("scope") or "all"))
     if scope is None:
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("scope", ", ".join(CHECK_SCOPES)))
-    if _m.VERIFICATEUR is None:
+    if _m.MODEL_CHECKER is None:
         raise ApiError(409, "not_available", _t("La vérification des modèles n'est pas disponible dans ce mode de lancement."))
-    _m.VERIFICATEUR(scope)
-    return _proposals_view(_m.lire_propositions())
+    _m.MODEL_CHECKER(scope)
+    return _proposals_view(_m.read_proposals())
 
 
 def _proposal_done(request, apply):
     key = request.params["key"]
-    if not any(p.get("cle") == key for p in _m.lire_propositions().get("propositions", [])):
+    if not any(p.get("cle") == key for p in _m.read_proposals().get("propositions", [])):
         raise ApiError(404, "not_found", _t("Proposition introuvable."))
-    _m.traiter_proposition(key, apply)
-    return _proposals_view(_m.lire_propositions())
+    _m.handle_proposal(key, apply)
+    return _proposals_view(_m.read_proposals())
 
 
 @route("POST", "/models/proposals/{key}/applied", SESSION)
@@ -1218,7 +1218,7 @@ def engines_measures(request):
     """What each engine gave here: the last successful measure of each (engine, model), the fastest first; the `candidates` that can be measured now
     (an engine running, its models); a measure `running`."""
     from . import engine_metrics as _metrics
-    seen = _metrics.view(_m.DONNEES, dict(_engines.ENGINES), _m.reglages())
+    seen = _metrics.view(_m.DATA, dict(_engines.ENGINES), _m.settings())
     state = seen["etat"]
     return {"running": bool(state["en_cours"]), "measuring": {"engine": state["moteur"], "model": state["modele"]} if state["en_cours"] else None, "error": state["erreur"],
             "ranking": [_engine_measure(entry) for entry in seen["classement"]], "count": seen["nombre"],
@@ -1236,9 +1236,9 @@ def engine_measure(request):
     mode = COMPARISON_MODES.get(str(request.body.get("mode") or "quick"))
     if not model or mode is None:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("model, mode"))
-    if _m.TOURS_ACTIFS or _metrics.STATE["en_cours"]:
+    if _m.ACTIVE_TURNS or _metrics.STATE["en_cours"]:
         raise ApiError(409, "busy", _t("Une réponse ou une autre mesure est en cours : attends sa fin."))
-    _metrics.launch(_m.DONNEES, engine, model, mode, memoire=lambda: _engine_bench.memory_of_engine(engine.id, model))
+    _metrics.launch(_m.DATA, engine, model, mode, memoire=lambda: _engine_bench.memory_of_engine(engine.id, model))
     return 202, {"started": True}
 
 
@@ -1290,16 +1290,16 @@ def change_models_folder(request):
 @route("POST", "/models/folder/restart-ollama", CONFIGURATOR)
 def models_folder_restart(request):
     """Stops then starts Ollama with the models folder chosen. The models in memory are lost (loaded again at the next question). 409 during an answer."""
-    if _m.TOURS_ACTIFS:
+    if _m.ACTIVE_TURNS:
         raise ApiError(409, "turn_running", _t("Une réponse est en cours : attends la fin avant de redémarrer Ollama."))
-    return {"message": _m.redemarrer_ollama()}
+    return {"message": _m.restart_ollama()}
 
 
 def _calibration_view():
     from . import calibration as _calibration
     seen = _calibration.state()
     return {"running": bool(seen["en_cours"]), "step": seen["etape"], "error": seen["erreur"], "model": seen["modele"], "date": seen["date"], "advised_threads": seen["recommande"],
-            "results": [{"threads": r.get("fils"), "tokens_per_s": r.get("tok_s")} for r in seen["resultats"] or []], "current_threads": _m.reglages().get("num_thread")}
+            "results": [{"threads": r.get("fils"), "tokens_per_s": r.get("tok_s")} for r in seen["resultats"] or []], "current_threads": _m.settings().get("num_thread")}
 
 
 @route("GET", "/calibration", SESSION)
@@ -1338,17 +1338,17 @@ def machine_advice(request):
     `dismissed` when the person asked not to be advised again."""
     from . import low_end_mode as _low_end
     profile = machine_profile()
-    advice = _low_end.advice(profile, _m.reglages()) if profile is not None else []
+    advice = _low_end.advice(profile, _m.settings()) if profile is not None else []
     names = {stored: name for name, (stored, _kind) in SETTINGS.items()}
     return {"advice": [{"setting": names.get(a["cle"], a["cle"]), "current": a["actuel"], "advised": a["conseille"], "text": a["texte"]} for a in advice],
-            "dismissed": _m.reglages().get("conseil_machine") is False}
+            "dismissed": _m.settings().get("conseil_machine") is False}
 
 
 @route("POST", "/machine/advice/apply", CONFIGURATOR)
 def machine_advice_apply(request):
     """Follows the advice: the settings listed are changed. Answers `{applied}` (setting: value)."""
     from . import low_end_mode as _low_end
-    changes = _low_end.apply(machine_profile(), _m.reglages()) if machine_profile() is not None else {}
+    changes = _low_end.apply(machine_profile(), _m.settings()) if machine_profile() is not None else {}
     if changes:
         _m.save_settings(changes)
     names = {stored: name for name, (stored, _kind) in SETTINGS.items()}
@@ -1491,7 +1491,7 @@ def engine_models_remove(request):
             _sourced(lambda: source.remove(request.params["name"]))
     except ValueError as invalid:
         raise ApiError(400, "invalid_request", str(invalid)) from None
-    return {"deleted": True, "engine": engine.id, "current": str(_m.reglages().get("modele") or "")}
+    return {"deleted": True, "engine": engine.id, "current": str(_m.settings().get("modele") or "")}
 
 
 # ------------------------------------------------------------------------------------------------------------ measures
@@ -1521,7 +1521,7 @@ def bench_state(request):
     measured, the `regressions` (the last measure clearly worse than the one before, and whether the engine changed in between) and the `history`
     (the last six measures of each model)."""
     from . import bench as _bench
-    path = _m.chemin_bench()
+    path = _m.bench_path()
     return {"running": _m.BENCH["en_cours"], "step": _m.BENCH["etape"], "queue": list(_m.BENCH.get("file") or []), "error": _m.BENCH["erreur"],
             "results": [_bench_measure(m) for m in sorted(_bench.read(path).values(), key=lambda m: str(m.get("modele", ""))) if isinstance(m, dict)],
             "regressions": [{"model": r["modele"], "kind": BENCH_KINDS.get(r["genre"], r["genre"]), "before": r["avant"], "after": r["apres"], "engine_changed": bool(r["moteur_change"])}
@@ -1537,15 +1537,15 @@ def bench_start(request):
     names = request.body.get("models")
     if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
         raise ApiError(400, "invalid_request", _t("Choisis au moins un modèle installé."))
-    if _m.TOURS_ACTIFS or _m.BENCH["en_cours"]:
+    if _m.ACTIVE_TURNS or _m.BENCH["en_cours"]:
         raise ApiError(409, "busy", _t("Une réponse ou une autre mesure est en cours : attends sa fin."))
-    started = _m.lancer_bench_serie(names[:8], bool(request.body.get("quick")))
+    started = _m.start_bench_series(names[:8], bool(request.body.get("quick")))
     return 202, {"models": started["modeles"]}
 
 
 def _comparison_view():
     from . import engine_bench as _engine_bench
-    seen = _engine_bench.view(_m.DONNEES, _m.reglages()["modele"], _engines.CONTEXT["profil"](), _engines.CONTEXT["en_docker"]())
+    seen = _engine_bench.view(_m.DATA, _m.settings()["modele"], _engines.CONTEXT["profil"](), _engines.CONTEXT["en_docker"]())
     result, advice = seen["resultat"], seen["recommandation"] or {}
     return {"model": seen["modele"], "outdated": bool(seen["a_refaire"]), "comparable": int(seen["comparables"]),
             "availability": [{"name": a["nom"], "reason": a["raison"], "model": a["modele"]} for a in seen["disponibilite"]],
@@ -1576,9 +1576,9 @@ def engines_comparison_start(request):
     mode = COMPARISON_MODES.get(str(request.body.get("mode") or "quick"))
     if mode is None:
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("mode", ", ".join(COMPARISON_MODES)))
-    if _m.TOURS_ACTIFS or _engine_bench.STATE["en_cours"]:
+    if _m.ACTIVE_TURNS or _engine_bench.STATE["en_cours"]:
         raise ApiError(409, "busy", _t("Une réponse ou une autre mesure est en cours : attends sa fin."))
-    _engine_bench.launch(_m.reglages()["modele"], mode, _m.DONNEES, _engines.CONTEXT["profil"]())
+    _engine_bench.launch(_m.settings()["modele"], mode, _m.DATA, _engines.CONTEXT["profil"]())
     return 202, _comparison_view()
 
 
@@ -1621,7 +1621,7 @@ def machine(request):
         "ram_gb": profile.ram_go, "ram_free_gb": profile.ram_libre_go or None,
         "gpus": [{"name": gpu.nom, "vendor": gpu.fabricant, "memory_gb": gpu.vram_go, "free_gb": gpu.libre_go or None, "integrated": _hardware.integrated_is(gpu)} for gpu in profile.gpus],
         "disks": [{"path": disk.racine, "free_gb": disk.libre_go, "total_gb": disk.total_go} for disk in profile.disques],
-        "budget_gb": profile.budget_go(), "budget_set_gb": float(_m.reglages().get("budget_go") or 0) or None, "class": MACHINE_CLASSES.get(profile.classe(), profile.classe()), "summary": profile.resume(),
+        "budget_gb": profile.budget_go(), "budget_set_gb": float(_m.settings().get("budget_go") or 0) or None, "class": MACHINE_CLASSES.get(profile.classe(), profile.classe()), "summary": profile.resume(),
     }
 
 
@@ -1736,7 +1736,7 @@ def engines(request):
     """Every engine with its state, the actions it allows and its running task: one card per program (ADR 0020), each with the same fields. `runs_here` says
     whether it can run on this machine and, when not, why. The engines are read at the same time: one that does not answer must not make the others wait."""
     current = _m.moteur_actuel().id
-    _engine_updates.in_background(bool(_m.config_lue().get("verifier_maj", True)) and not _offline.is_active())          # once a day at most, never waited for
+    _engine_updates.in_background(bool(_m.read_config().get("verifier_maj", True)) and not _offline.is_active())          # once a day at most, never waited for
     updates = _engine_updates.state()
     listed = _engines.entries()
     unknown = ({"installe": False, "actif": False, "version": "", "detail": ""}, {"installes": []}, {})
@@ -1856,12 +1856,12 @@ SETUP_FILE = "setup.json"
 
 
 def _setup_path():
-    return _m.DONNEES / SETUP_FILE
+    return _m.DATA / SETUP_FILE
 
 
 def _has_history():
     """Conversations or a settings file: signs of an installation that has been used. Cheap, and decided before the engine is asked."""
-    return bool(_m.conv_list()) or (_m.DONNEES / "reglages.json").is_file()
+    return bool(_m.conv_list()) or (_m.DATA / "reglages.json").is_file()
 
 
 def setup_state():
@@ -1916,9 +1916,9 @@ def speed_test(request):
 @route("POST", "/speed-test", SESSION)
 def start_speed_test(request):
     """Starts the test on the model in use (Ollama only for now) and answers at once (202): `GET /speed-test` follows it. Refused while an answer is being written: the figure would be wrong."""
-    model = str(_m.reglages().get("modele") or "")
-    with _m.VERROU_TOURS:
-        if _m.TOURS_ACTIFS or _m.BENCH["en_cours"]:
+    model = str(_m.settings().get("modele") or "")
+    with _m.TURNS_LOCK:
+        if _m.ACTIVE_TURNS or _m.BENCH["en_cours"]:
             raise ApiError(409, "busy", _t("Une réponse ou une mesure est en cours : la mesure serait faussée. Attends sa fin."))
         if SPEED["state"] == "running":
             raise ApiError(409, "busy", _t("Une mesure est déjà en cours."))
@@ -1954,11 +1954,11 @@ LEVEL_IDS = {level: name for name, level in LEVEL_NAMES.items()}          # fixe
 def _access_view(request):
     from . import access as _access
     from . import setup_wizard as _wizard
-    running, saved = _m.SECURITE, _access.saved_security()
+    running, saved = _m.SECURITY, _access.saved_security()
     strict, docker = bool(request.handler._configurateur_strict()), _access.in_docker()
     return {"level": ACCESS_LEVELS.get(running.niveau, running.niveau), "port": running.port, "public_url": running.url_publique, "proxy_ips": list(running.proxy_ips),
             "saved": {"level": ACCESS_LEVELS.get(saved.niveau, saved.niveau), "public_url": saved.url_publique, "proxy_ips": list(saved.proxy_ips)},
-            "restart_needed": saved != running, "address": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), running.port), "docker": docker,
+            "restart_needed": saved != running, "address": "http://{}:{}/".format(_m.IP_LAN or _m.local_ip(), running.port), "docker": docker,
             "can_change": strict and not docker, "can_restart": bool(_access.can_restart()),
             "remote_admin": {"active": bool(request.handler._admin_tous()), "can_change": strict and not docker},
             "levels": [{"id": LEVEL_IDS[level], "title": _t(title), "detail": _t(detail)} for level, (_, title, detail) in _wizard.LEVELS_TEXT.items()],
@@ -2005,10 +2005,10 @@ def access_remote_admin(request):
     active = request.body.get("active")
     if not isinstance(active, bool):
         raise ApiError(400, "invalid_request", _t("Indique true ou false."))
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     cfg["admin_a_distance"] = active
-    _m.config_ecrire(cfg)
-    _m.journaliser("Administration à distance {}.".format("ouverte" if active else "fermée"))
+    _m.write_config(cfg)
+    _m.log_event("Administration à distance {}.".format("ouverte" if active else "fermée"))
     return _access_view(request)
 
 
@@ -2016,9 +2016,9 @@ def access_remote_admin(request):
 # The devices that were paired with the code shown on this machine (a phone, another computer). Nothing here changes how a session is checked: the code,
 # its attempts and the sessions stay in lutin.security. Only the digests of the session tokens are stored, and only their first characters are shown.
 def _devices_view():
-    level = ACCESS_LEVELS.get(_m.SECURITE.niveau, _m.SECURITE.niveau)
-    return {"devices": [{"id": item["id"], "name": item["nom"], "paired_at": int(item["cree"]), "seen_at": int(item["vu"])} for item in _m.APPAREILS.liste()],
-            "level": level, "pairing_possible": level != "local", "address": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), _m.SECURITE.port)}
+    level = ACCESS_LEVELS.get(_m.SECURITY.niveau, _m.SECURITY.niveau)
+    return {"devices": [{"id": item["id"], "name": item["nom"], "paired_at": int(item["cree"]), "seen_at": int(item["vu"])} for item in _m.DEVICES.liste()],
+            "level": level, "pairing_possible": level != "local", "address": "http://{}:{}/".format(_m.IP_LAN or _m.local_ip(), _m.SECURITY.port)}
 
 
 @route("GET", "/devices", SESSION)
@@ -2037,7 +2037,7 @@ def pairing_code(request):
         raise ApiError(409, "local_only", _t("Lutin n'écoute que sur cette machine : ouvre d'abord l'accès au réseau (Accès), puis redémarre-le."))
     from . import qr as _qr
     matrix = _qr.matrix(view["address"])
-    return 201, {"code": _m.APPAREILS.nouveau_pin(), "valid_seconds": _sec.DURATION_PIN_S, "address": view["address"],
+    return 201, {"code": _m.DEVICES.nouveau_pin(), "valid_seconds": _sec.DURATION_PIN_S, "address": view["address"],
                  "qr": {"size": len(matrix), "rows": ["".join(map(str, row)) for row in matrix]}}
 
 
@@ -2045,7 +2045,7 @@ def pairing_code(request):
 def revoke_device(request):
     """Ends the session of one device: it must be paired again to come back. 404 when no device has this identifier."""
     identifier = request.params["id"]
-    if not re.fullmatch(r"[0-9a-f]{10}", identifier) or not _m.APPAREILS.revoquer(identifier):
+    if not re.fullmatch(r"[0-9a-f]{10}", identifier) or not _m.DEVICES.revoquer(identifier):
         raise ApiError(404, "not_found", _t("Appareil inconnu."))
     return _devices_view()
 
@@ -2053,14 +2053,14 @@ def revoke_device(request):
 @route("DELETE", "/devices", CONFIGURATOR)
 def revoke_all_devices(request):
     """Ends the session of every paired device."""
-    _m.APPAREILS.revoquer(None)
+    _m.DEVICES.revoquer(None)
     return _devices_view()
 
 
 # --------------------------------------------------------------------------------------------------------- approval rules
 def _rules_view():
     return {"rules": [{"id": rule["id"], "effect": rule["effect"], "command": rule["command"], "created_at": rule.get("created", 0)} for rule in _approval_rules.user_rules()],
-            "project_rules": [{"effect": rule["effect"], "command": rule["command"]} for rule in _approval_rules.project_rules(_m.RACINE)],
+            "project_rules": [{"effect": rule["effect"], "command": rule["command"]} for rule in _approval_rules.project_rules(_m.ROOT)],
             "hardline": sorted({reason for _, reason in _approval_rules.HARDLINE})}
 
 
@@ -2179,7 +2179,7 @@ def select_project(request):
         _m.choose_work(request.params["id"])
     except ValueError as refused:
         text = str(refused)
-        if _m.TOURS_ACTIFS and "réponse" in text:
+        if _m.ACTIVE_TURNS and "réponse" in text:
             raise ApiError(409, "workspace_conflict", text) from None
         raise
     return _projects_view()
@@ -2352,7 +2352,7 @@ def run_scheduled_task(request):
     _scheduled_one(identifier)
     if identifier in _scheduled_tasks.RUNNING:
         raise ApiError(409, "busy", _t("Cette tâche travaille déjà."))
-    if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+    if len(_m.ACTIVE_TURNS) >= _m.CONCURRENT_TURNS:
         raise ApiError(409, "busy", _t("Une réponse est déjà en cours : attends sa fin."))
     threading.Thread(target=lambda: _scheduled_tasks.execute(identifier), daemon=True, name="scheduled-run").start()
     return 202, {"started": True}
@@ -3082,7 +3082,7 @@ def third_party_skill_updates(request):
 
 
 def _skill_done(done, repo, folder):
-    _m.journaliser(_t("Skill tiers installé : {} ({}, {}).").format(done["nom"], repo, folder))
+    _m.log_event(_t("Skill tiers installé : {} ({}, {}).").format(done["nom"], repo, folder))
     return {"name": done["nom"], "folder": done["dossier"], "files": done["fichiers"], "ignored": done["ignores"]}
 
 
@@ -3126,7 +3126,7 @@ def remove_third_party_skill(request):
     if not any(skill["nom"] == request.params["name"] for skill in _skills.installed({project: root})):
         raise ApiError(404, "not_found", _t("Ce skill n'a pas été installé par Lutin."))
     _skills.remove(root, request.params["name"])
-    _m.journaliser(_t("Skill tiers retiré : {}.").format(request.params["name"][:60]))
+    _m.log_event(_t("Skill tiers retiré : {}.").format(request.params["name"][:60]))
     return installed_third_party_skills(request)
 
 
@@ -3156,7 +3156,7 @@ def _read(identifier):
 
 
 def _not_running(identifier):
-    if identifier in _m.TOURS_ACTIFS:
+    if identifier in _m.ACTIVE_TURNS:
         raise ApiError(409, "turn_running", _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
 
 
@@ -3218,7 +3218,7 @@ MISSION_HOURS_DEFAULT = 8
 
 def _options_view(identifier):
     stored = _m.options_read(identifier)
-    effective = _m.apply_options(_m.reglages(), identifier)
+    effective = _m.apply_options(_m.settings(), identifier)
     shown = {name: effective[key] for name, (key, _) in OPTIONS.items() if key in effective}
     shown["mode"] = OPTION_MODES.get(effective["mode"], effective["mode"])
     shown["mission_hours"] = stored.get("mission_duree_h", MISSION_HOURS_DEFAULT)
@@ -3272,7 +3272,7 @@ def delete_conversation(request):
 @route("POST", "/conversations/{id}/stop", SESSION)
 def stop_turn(request):
     """The Stop button: the model, the tools and the pending approvals of the running turn stop. `was_running` says whether there was anything to stop."""
-    return {"was_running": bool(_m.arreter_conversation(request.params["id"]).get("actif"))}
+    return {"was_running": bool(_m.stop_conversation(request.params["id"]).get("actif"))}
 
 
 # ----------------------------------------------------------------------------------------------------------------- backup
@@ -3280,15 +3280,15 @@ def stop_turn(request):
 # an archive holds every conversation and the memory (the old page let any session download it: tightened here). A restore keeps the state before
 # it in a zip of its own and asks for a restart.
 def _backup_folders():
-    config = _m.chemin_config()
-    return {"config": config.parent if config else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}
+    config = _m.config_path()
+    return {"config": config.parent if config else None, "donnees": _m.DATA, "memoire": _m.MEMORY}
 
 
 @route("GET", "/backup/where", SESSION)
 def backup_where(request):
     """Where this Lutin keeps its data: the folders a backup takes, and the folder of the backups made before a migration or a restore."""
     folders = _backup_folders()
-    return {"config": str(folders["config"] or ""), "data": str(folders["donnees"]), "memory": str(folders["memoire"]), "backups": str(Path(_m.DONNEES) / "sauvegardes")}
+    return {"config": str(folders["config"] or ""), "data": str(folders["donnees"]), "memory": str(folders["memoire"]), "backups": str(Path(_m.DATA) / "sauvegardes")}
 
 
 @route("GET", "/backup", CONFIGURATOR)
@@ -3325,7 +3325,7 @@ UPDATE_STATES = {"": "idle", "en cours": "running", "erreur": "failed", "a_jour"
 
 def _new_version():
     """{version, page, command} when the launch check found a newer version that was not ignored; None otherwise. Never the network."""
-    found = _m.nouvelle_version_lutin()
+    found = _m.new_lutin_version()
     return {"version": found["version"], "page": found["page"], "command": found["commande"]} if found else None
 
 
@@ -3362,7 +3362,7 @@ def lutin_update(request):
         raise ApiError(409, "in_docker", _t("Dans Docker, la mise à jour se fait en récupérant la nouvelle image : docker compose pull && docker compose up -d"))
     if _offline.is_active():
         raise ApiError(409, "offline", _t("Mode hors ligne strict : Lutin n'est pas mis à jour."))
-    if _m.TOURS_ACTIFS:
+    if _m.ACTIVE_TURNS:
         raise ApiError(409, "turn_running", _t("Une réponse est en cours : attends la fin avant de mettre à jour."))
     try:
         _access.update()
@@ -3412,7 +3412,7 @@ def lutin_restart(request):
 def _startup_view():
     from . import power as _power
     state = _power.startup_state_memo()
-    return {"check_updates": bool(_m.config_lue().get("verifier_maj", True)),
+    return {"check_updates": bool(_m.read_config().get("verifier_maj", True)),
             "autostart": {"installed": bool(state.get("installe")), "possible": bool(state.get("possible")), "limits": str(state.get("limites") or "")}}
 
 
@@ -3444,10 +3444,10 @@ def lutin_startup_change(request):
         finally:
             _power.STARTUP_MEMO["v"] = None
     if "check_updates" in body:
-        cfg = _m.config_lue()
+        cfg = _m.read_config()
         cfg["verifier_maj"] = body["check_updates"]
         try:
-            _m.config_ecrire(cfg)
+            _m.write_config(cfg)
         except ValueError:
             raise ApiError(409, "not_available", _t("Ce lancement de Lutin n'a pas de fichier de configuration : le réglage ne peut pas être gardé.")) from None
     return _startup_view()
@@ -3599,7 +3599,7 @@ def health_free_graphics_memory(request):
     """Unloads every model Lutin keeps in memory (Ollama's, the llama.cpp server, and the ExLlamaV3, Colibri or LM Studio server it manages)."""
     if request.body:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
-    done = _m.liberer_vram(tout=True)
+    done = _m.free_vram(tout=True)
     return {"message": done.get("message", ""), "resources": _resources()}
 
 
@@ -3885,7 +3885,7 @@ def compact_conversation(request):
 @route("GET", "/project-commands", SESSION)
 def project_commands(request):
     """The commands of the Claude project in the work folder: `{commands: [{name, description}]}` (empty without a `.claude/commands` folder)."""
-    found = _claude_project.detect(_m.RACINE)
+    found = _claude_project.detect(_m.ROOT)
     return {"commands": [{"name": c["nom"], "description": c.get("description", "")} for c in found.get("commandes") or []]}
 
 
@@ -3893,7 +3893,7 @@ def project_commands(request):
 def project_command(request):
     """`?args=`: the message the command makes, its $ARGUMENTS and $1, $2… replaced: `{text}`. 404 for a command the project does not have."""
     try:
-        return {"text": _claude_project.command(_m.RACINE, request.params["name"], request.query.get("args", "")[:2000])}
+        return {"text": _claude_project.command(_m.ROOT, request.params["name"], request.query.get("args", "")[:2000])}
     except ValueError as missing:
         raise ApiError(404, "not_found", str(missing)) from None
 
@@ -3908,7 +3908,7 @@ SHEET_KEYS = {"objectif": "objective", "decisions": "decisions", "plan": "plan",
 
 def _sheet_view(identifier, conversation=None):
     from . import progress_sheet as _sheet
-    settings = _m.reglages()
+    settings = _m.settings()
     conversation = conversation or _read(identifier)
     sections = _sheet.read(identifier)
     measure = _sheet.measure(identifier, settings["num_ctx"])
@@ -3964,12 +3964,12 @@ def conversation_ai_title(request):
     conversation = _read(identifier)
     _not_running(identifier)
     try:
-        title = _m.titre_propose(conversation, _m.reglages())
+        title = _m.titre_propose(conversation, _m.settings())
     except ValueError as failed:
         raise ApiError(502, "engine_failed", str(failed)) from None
     except (OSError, urllib.error.URLError) as failed:
         raise ApiError(503, "engine_unreachable", str(failed)) from None
-    if not title or identifier in _m.TOURS_ACTIFS:          # a mission keeps its name; an answer started meanwhile writes the conversation, it is not renamed under it
+    if not title or identifier in _m.ACTIVE_TURNS:          # a mission keeps its name; an answer started meanwhile writes the conversation, it is not renamed under it
         return {"title": conversation.get("titre", ""), "applied": False}
     _m.conv_rename(identifier, title)
     return {"title": title, "applied": True}
@@ -3982,7 +3982,7 @@ def conversation_handover(request):
     identifier = request.params["id"]
     conversation = _read(identifier)
     _not_running(identifier)
-    settings = _m.reglages()
+    settings = _m.settings()
     try:
         return {"text": _m.document_de_reprise(conversation, settings), "model": settings["modele"]}
     except (OSError, urllib.error.URLError) as failed:
@@ -4054,7 +4054,7 @@ def actions_log(request):
     except ValueError:
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("n", "1-2000")) from None
     return {"entries": [{"at": e.get("ts", ""), "conversation": e.get("conversation", ""), "folder": e.get("dossier", ""), "tool": e.get("outil", ""), "target": e.get("cible", ""),
-                         "outcome": e.get("issue", ""), "approval": e.get("accord", ""), "who": e.get("qui", "")} for e in _m.lire_journal(count) if isinstance(e, dict)]}
+                         "outcome": e.get("issue", ""), "approval": e.get("accord", ""), "who": e.get("qui", "")} for e in _m.read_log(count) if isinstance(e, dict)]}
 
 
 # ----------------------------------------------------------------------------------------------- documents, notes, meaning
@@ -4104,7 +4104,7 @@ def add_note(request):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("text"))
     try:
         _storage_notes.add_note(request.body["text"])
-    except _m.ErreurOutil as refused:
+    except _m.ToolError as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
     return 201, _notes_view()
 

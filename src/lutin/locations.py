@@ -23,12 +23,12 @@ def docker():
 
 def read_models_config():
     """Le dossier des modèles inscrit dans la configuration de Lutin ('' s'il n'y en a pas ; `null` ou une valeur absurde comptent comme absent)."""
-    v = ((_m.config_lue().get("emplacements") or {}).get("modeles"))
+    v = ((_m.read_config().get("emplacements") or {}).get("modeles"))
     return v.strip() if isinstance(v, str) and v.strip() and v.strip().lower() != "null" else ""
 
 
 def _seen_file():
-    return _m.DONNEES / "dossier_modeles_vu.json"
+    return _m.DATA / "dossier_modeles_vu.json"
 
 
 def remember_seen_folder(dossier):
@@ -173,9 +173,9 @@ def set_models_folder(chemin):
         essai.unlink()
     except OSError as e:
         raise ValueError(_t("Ce dossier n'est pas utilisable ({}).").format(e)) from e
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     cfg.setdefault("emplacements", {})["modeles"] = str(p)
-    _m.config_ecrire(cfg)
+    _m.write_config(cfg)
     os.environ["OLLAMA_MODELS"] = str(p)
     _m.ENV_OLLAMA["OLLAMA_MODELS"] = str(p)
     if os.name == "nt":
@@ -204,11 +204,11 @@ def list_locations():
     """Tous les emplacements utilisés : [{cle, nom, chemin, explication, existe, taille, disque}], et le détail du dossier de données."""
     from . import config
     d = config.folders()
-    cfg_fichier = _m.chemin_config()
+    cfg_fichier = _m.config_path()
     lignes = [location_row("programme", _t("Programme"), Path(sys.prefix), _t("Lutin et son Python (supprimés par la désinstallation)."))]
     lignes.append(location_row("config", _t("Configuration de Lutin"), cfg_fichier.parent if cfg_fichier else d["config"], _t("config.json : niveau d'accès, dossiers de travail, langue.")))
-    lignes.append(location_row("donnees", _t("Données"), _m.DONNEES, _t("Conversations, images et fichiers joints, sauvegardes avant import, journal, réglages.")))
-    lignes.append(location_row("memoire", _t("Mémoire"), _m.MEMOIRE, _t("Contexte du projet et notes de l'assistant.")))
+    lignes.append(location_row("donnees", _t("Données"), _m.DATA, _t("Conversations, images et fichiers joints, sauvegardes avant import, journal, réglages.")))
+    lignes.append(location_row("memoire", _t("Mémoire"), _m.MEMORY, _t("Contexte du projet et notes de l'assistant.")))
     lignes.append(location_row("cache", _t("Cache (fichiers temporaires)"), d["cache"], _t("Catalogue et numéro de version récupérés en ligne (sans risque à supprimer).")))
     o = _m.etat_ollama()
     modeles = location_row("modeles", _t("Modèles d'Ollama"), models_folder(), _t("Les modèles téléchargés : c'est en général le plus gros."), mesurer=False,
@@ -222,7 +222,7 @@ def list_locations():
         lignes.append(location_row("travail:" + t["id"], _t("Dossier de travail : {}").format(t["nom"]), t["chemin"], _t("Les fichiers que Lutin peut lire et, avec ton accord, modifier."), mesurer=False))
     detail = []
     try:
-        for sous in sorted(p for p in Path(_m.DONNEES).iterdir() if p.is_dir()):
+        for sous in sorted(p for p in Path(_m.DATA).iterdir() if p.is_dir()):
             detail.append({"nom": sous.name, "taille": size_of(sous)})
     except OSError:
         pass

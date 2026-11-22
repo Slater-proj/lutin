@@ -35,7 +35,7 @@ RE_TELEGRAM_TOKEN = re.compile(r"^\d{3,15}:[A-Za-z0-9_\-]{20,80}$")
 
 
 def path_of():
-    return _m.DONNEES / "notifications.json"
+    return _m.DATA / "notifications.json"
 
 
 def _read():
@@ -122,7 +122,7 @@ def add(nom, type_, params):
         canal = {"id": secrets.token_hex(4), "nom": nom, "type": type_, "params": propres}
         canaux.append(canal)
         _write(canaux)
-    _m.journaliser("Notification : canal « {} » ({}) ajouté.".format(nom, TYPES[type_][0]))
+    _m.log_event("Notification : canal « {} » ({}) ajouté.".format(nom, TYPES[type_][0]))
     return list_channels()
 
 

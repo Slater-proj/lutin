@@ -39,7 +39,7 @@ class Batches(unittest.TestCase):
                 running[0] -= 1
                 done.append(name)
             if arguments.get("fail"):
-                raise agent._m.ErreurOutil("no such file")
+                raise agent._m.ToolError("no such file")
             return "%s:%s" % (name, arguments.get("chemin", ""))
 
         futures = agent.lectures_groupees(calls, lambda name, raw: dict(raw or {}), execute, allowed)
@@ -73,7 +73,7 @@ class Batches(unittest.TestCase):
 
     def test_an_error_of_one_read_is_its_own_and_the_others_still_answer(self):
         futures, _, _ = self.run_batches([call("lire", chemin="a", fail=True), call("lire", chemin="b")])
-        with self.assertRaises(agent._m.ErreurOutil):
+        with self.assertRaises(agent._m.ToolError):
             futures[0].result()
         self.assertEqual(futures[1].result(), "lire:b")
 

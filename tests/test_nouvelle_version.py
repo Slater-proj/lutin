@@ -40,7 +40,7 @@ def faux_github(version, appels=None):
 
 def requete(methode, chemin, corps=None):
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
-    h = {"Host": "127.0.0.1:%d" % PORT, "X-Token": A.JETON}
+    h = {"Host": "127.0.0.1:%d" % PORT, "X-Token": A.TOKEN}
     donnees = None
     if corps is not None:
         donnees = json.dumps(corps).encode("utf-8")
@@ -142,7 +142,7 @@ class Serveur(unittest.TestCase):
         self.assertIsNone(requete("GET", "/api/etat")[1]["nouvelle_version"])
 
     def test_la_page_contient_le_bandeau(self):
-        page = A.page_web()
+        page = A.web_page()
         self.assertIn('id="bandeauVersion"', page)
         self.assertIn("/api/version-ignorer", page)
 

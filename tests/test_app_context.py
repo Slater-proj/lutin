@@ -1,4 +1,4 @@
-"""ADR 0014, stage 1: the environment is read once, by the application context, and the old module names (core.RACINE, core.OLLAMA, web.DDG_URL…)
+"""ADR 0014, stage 1: the environment is read once, by the application context, and the old module names (core.ROOT, core.OLLAMA, web.DDG_URL…)
 read and write it. A patch, a plain assignment and a change of context leave the context, the module attribute and the bare name inside the module equal."""
 import tempfile
 import threading
@@ -54,8 +54,8 @@ class TheNamesReadTheContext(unittest.TestCase):
 
     def test_the_names_of_core_are_those_of_the_context(self):
         s = app_context.current().settings
-        for name, value in (("RACINE", s.root), ("DONNEES", s.data), ("MEMOIRE", s.memory), ("OLLAMA", s.ollama_url), ("OUTIL", s.tool_url),
-                            ("PORT", s.port), ("GARDE_RESSOURCES_ACTIF", s.resource_guard), ("AUTO_DEMARRAGE", s.auto_start)):
+        for name, value in (("ROOT", s.root), ("DATA", s.data), ("MEMORY", s.memory), ("OLLAMA", s.ollama_url), ("TOOL_URL", s.tool_url),
+                            ("PORT", s.port), ("RESOURCE_GUARD", s.resource_guard), ("AUTO_START", s.auto_start)):
             self.assertSame(name, value)
         self.assertEqual(web.DDG_URL, s.search_ddg_url)
         self.assertEqual(web_search.BRAVE_URL, s.search_brave_url)
@@ -89,9 +89,9 @@ class TheNamesReadTheContext(unittest.TestCase):
             self.assertIs(app_context.current(), other)
             self.assertSame("OLLAMA", "http://127.0.0.1:7")
             self.assertSame("PORT", 7000)
-            self.assertSame("MEMOIRE", Path("/elsewhere/memoire"))
+            self.assertSame("MEMORY", Path("/elsewhere/memoire"))
             self.assertEqual(web.__dict__["DDG_URL"], "http://127.0.0.1:8/")
-            self.assertIn(Path("/elsewhere/donnees"), core.dossiers_de_lutin(), "a function of core reads the new folders")
+            self.assertIn(Path("/elsewhere/donnees"), core.lutin_folders(), "a function of core reads the new folders")
         self.assertIs(app_context.current(), before)
         self.assertSame("OLLAMA", before.settings.ollama_url)
         self.assertSame("PORT", before.settings.port)
@@ -105,15 +105,15 @@ class TheNamesReadTheContext(unittest.TestCase):
         self.assertEqual(seen, ["http://127.0.0.1:2"])
 
     def test_a_new_working_folder_goes_through_the_context(self):
-        before = core.RACINE
+        before = core.ROOT
         elsewhere = Path(tempfile.mkdtemp(prefix="lutin-root-"))
         try:
-            core.definir_racine(elsewhere)
+            core.set_root(elsewhere)
             self.assertEqual(app_context.current().settings.root, elsewhere.resolve())
-            self.assertSame("RACINE", elsewhere.resolve())
+            self.assertSame("ROOT", elsewhere.resolve())
         finally:
-            core.definir_racine(before)
-        self.assertSame("RACINE", before)
+            core.set_root(before)
+        self.assertSame("ROOT", before)
 
     def test_only_a_setting_can_be_bound(self):
         with self.assertRaises(ValueError):

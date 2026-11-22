@@ -65,10 +65,10 @@ def save_settings(nouveau):
 def _save_settings(nouveau):
     from . import tool_settings
     tool_settings.check(nouveau)          # une commande dangereuse ou un outil inconnu est refusé avec une explication (le nettoyage ne l'ignorerait qu'en silence)
-    r = _m.reglages()
+    r = _m.settings()
     mode_avant = r["mode"]
     moteur_avant, modele_avant = r.get("moteur") or "ollama", r["modele"]
-    for k in _m.REGLAGES_DEFAUT:
+    for k in _m.DEFAULT_SETTINGS:
         if k in nouveau:
             r[k] = nouveau[k]
     from . import engines
@@ -77,7 +77,7 @@ def _save_settings(nouveau):
         raise ValueError(_t("Moteur inconnu."))
     moteur_ecrit = r["moteur"]
     if r["moteur"] == moteur_avant:          # an old « openai » + « serveur » setting, read as that server (ADR 0020), is written back as it was until the person changes the engine
-        stocke = str(read_json(_m.DONNEES / "reglages.json", {}).get("moteur") or "")
+        stocke = str(read_json(_m.DATA / "reglages.json", {}).get("moteur") or "")
         if stocke and engines.chosen_id(stocke, _llamacpp().old_server()) == moteur_avant:
             moteur_ecrit = stocke
     else:
@@ -88,7 +88,7 @@ def _save_settings(nouveau):
             try:
                 avant.arreter_gere()          # one OpenAI-compatible server at a time, as the old select did: the one Lutin started gives its memory back
             except ValueError as e:
-                _m.journaliser("Arrêt de {} impossible : {}".format(avant.nom, e))
+                _m.log_event("Arrêt de {} impossible : {}".format(avant.nom, e))
     par = dict(r.get("modeles_par_moteur") or {})
     if r["moteur"] != moteur_avant:          # un autre moteur a d'autres modèles : on retrouve celui qu'on y utilisait, ou le premier qu'il propose
         par[moteur_avant] = modele_avant
@@ -132,11 +132,11 @@ def _save_settings(nouveau):
     if r.get("memoire_longue") not in ("resume", "fichier", "demander"):
         raise ValueError(_t("Mémoire des longues conversations inconnue (resume, fichier ou demander)."))
     r["memoire_longue"] = "fichier"                    # les anciennes valeurs restent acceptées et valent la fiche de suivi (ADR 0019)
-    _m.nettoyer_echantillonnage(r)
-    _m.nettoyer_ressources(r)
+    _m.clean_sampling(r)
+    _m.clean_resources(r)
     tool_settings.clean(r)
-    write_atomic(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2, moteur=moteur_ecrit), ensure_ascii=False, indent=1))
-    return _m.reglages()
+    write_atomic(_m.DATA / "reglages.json", json.dumps(dict(r, memoire_v=2, moteur=moteur_ecrit), ensure_ascii=False, indent=1))
+    return _m.settings()
 
 
 def _llamacpp():
@@ -145,7 +145,7 @@ def _llamacpp():
 
 
 def read_memory(nom):
-    f = _m.MEMOIRE / nom
+    f = _m.MEMORY / nom
     try:
         return f.read_text(encoding="utf-8-sig")
     except OSError:
@@ -157,15 +157,15 @@ def write_memory(nom, texte):
         raise ValueError("Fichier de mémoire inconnu.")
     if len(texte) > 60000:
         raise ValueError("Texte trop long (60 000 caractères au maximum).")
-    write_atomic(_m.MEMOIRE / nom, texte)
+    write_atomic(_m.MEMORY / nom, texte)
 
 
 def add_note(note):
     note = " ".join(str(note).split())[:600]
     if not note:
-        raise _m.ErreurOutil("Note vide.")
+        raise _m.ToolError("Note vide.")
     ligne = "- {} : {}\n".format(datetime.now().strftime("%Y-%m-%d"), note)
-    f = _m.MEMOIRE / "MEMOIRE.md"
+    f = _m.MEMORY / "MEMOIRE.md"
     existant = read_memory("MEMOIRE.md") or _t("# Mémoire de l'assistant\n\nNotes durables (ajoutées par l'assistant ou à la main).\n\n")
     if notes_position(existant) < 0:                        # sans la section des notes, une note n'était ni listée ni relue : la section est créée
         from . import i18n
@@ -203,14 +203,14 @@ def delete_note(ligne):
     if ligne not in lignes:
         raise ValueError(_t("Note introuvable."))
     lignes.remove(ligne)
-    write_atomic(_m.MEMOIRE / "MEMOIRE.md", memoire[:i] + "\n".join(lignes))
+    write_atomic(_m.MEMORY / "MEMOIRE.md", memoire[:i] + "\n".join(lignes))
     return {"ok": True}
 
 
 def list_skills():
     """Les fiches de skills (skills/*.md) : le contenu du projet, construit par l'utilisateur.
     On ne lit que les titres ici (le contenu se lit à la demande avec l'outil « lire »)."""
-    dossier = _m.RACINE / "skills"
+    dossier = _m.ROOT / "skills"
     try:
         fichiers = sorted(dossier.glob("*.md"), key=lambda p: p.name)
     except OSError:
@@ -235,7 +235,7 @@ RE_SKILL_DESC = re.compile(r"^[ÀA] lire quand\s+(.+)$", re.M)
 def skill_description(nom):
     """« À lire quand… » : la phrase que la fiche donne sur elle-même, pour que le modèle sache quand l'ouvrir. Vide si la fiche n'en a pas (le contenu n'est jamais copié dans le prompt)."""
     try:
-        tete = (_m.RACINE / "skills" / nom).read_text(encoding="utf-8-sig", errors="ignore")[:1500]
+        tete = (_m.ROOT / "skills" / nom).read_text(encoding="utf-8-sig", errors="ignore")[:1500]
     except OSError:
         return ""
     m = RE_SKILL_DESC.search(tete)
@@ -265,7 +265,7 @@ def _report_cut(nom, taille, relu):
         return
     if CUTS.get(nom) != (taille, relu):
         CUTS[nom] = (taille, relu)
-        _m.journaliser("{} : {} caractères, {} relus par le modèle à chaque conversation (le reste est coupé)".format(nom, taille, relu))
+        _m.log_event("{} : {} caractères, {} relus par le modèle à chaque conversation (le reste est coupé)".format(nom, taille, relu))
 
 
 def bound_context(texte, limite=CONTEXT_LIMIT):
@@ -304,7 +304,7 @@ RE_SKILL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\- ]{0,98}\.md$")
 def _skill_file(nom):
     if not RE_SKILL.match(str(nom)):
         raise ValueError("Nom de skill invalide (lettres, chiffres, tirets, espaces, et .md).")
-    dossier = _m.RACINE / "skills"
+    dossier = _m.ROOT / "skills"
     dossier.mkdir(exist_ok=True)
     return dossier / nom
 
@@ -334,7 +334,7 @@ RE_CONV = re.compile(r"^[0-9a-f]{8,16}$")
 def conv_path(ident):
     if not RE_CONV.match(ident or ""):
         raise ValueError("Conversation inconnue.")
-    return _m.DONNEES / "conversations" / (ident + ".json")
+    return _m.DATA / "conversations" / (ident + ".json")
 
 
 def conv_read(ident):
@@ -378,7 +378,7 @@ def repair_conversation(conv):
         else:
             i += 1
     if repares:
-        _m.journaliser("Conversation {} réparée : {} réponse(s) d'outil manquante(s).".format(conv.get("id"), repares))
+        _m.log_event("Conversation {} réparée : {} réponse(s) d'outil manquante(s).".format(conv.get("id"), repares))
     return repares
 
 
@@ -390,7 +390,7 @@ def conv_new():
 
 
 def conv_write(c):
-    if getattr(getattr(_m.LOCAL_TOUR, "stop", None), "abandonne", False):
+    if getattr(getattr(_m.TURN_LOCAL, "stop", None), "abandonne", False):
         return          # ce fil exécute un tour abandonné après « Arrêter » : la conversation a continué sans lui, il ne doit rien écraser
     c["maj"] = datetime.now().isoformat(timespec="milliseconds")          # à la milliseconde : deux conversations écrites dans la même seconde restent dans l'ordre
     conv_path(c["id"])
@@ -399,7 +399,7 @@ def conv_write(c):
     try:
         copy_to_work_folder(c)
     except OSError as erreur:                               # une copie impossible (dossier en lecture seule, disque réseau absent) ne doit jamais empêcher d'enregistrer la conversation
-        _m.journaliser("Copie de la conversation {} dans le dossier de travail impossible : {!r}".format(c.get("id"), erreur))
+        _m.log_event("Copie de la conversation {} dans le dossier de travail impossible : {!r}".format(c.get("id"), erreur))
 
 
 COPIES_FOLDER = "conversations-lutin"
@@ -439,13 +439,13 @@ def copy_name(c):
 def work_folder_of(c):
     """Le dossier de travail de cette conversation (le sien, sinon le dossier courant)."""
     from . import workspaces as _trav
-    t = _trav.by_id(_m.config_lue(), c["travail"]) if c.get("travail") else None
-    return Path(t["chemin"]) if t else _m.RACINE
+    t = _trav.by_id(_m.read_config(), c["travail"]) if c.get("travail") else None
+    return Path(t["chemin"]) if t else _m.ROOT
 
 
 def copy_to_work_folder(c):
     """Si le réglage est coché : une copie lisible (Markdown) de la conversation dans `conversations-lutin/` du dossier de travail. Écrite seulement si elle change. Renvoie le chemin ou None."""
-    if not _m.reglages().get("copie_conversations") or not c.get("messages"):
+    if not _m.settings().get("copie_conversations") or not c.get("messages"):
         return None
     dossier = work_folder_of(c) / COPIES_FOLDER
     if not dossier.parent.is_dir():
@@ -487,7 +487,7 @@ RE_IDENT = re.compile(r"^[0-9a-f]{8}$")
 def options_path(ident):
     if not RE_IDENT.match(str(ident or "")):
         raise ValueError("Conversation inconnue.")
-    return _m.DONNEES / "options" / (ident + ".json")
+    return _m.DATA / "options" / (ident + ".json")
 
 
 def clean_options(brut):

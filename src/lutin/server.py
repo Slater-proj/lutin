@@ -148,7 +148,7 @@ class Handler(BaseHTTPRequestHandler):
         elif code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")):
             corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Pour le faire depuis un autre appareil : Accès > Administration à distance (à activer depuis cette machine)."))
         if isinstance(corps, dict) and _i18n.language() != "fr":
-            corps = _m.traduire_json(corps)
+            corps = _m.translate_json(corps)
         donnees = corps if isinstance(corps, (bytes, bytearray)) else (corps if isinstance(corps, str) else json.dumps(corps, ensure_ascii=False)).encode("utf-8")
         compressible = len(donnees) > 1400 and type_.split(";")[0].strip() in COMPRESSIBLE_TYPES and "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
         if compressible:          # la page (370 Ko) et l'état se compressent à environ le quart : sensible sur un téléphone ou le Wi-Fi
@@ -181,22 +181,22 @@ class Handler(BaseHTTPRequestHandler):
         if self._via_relais:
             return True                                      # déjà contrôlé par le jeton de nœud (voir _relais)
         donne = self.headers.get("X-Token") or ""
-        return any(_sec.equal(donne, attendu) for attendu in (_m.JETON, _m.JETON_CONSOLE))
+        return any(_sec.equal(donne, attendu) for attendu in (_m.TOKEN, _m.CONSOLE_TOKEN))
 
     def _authentifie(self):
         if self._via_relais:
             return True
-        if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
+        if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.CONSOLE_TOKEN):
             return True                                      # la console de cette machine (fichier réservé à l'utilisateur)
-        return _sec.access_decision(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[0]
+        return _sec.access_decision(_m.SECURITY, _m.DEVICES, self.client_address[0], self.headers)[0]
 
     def _identite(self):
         """Qui fait cette requête, pour le journal : « console », « local », le nom donné par le proxy, ou « appareil »."""
         if self._via_relais:
             return "machine : " + self._via_relais
-        if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
+        if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.CONSOLE_TOKEN):
             return "console"
-        return _sec.access_decision(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[1]
+        return _sec.access_decision(_m.SECURITY, _m.DEVICES, self.client_address[0], self.headers)[1]
 
     def _sur_cette_machine(self):
         """Le navigateur est sur cette machine : connexion de boucle locale, nom d'hôte de boucle locale, et aucun en-tête laissant croire qu'un relais (proxy, tunnel) a transmis une requête venue d'ailleurs."""
@@ -384,7 +384,7 @@ class Handler(BaseHTTPRequestHandler):
         if _acces.in_docker() and os.environ.get("LUTIN_ADMIN_TOUS", "").strip().lower() in ("1", "true", "oui", "yes", "on"):
             return True
         try:
-            return bool(_m.config_lue().get("admin_a_distance"))
+            return bool(_m.read_config().get("admin_a_distance"))
         except (OSError, ValueError):
             return False
 
@@ -402,19 +402,19 @@ class Handler(BaseHTTPRequestHandler):
         C'est la règle d'origine, sans l'ouverture à distance (voir _configurateur) : elle seule peut activer ou retirer l'administration à distance."""
         if self._via_relais:
             return False
-        if _m.SECURITE.niveau == _sec.LOCAL:
+        if _m.SECURITY.niveau == _sec.LOCAL:
             return True
-        if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
+        if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.CONSOLE_TOKEN):
             return True
-        if _sec.is_admin_proxy(_m.SECURITE, self.client_address[0], self.headers):
+        if _sec.is_admin_proxy(_m.SECURITY, self.client_address[0], self.headers):
             return True                                                    # niveau proxy : un administrateur déclaré (LUTIN_ADMINS) identifié par le proxy de confiance (Authelia…)
-        return _m.SECURITE.niveau == _sec.RESEAU and self._sur_cette_machine()
+        return _m.SECURITY.niveau == _sec.RESEAU and self._sur_cette_machine()
 
     def _controle(self, ecriture):
         """Nom d'hôte (contre le « DNS rebinding ») et origine (contre les requêtes venues d'autres sites). Répond lui-même en cas de refus."""
-        if not _sec.allowed_host(_m.SECURITE, self.headers.get("Host"), _m.IP_LAN):
+        if not _sec.allowed_host(_m.SECURITY, self.headers.get("Host"), _m.IP_LAN):
             code, message = "host_not_allowed", "nom d'hôte non autorisé"
-        elif ecriture and not _sec.allowed_origin(_m.SECURITE, self.headers.get("Origin"), self.headers.get("Host"), _m.IP_LAN):
+        elif ecriture and not _sec.allowed_origin(_m.SECURITY, self.headers.get("Origin"), self.headers.get("Host"), _m.IP_LAN):
             code, message = "origin_not_allowed", "origine non autorisée"
         else:
             return True
@@ -425,9 +425,9 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _page_connexion(self):
-        page = _m.PAGE_CONNEXION
+        page = _m.LOGIN_PAGE
         if _i18n.language() != "fr":
-            for phrase in _m.TEXTES_PAGE_CONNEXION:
+            for phrase in _m.LOGIN_PAGE_TEXTS:
                 page = page.replace(phrase, _t(phrase))
             page = page.replace('<html lang="fr">', '<html lang="{}">'.format(_i18n.language()))
         return self._envoyer(200, page, "text/html; charset=utf-8")
@@ -453,7 +453,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(404, {"erreur": "introuvable"})
         if not self._authentifie():
             return self._page_connexion()
-        page = _web_app.page(_m.JETON, _m.VERSION, _i18n.language())
+        page = _web_app.page(_m.TOKEN, _m.VERSION, _i18n.language())
         if page is None:
             return self._envoyer(404, _web_app.NOT_BUILT, "text/html; charset=utf-8")
         return self._envoyer(200, page, "text/html; charset=utf-8", {"Content-Security-Policy": _web_app.CSP})
@@ -506,12 +506,12 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if chemin == "/api/ouvrir-chemin":
                     q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                    trouve = _ouverture.resolve((q.get("p") or [""])[0], _m.RACINE)
+                    trouve = _ouverture.resolve((q.get("p") or [""])[0], _m.ROOT)
                     if trouve is None:
                         return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(_t("Fichier introuvable dans le dossier de travail.")) + "</h3><p>"
-                                             + html.escape(_t("Lutin ne retrouve que les fichiers du dossier de travail actif ({}). Si le fichier est ailleurs, ajoute son dossier comme dossier de travail (Réglages > Dossiers).").format(_m.RACINE)) + "</p>", "text/html; charset=utf-8")
-                    return self._envoyer(302, b"", "text/plain", {"Location": _ouverture.address(trouve, _m.RACINE)})
-                octets, mime, entetes = _ouverture.read(chemin[len("/ouvrir/"):], _m.RACINE)
+                                             + html.escape(_t("Lutin ne retrouve que les fichiers du dossier de travail actif ({}). Si le fichier est ailleurs, ajoute son dossier comme dossier de travail (Réglages > Dossiers).").format(_m.ROOT)) + "</p>", "text/html; charset=utf-8")
+                    return self._envoyer(302, b"", "text/plain", {"Location": _ouverture.address(trouve, _m.ROOT)})
+                octets, mime, entetes = _ouverture.read(chemin[len("/ouvrir/"):], _m.ROOT)
             except ValueError as e:
                 return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(str(e)) + "</h3>", "text/html; charset=utf-8")
             return self._envoyer(200, octets, mime, entetes)
@@ -525,22 +525,22 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(404, {"erreur": str(e)})
             return self._envoyer(200, octets, mime, {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(nom), "Content-Security-Policy": "default-src 'none'; sandbox"})
         if chemin in ("/", "/index.html", "/ancienne/", "/ancienne/index.html"):          # « / » seulement quand la nouvelle interface n'est pas construite (une copie de développement)
-            return self._envoyer(200, _m.page_web(), "text/html; charset=utf-8")
+            return self._envoyer(200, _m.web_page(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
             o = _m.etat_moteur()
-            r = _m.reglages()
+            r = _m.settings()
             modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
             profil = _adequation.ready_profile()
             return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
-                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
-                                       "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_list(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.PendingApproval.EN_COURS.values()],
+                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.ACTIVE_TURNS),
+                                       "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_list(), "racine": str(_m.ROOT), "donnees": str(_m.DATA),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITY.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.new_lutin_version(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
+                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.running_tasks(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.bench_path())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.PendingApproval.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.PendingApproval.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
-            r = _m.reglages()
-            vitesse = ((_bench.read(_m.chemin_bench()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
+            r = _m.settings()
+            vitesse = ((_bench.read(_m.bench_path()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
             if not vitesse or not vitesse.get("tok_s"):
                 return self._envoyer(200, {"mesure": None, "conseil": []})
             from .hardware import detecter
@@ -574,12 +574,12 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/commande-claude":
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
-                return self._envoyer(200, {"texte": _pc.command(_m.RACINE, (q.get("nom") or [""])[0], (q.get("args") or [""])[0][:2000])})
+                return self._envoyer(200, {"texte": _pc.command(_m.ROOT, (q.get("nom") or [""])[0], (q.get("args") or [""])[0][:2000])})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/projet-claude":
-            d = _pc.detect(_m.RACINE)
-            return self._envoyer(200, {"detecte": d, "resume": _pc.summary(d) if not _pc.is_empty(d) else "", "racine": str(_m.RACINE)})
+            d = _pc.detect(_m.ROOT)
+            return self._envoyer(200, {"detecte": d, "resume": _pc.summary(d) if not _pc.is_empty(d) else "", "racine": str(_m.ROOT)})
         if chemin == "/api/travaux":
             return self._envoyer(200, dict(_m.works_state(), modifiable=self._configurateur()))
         if chemin == "/api/dossiers":                          # le navigateur de dossiers de la page : seulement pour qui peut gérer les dossiers de travail (cette machine)
@@ -600,7 +600,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(503, {"erreur": str(e)})
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
-            _moteurs_maj.in_background(bool(_m.config_lue().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
+            _moteurs_maj.in_background(bool(_m.read_config().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
             return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.entries()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.engines_folder_view()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -639,7 +639,7 @@ class Handler(BaseHTTPRequestHandler):
             ident = (q.get("conversation") or [""])[0]
             try:
                 conv = _m.conv_read(ident)
-                r = _m.reglages()
+                r = _m.settings()
                 sections = _suivi.read(ident)
                 return self._envoyer(200, {"sections": sections, "texte": _suivi.serialize(ident, sections), "mesure": _suivi.measure(ident, r["num_ctx"]), "mode": _m.memoire_longue(conv, r),
                                            "mode_general": r["memoire_longue"], "chemin": str(_suivi.path(ident))})
@@ -690,24 +690,24 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(200, dict(locations.list_locations(), modifiable=self._configurateur()))
         if chemin == "/api/journal":
             m = re.search(r"[?&]n=(\d+)", self.path)
-            return self._envoyer(200, {"entrees": _m.lire_journal(int(m.group(1)) if m else 200)})
+            return self._envoyer(200, {"entrees": _m.read_log(int(m.group(1)) if m else 200)})
         if chemin == "/api/sauvegarde":
             tampon = io.BytesIO()
-            c = _m.chemin_config()
+            c = _m.config_path()
             try:
-                _sauv.export({"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}, tampon)
+                _sauv.export({"config": c.parent if c else None, "donnees": _m.DATA, "memoire": _m.MEMORY}, tampon)
             except _sauv.BackupError as e:
                 return self._envoyer(400, {"erreur": str(e)})
             return self._envoyer(200, tampon.getvalue(), "application/zip", {"Content-Disposition": 'attachment; filename="lutin-sauvegarde-{}.zip"'.format(datetime.now().strftime("%Y%m%d-%H%M%S"))})
         if chemin == "/api/propositions":
-            return self._envoyer(200, _m.lire_propositions())
+            return self._envoyer(200, _m.read_proposals())
         if chemin == "/api/bench-moteurs":                        # comparaison des moteurs : dernier résultat, recommandation et sa raison, avancement
-            return self._envoyer(200, _bench_moteurs.view(_m.DONNEES, _m.reglages()["modele"], _moteurs.CONTEXT["profil"](), _moteurs.CONTEXT["en_docker"]()))
+            return self._envoyer(200, _bench_moteurs.view(_m.DATA, _m.settings()["modele"], _moteurs.CONTEXT["profil"](), _moteurs.CONTEXT["en_docker"]()))
         if chemin == "/api/estimation":                          # estimer AVANT de charger : mémoire prise, où, saturation, conseils, préréglage des modèles à experts
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            modele = (q.get("modele") or [""])[0] or _m.reglages()["modele"]
+            modele = (q.get("modele") or [""])[0] or _m.settings()["modele"]
             try:
-                ctx = int((q.get("ctx") or [_m.reglages()["num_ctx"]])[0])
+                ctx = int((q.get("ctx") or [_m.settings()["num_ctx"]])[0])
             except ValueError:
                 return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
             e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.ready_profile())
@@ -716,14 +716,14 @@ class Handler(BaseHTTPRequestHandler):
             evenements = _observatoire.read(400)
             return self._envoyer(200, {"resume": _observatoire.summary(evenements), "recents": [e for e in evenements if e["type"] != "tour"][:25], "modifiable": self._configurateur()})
         if chemin == "/api/bench-historique":                     # Santé : l'évolution des mesures de chaque modèle et les régressions
-            historique = _bench.read_history(_m.chemin_bench())
-            return self._envoyer(200, {"regressions": _bench.regressions(_m.chemin_bench()), "modeles": [{"modele": m, "mesures": v[-6:]} for m, v in historique.items() if len(v) >= 1]})
+            historique = _bench.read_history(_m.bench_path())
+            return self._envoyer(200, {"regressions": _bench.regressions(_m.bench_path()), "modeles": [{"modele": m, "mesures": v[-6:]} for m, v in historique.items() if len(v) >= 1]})
         if chemin == "/api/sorties":                              # Santé : ce qui est sorti de la machine (recherches envoyées à un service extérieur)
             return self._envoyer(200, {"entrees": _sorties.read(60), "modifiable": self._configurateur()})
         if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
             return self._envoyer(200, dict(_recherche.view(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
-            return self._envoyer(200, _mesures.view(_m.DONNEES, dict(_moteurs.ENGINES), _m.reglages()))
+            return self._envoyer(200, _mesures.view(_m.DATA, dict(_moteurs.ENGINES), _m.settings()))
         if chemin.split("?")[0] in MANAGED_MODEL_ROUTES:          # onglet Modèles d'un serveur géré par Lutin : ce qui est téléchargé, ce qu'on peut télécharger, jugé pour cette machine
             return self._modeles_serveur_gere(chemin)
         if chemin == "/api/machines":                             # onglet Machines : le nœud de cette machine, les machines appairées et leur état
@@ -795,14 +795,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(200, manifeste, "application/manifest+json; charset=utf-8")
         if chemin in ("/icone.svg", "/logo.svg"):
             return self._envoyer(200, _m.ICONE_SVG, "image/svg+xml; charset=utf-8")
-        return self._envoyer(200, _m.icone_png(int(re.search(r"(\d+)", chemin).group(1))), "image/png")
+        return self._envoyer(200, _m.icon_png(int(re.search(r"(\d+)", chemin).group(1))), "image/png")
 
     @staticmethod
     def _outil_vivant():
-        if not _m.OUTIL:
+        if not _m.TOOL_URL:
             return False
         try:
-            with urllib.request.urlopen(_m.OUTIL + "/api/sante", timeout=1.5):
+            with urllib.request.urlopen(_m.TOOL_URL + "/api/sante", timeout=1.5):
                 return True
         except (urllib.error.URLError, OSError, ValueError):
             return False
@@ -910,7 +910,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/noeud/capacites":                # ... ou pour savoir ce qu'un de ses modèles sait faire (outils, images, réflexion)
             if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
                 return self._envoyer(401, {"erreur": "machine non autorisée"})
-            mo = _moteurs.by_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
+            mo = _moteurs.by_id(_m.settings().get("moteur") or _moteurs.OLLAMA)
             return self._envoyer(200, {"capacites": _machines.noeud_capacites(mo, donnees.get("modele"))})
         if self.path == "/api/noeud/eteindre":                 # ... ou, si le propriétaire l'a autorisé, pour l'éteindre (30 s, annulable, journalisé)
             return self._noeud_eteindre(donnees)
@@ -932,7 +932,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/notes-ajouter":
                 try:
                     _donnees.add_note(str(donnees.get("texte", "")))
-                except _m.ErreurOutil as e:
+                except _m.ToolError as e:
                     raise ValueError(str(e)) from e
                 return self._envoyer(200, {"notes": _donnees.list_notes()})
             if self.path == "/api/notes-supprimer":
@@ -953,11 +953,11 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/nouveau-pin":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": "le code ne se demande que depuis cette machine"})
-                return self._envoyer(200, {"pin": _m.APPAREILS.nouveau_pin(), "valable_s": _sec.DURATION_PIN_S})
+                return self._envoyer(200, {"pin": _m.DEVICES.nouveau_pin(), "valable_s": _sec.DURATION_PIN_S})
             if self.path == "/api/appareils":
-                return self._envoyer(200, {"appareils": _m.APPAREILS.liste(), "niveau": _m.SECURITE.niveau})
+                return self._envoyer(200, {"appareils": _m.DEVICES.liste(), "niveau": _m.SECURITY.niveau})
             if self.path == "/api/appareils-revoquer":
-                return self._envoyer(200, {"revoques": _m.APPAREILS.revoquer(donnees.get("id") or None)})
+                return self._envoyer(200, {"revoques": _m.DEVICES.revoquer(donnees.get("id") or None)})
             if self.path == "/api/chat":
                 return self._chat(donnees)
             if self.path == "/api/autotest":
@@ -966,7 +966,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.undo_turn(str(donnees.get("conversation", ""))))
             if self.path == "/api/annuler-fichier":
                 return self._envoyer(200, _m.undo_turn(str(donnees.get("conversation", "")), str(donnees.get("chemin", ""))))
-            if self.path == "/api/epingler" and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
+            if self.path == "/api/epingler" and str(donnees.get("id", "")) in _m.ACTIVE_TURNS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
             if self.path == "/api/epingler":
                 return self._envoyer(200, _m.pin_conversation(str(donnees.get("id", "")), donnees.get("epingle")))
@@ -980,11 +980,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(200, {"ok": True})
             if self.path in ("/api/suivi", "/api/suivi-vider", "/api/memoire-conversation"):
                 ident = str(donnees.get("conversation", ""))
-                with _m.VERROU_TOURS:
-                    if ident in _m.TOURS_ACTIFS:
+                with _m.TURNS_LOCK:
+                    if ident in _m.ACTIVE_TURNS:
                         return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
                 conv = _m.conv_read(ident)
-                r = _m.reglages()
+                r = _m.settings()
                 if self.path == "/api/suivi":
                     _suivi.write(ident, _suivi.parse(str(donnees.get("texte", ""))[:20000]))
                 elif self.path == "/api/suivi-vider":
@@ -1079,7 +1079,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(200, locations.analyze_folder(str(donnees.get("chemin", ""))))
                 if self.path == "/api/dossier-modeles-copie":
                     return self._envoyer(200, locations.copy_models(str(donnees.get("chemin", ""))))
-                return self._envoyer(200, {"message": _m.redemarrer_ollama()})
+                return self._envoyer(200, {"message": _m.restart_ollama()})
             if self.path == "/api/dossier-modeles":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
@@ -1137,7 +1137,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(200, _plan.modify(ident, actif=bool(donnees.get("actif"))))
                 if ident in _plan.RUNNING:
                     raise ValueError(_t("Cette tâche travaille déjà."))
-                if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+                if len(_m.ACTIVE_TURNS) >= _m.CONCURRENT_TURNS:
                     raise ValueError(_t("Une réponse est déjà en cours : attends sa fin."))
                 threading.Thread(target=lambda: _plan.execute(ident), daemon=True, name="planifie-lancer").start()
                 return self._envoyer(200, {"ok": True})
@@ -1156,15 +1156,15 @@ class Handler(BaseHTTPRequestHandler):
                     _m.save_settings({"conseil_machine": False})
                     return self._envoyer(200, {"ok": True})
                 if action == "appliquer":
-                    changements = _conseil_machine.apply(_adequation.ready_profile(), _m.reglages())
+                    changements = _conseil_machine.apply(_adequation.ready_profile(), _m.settings())
                     if changements:
                         _m.save_settings(changements)
                     return self._envoyer(200, {"ok": True, "appliques": changements})
                 return self._envoyer(400, {"erreur": _t("Action inconnue.")})
             if self.path == "/api/bench-serie":
-                return self._envoyer(200, _m.lancer_bench_serie([str(x) for x in (donnees.get("modeles") or [])][:8], bool(donnees.get("rapide"))))
+                return self._envoyer(200, _m.start_bench_series([str(x) for x in (donnees.get("modeles") or [])][:8], bool(donnees.get("rapide"))))
             if self.path == "/api/bench":
-                return self._envoyer(200, _m.lancer_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
+                return self._envoyer(200, _m.start_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
             if self.path == "/api/version-ignorer":
                 chemin = os.environ.get("LUTIN_VERSION_CACHE")
                 if not chemin:
@@ -1181,7 +1181,7 @@ class Handler(BaseHTTPRequestHandler):
                 d = updates.check_lutin({"cache": str(Path(chemin).parent)}, force=True)
                 if (d.get("date") or 0) <= avant:
                     return self._envoyer(503, {"erreur": _t("Impossible de joindre GitHub : {}").format(d.get("erreur") or "?"), "actuelle": _m.VERSION})
-                return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": updates.read_version_file(chemin).get("version", ""), "nouvelle": _m.nouvelle_version_lutin()})
+                return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": updates.read_version_file(chemin).get("version", ""), "nouvelle": _m.new_lutin_version()})
             if self.path == "/api/langue":
                 try:
                     return self._envoyer(200, {"langue": _i18n.save_language(str(donnees.get("valeur", "")).strip().lower())})
@@ -1193,25 +1193,25 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(403, {"erreur": "Le mode hors ligne ne se coupe que depuis cette machine."})
                 return self._envoyer(200, {"hors_ligne": _hl.set_mode(voulu)})
             if self.path == "/api/modeles-verifier":
-                if _m.VERIFICATEUR is None:
+                if _m.MODEL_CHECKER is None:
                     return self._envoyer(501, {"erreur": "La vérification des modèles n'est pas disponible dans ce mode de lancement."})
                 portee = str(donnees.get("portee", "tout"))
                 if portee not in ("maj", "nouveaux", "tout"):
                     raise ValueError("Portée inconnue.")
-                return self._envoyer(200, _m.VERIFICATEUR(portee))
+                return self._envoyer(200, _m.MODEL_CHECKER(portee))
             if self.path == "/api/propositions-traiter":
-                return self._envoyer(200, _m.traiter_proposition(str(donnees.get("cle", "")), bool(donnees.get("appliquer"))))
+                return self._envoyer(200, _m.handle_proposal(str(donnees.get("cle", "")), bool(donnees.get("appliquer"))))
             if self.path == "/api/taches-effacer":
                 ident = str(donnees.get("conversation", ""))
-                with _m.VERROU_TOURS:
-                    travaille = ident in _m.TOURS_ACTIFS               # un tour en cours réécrit la conversation : on ne la touche pas
+                with _m.TURNS_LOCK:
+                    travaille = ident in _m.ACTIVE_TURNS               # un tour en cours réécrit la conversation : on ne la touche pas
                 if not travaille:
                     c = _m.conv_read(ident)
                     c["taches"] = []
                     _m.conv_write(c)
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/arreter":
-                return self._envoyer(200, _m.arreter_conversation(str(donnees.get("conversation", ""))))
+                return self._envoyer(200, _m.stop_conversation(str(donnees.get("conversation", ""))))
             if self.path == "/api/approuver":
                 _m.answer_pending(str(donnees.get("id", "")), donnees.get("ok"), bool(donnees.get("reactiver")))
                 return self._envoyer(200, {"ok": True})
@@ -1229,7 +1229,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.delete_skill(str(donnees.get("nom", ""))))
             if self.path == "/api/nouvelle":
                 return self._envoyer(200, _m.conv_new())
-            if self.path in ("/api/supprimer", "/api/renommer", "/api/epingler") and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
+            if self.path in ("/api/supprimer", "/api/renommer", "/api/epingler") and str(donnees.get("id", "")) in _m.ACTIVE_TURNS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})          # sinon la fin de la réponse réécrirait la conversation par-dessus
             if self.path == "/api/supprimer":
                 _mission.forget_conversation(str(donnees.get("id", "")))                  # sa mission, s'il y en a une, s'arrête avec elle
@@ -1250,7 +1250,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/rappeler":
                 try:
                     return self._envoyer(200, {"texte": _m.recall_tool(str(donnees.get("requete", "")), 6)})
-                except _m.ErreurOutil as erreur:
+                except _m.ToolError as erreur:
                     raise ValueError(str(erreur))
             if self.path == "/api/oublier-modele":
                 return self._envoyer(200, _m.oublier_modele(str(donnees.get("modele", ""))))
@@ -1261,10 +1261,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(403, {"erreur": _t("L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin security).")})
                 if _acces.in_docker():
                     return self._envoyer(400, {"erreur": _t("Dans Docker, l'administration à distance se règle avec la variable LUTIN_ADMIN_TOUS du conteneur (docs/DOCKER.md).")})
-                cfg = _m.config_lue()
+                cfg = _m.read_config()
                 cfg["admin_a_distance"] = bool(donnees.get("actif"))
-                _m.config_ecrire(cfg)
-                _m.journaliser("Administration à distance {}.".format("ouverte" if cfg["admin_a_distance"] else "fermée"))
+                _m.write_config(cfg)
+                _m.log_event("Administration à distance {}.".format("ouverte" if cfg["admin_a_distance"] else "fermée"))
                 return self._envoyer(200, {"actif": cfg["admin_a_distance"]})
             if self.path == "/api/web-recherche-config":               # l'adresse de SearXNG (seul hôte local que la recherche peut joindre) et les clés d'API : comme les connecteurs MCP (cette machine, ou LUTIN_ADMIN_TOUS / LUTIN_ADMINS)
                 if not self._configurateur():
@@ -1374,13 +1374,13 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/mesurer-moteur":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                if _m.TOURS_ACTIFS:
+                if _m.ACTIVE_TURNS:
                     return self._envoyer(409, {"erreur": _t("Une réponse est en cours : attends sa fin avant de mesurer (la mesure occupe le moteur).")})
                 if str(donnees.get("moteur", "")) not in _moteurs.ENGINES:
                     return self._envoyer(400, {"erreur": _t("Moteur inconnu.")})
                 mo = _moteurs.by_id(str(donnees["moteur"]))
                 modele = str(donnees.get("modele", ""))
-                return self._envoyer(200, _mesures.launch(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memory_of_engine(mo.id, modele)))
+                return self._envoyer(200, _mesures.launch(_m.DATA, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memory_of_engine(mo.id, modele)))
             if self.path in ("/api/exllamav3-verifier", "/api/lmstudio-verifier", "/api/colibri-verifier"):          # chercher les mises à jour des modèles téléchargés (ExLlamaV3), ou de nouveaux modèles qui tiennent sur cette machine
                 genre = self.path[len("/api/"):-len("-verifier")]
                 if not _geres.chosen(genre):
@@ -1404,16 +1404,16 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/supprimer-modele":
                 return self._envoyer(200, _m.supprimer_modele(str(donnees.get("modele", ""))))
             if self.path == "/api/demarrer-ollama":
-                return self._envoyer(200, {"message": _m.demarrer_ollama()})
+                return self._envoyer(200, {"message": _m.start_ollama()})
             if self.path == "/api/bench-moteurs":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                _bench_moteurs.launch(_m.reglages()["modele"], str(donnees.get("mode", "rapide")), _m.DONNEES, _moteurs.CONTEXT["profil"]())
+                _bench_moteurs.launch(_m.settings()["modele"], str(donnees.get("mode", "rapide")), _m.DATA, _moteurs.CONTEXT["profil"]())
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/decharger":                          # décharger une chose de la liste des ressources (modèle d'Ollama, serveur llama.cpp, ComfyUI)
                 return self._envoyer(200, _ressources.unload(donnees.get("id")))
             if self.path == "/api/liberer-vram":
-                return self._envoyer(200, _m.liberer_vram(tout=True))
+                return self._envoyer(200, _m.free_vram(tout=True))
             if self.path == "/api/resumer":
                 return self._resumer(donnees)
         except (ValueError, OSError, TypeError, subprocess.SubprocessError) as erreur:
@@ -1424,7 +1424,7 @@ class Handler(BaseHTTPRequestHandler):
     @staticmethod
     def _racines_travail():
         """{id: chemin} des dossiers de travail, et l'identifiant du dossier actif (où les skills s'installent par défaut)."""
-        cfg = _m.config_lue()
+        cfg = _m.read_config()
         actif = _travaux.active(cfg)
         return {t["id"]: t["chemin"] for t in _travaux.entries(cfg)}, (actif["id"] if actif else "")
 
@@ -1492,11 +1492,11 @@ class Handler(BaseHTTPRequestHandler):
                     if depot not in {x["depot"] for x in _skills.sources()}:
                         return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
                 r = _skills.install(depot, dossier, racines[travail], danger_ok=bool(donnees.get("danger_ok")), licence_ok=bool(donnees.get("licence_ok")), remplacer=remplacer, nom=nom)
-                _m.journaliser("Skill tiers installé : {} ({}, {}).".format(r["nom"], depot, dossier))
+                _m.log_event("Skill tiers installé : {} ({}, {}).".format(r["nom"], depot, dossier))
                 return self._envoyer(200, r)
             if chemin == "/api/skills-tiers-retirer":
                 _skills.remove(racines[travail], str(donnees.get("nom", "")))
-                _m.journaliser("Skill tiers retiré : {}.".format(str(donnees.get("nom", ""))[:60]))
+                _m.log_event("Skill tiers retiré : {}.".format(str(donnees.get("nom", ""))[:60]))
                 return self._envoyer(200, {"ok": True})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})          # jamais 5xx : une lecture qui échoue (limite de GitHub, réseau) est un refus expliqué, pas une panne de Lutin
@@ -1508,7 +1508,7 @@ class Handler(BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         try:
             if route == "modeles":
-                return self._envoyer(200, _geres.models(genre, _m.reglages().get("modele")))
+                return self._envoyer(200, _geres.models(genre, _m.settings().get("modele")))
             if route == "catalogue":
                 return self._envoyer(200, _geres.catalog(genre, (q.get("q") or [""])[0], (q.get("tri") or ["recent"])[0], (q.get("communaute") or ["0"])[0] == "1", (q.get("page") or ["1"])[0]))
             return self._envoyer(200, {"quantifications": _geres.quantizations(genre, (q.get("depot") or [""])[0])})
@@ -1522,11 +1522,11 @@ class Handler(BaseHTTPRequestHandler):
     def _noeud_etat(self):
         if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})
-        mo = _moteurs.by_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
-        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0], _machines.noeud_charge(bool(_m.TOURS_ACTIFS), self.NOEUD_ACTIFS["n"]), _machines.noeud_jeton_valide(self.headers.get("X-Noeud")) or ""))
+        mo = _moteurs.by_id(_m.settings().get("moteur") or _moteurs.OLLAMA)
+        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0], _machines.noeud_charge(bool(_m.ACTIVE_TURNS), self.NOEUD_ACTIFS["n"]), _machines.noeud_jeton_valide(self.headers.get("X-Noeud")) or ""))
 
     def _noeud_appairer(self, donnees):
-        if not _m.LIMITEUR_PIN.autoriser(self.client_address[0]):
+        if not _m.PIN_LIMITER.autoriser(self.client_address[0]):
             return self._envoyer(429, {"erreur": "Trop d'essais : attends une minute."})
         try:
             return self._envoyer(200, _machines.noeud_echanger(donnees.get("code"), donnees.get("nom"), self.request.getsockname()[0]))
@@ -1640,7 +1640,7 @@ class Handler(BaseHTTPRequestHandler):
     def _laisser_passer_l_utilisateur_local(self):
         """Le moteur est partagé : si quelqu'un utilise Lutin sur cette machine, la demande de l'autre machine attend la fin de son tour (au plus ATTENTE_LOCAL_S), puis passe. Le propriétaire de la carte graphique passe en premier."""
         fin = time.monotonic() + self.ATTENTE_LOCAL_S
-        while _m.TOURS_ACTIFS and time.monotonic() < fin:
+        while _m.ACTIVE_TURNS and time.monotonic() < fin:
             time.sleep(0.5)
 
     def _noeud_chat(self, donnees):
@@ -1650,7 +1650,7 @@ class Handler(BaseHTTPRequestHandler):
             corps = _machines.corps_autorise(donnees.get("corps"))
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
-        mo = _moteurs.by_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)          # le moteur de CETTE machine : jamais une autre machine (pas de chaîne)
+        mo = _moteurs.by_id(_m.settings().get("moteur") or _moteurs.OLLAMA)          # le moteur de CETTE machine : jamais une autre machine (pas de chaîne)
         if corps["model"] not in mo.modeles()["installes"]:
             return self._envoyer(404, {"erreur": "modèle absent de cette machine"})
         if not self.NOEUD_PLACES.acquire(blocking=False):
@@ -1684,7 +1684,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _machines(self, action, donnees):
         """onglet Machines (configurateur seulement) : ajouter, retirer, choisir celle qui répond, prêter le moteur de cette machine."""
-        r = _m.reglages()
+        r = _m.settings()
         if action == "add":
             _machines.ajouter(donnees.get("adresse"), donnees.get("code"), donnees.get("nom", ""), donnees.get("mac", ""))
         elif action == "remove":
@@ -1697,7 +1697,7 @@ class Handler(BaseHTTPRequestHandler):
         elif action == "mac":
             _machines.definir_mac(str(donnees.get("id", "")), donnees.get("mac"))
         elif action == "noeud-activer":
-            _machines.noeud_activer(bool(donnees.get("actif")), niveau_local=_m.SECURITE.niveau == _sec.LOCAL)
+            _machines.noeud_activer(bool(donnees.get("actif")), niveau_local=_m.SECURITY.niveau == _sec.LOCAL)
         elif action == "wake":
             return _machines.reveiller(str(donnees.get("id", "")))
         elif action == "shutdown":
@@ -1743,19 +1743,19 @@ class Handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _vue_machines():
-        r = _m.reglages()
-        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "demarrage": _alimentation.startup_state_memo(), "journal": _machines.journal()}
+        r = _m.settings()
+        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITY.niveau == _sec.LOCAL, "demarrage": _alimentation.startup_state_memo(), "journal": _machines.journal()}
 
     def _appairer(self, donnees):
-        if _m.SECURITE.niveau == _sec.LOCAL:
+        if _m.SECURITY.niveau == _sec.LOCAL:
             return self._envoyer(400, {"erreur": "Cet accès est réservé à cette machine : pas de code à saisir."})
-        if not _m.LIMITEUR_PIN.autoriser(self.client_address[0]):
+        if not _m.PIN_LIMITER.autoriser(self.client_address[0]):
             return self._envoyer(429, {"erreur": "Trop d'essais : attends une minute."})
         nom = donnees.get("nom")
-        jeton = _m.APPAREILS.appairer(str(donnees.get("pin", "")), _sec.nom_appareil(nom if isinstance(nom, str) else "", self.headers.get("User-Agent"), self._sur_cette_machine()))
+        jeton = _m.DEVICES.appairer(str(donnees.get("pin", "")), _sec.nom_appareil(nom if isinstance(nom, str) else "", self.headers.get("User-Agent"), self._sur_cette_machine()))
         if not jeton:
             return self._envoyer(403, {"erreur": "Code incorrect ou expiré. Demande-en un nouveau sur l'ordinateur (lutin pin)."})
-        return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.set_cookie_header(jeton, _m.SECURITE.url_publique.startswith("https://"))})
+        return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.set_cookie_header(jeton, _m.SECURITY.url_publique.startswith("https://"))})
 
     _flux_v1 = False          # posé par lutin.api_v1 : cette demande de réponse vient de /api/v1, ses refus et ses évènements sont traduits à la frontière
 
@@ -1778,9 +1778,9 @@ class Handler(BaseHTTPRequestHandler):
         if self._via_relais:                                      # le tour s'exécute avec les réglages DE CETTE machine : ni modèle, ni mode, ni accords automatiques, ni autre machine imposés de l'extérieur
             donnees = {k: v for k, v in donnees.items() if k not in ("modele", "machine", "mode", "options", "reflexion", "travail")}
         ident = str(donnees.get("conversation") or "")
-        with _m.VERROU_TOURS:                                   # trop de réponses en cours : on refuse avant de créer quoi que ce soit
-            if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES and ident not in _m.TOURS_ACTIFS:
-                return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS)), "too_many_turns")
+        with _m.TURNS_LOCK:                                   # trop de réponses en cours : on refuse avant de créer quoi que ce soit
+            if len(_m.ACTIVE_TURNS) >= _m.CONCURRENT_TURNS and ident not in _m.ACTIVE_TURNS:
+                return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.ACTIVE_TURNS)), "too_many_turns")
         _fond.interrupt_for_user(8)                    # le travail de fond cède la place : son document en cours sera refait plus tard
         conv = _m.conv_read(ident) if ident else _m.conv_new()
 
@@ -1802,10 +1802,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._refus_tour(400, "Ce message n'existe plus dans la conversation : recharge-la.", "invalid_request")
         if isinstance(donnees.get("options"), dict):
             _m.options_write(conv["id"], donnees["options"])                                  # les options affichées par la page deviennent celles de cette conversation (créée au premier message)
-        mode_voulu = _m.options_read(conv["id"]).get("mode") or (donnees.get("mode") if not isinstance(donnees.get("options"), dict) else None) or _m.reglages()["mode"]
+        mode_voulu = _m.options_read(conv["id"]).get("mode") or (donnees.get("mode") if not isinstance(donnees.get("options"), dict) else None) or _m.settings()["mode"]
         if mode_voulu == "mission":                                                            # mode « Mission longue » : ce message est le cahier des charges (ou une consigne), la conversation sert de compte rendu
             mission_en_cours = _mission.find_for_conversation(conv["id"])
-            if not (mission_en_cours and mission_en_cours["etat"] != "terminee") and conv["id"] in _m.TOURS_ACTIFS:
+            if not (mission_en_cours and mission_en_cours["etat"] != "terminee") and conv["id"] in _m.ACTIVE_TURNS:
                 return self._refus_tour(409, "Cette conversation est déjà en train de répondre. Attends la fin ou clique sur Arrêter.", "turn_running")
             return self._mission_dans_la_conversation(conv, texte, donnees, mission_en_cours, abandon, not ident)
         try:
@@ -1819,7 +1819,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_turns.active())), "too_many_turns")
         fin_flux = threading.Event()
         try:
-            r = _m.apply_options(_m.reglages(), conv["id"])
+            r = _m.apply_options(_m.settings(), conv["id"])
             for k in ("modele", "reflexion", "mode"):
                 if k in donnees and (k == "modele" or not isinstance(donnees.get("options"), dict)):
                     r[k] = donnees[k]
@@ -1854,7 +1854,7 @@ class Handler(BaseHTTPRequestHandler):
                         page_partie[0] = True
 
             def emit(evenement):
-                ecrire((json.dumps(self._evenement_flux(_m.traduire_evenement(evenement)), ensure_ascii=False) + "\n").encode("utf-8"))
+                ecrire((json.dumps(self._evenement_flux(_m.translate_event(evenement)), ensure_ascii=False) + "\n").encode("utf-8"))
 
             def battement():
                 while not fin_flux.wait(STREAM_HEARTBEAT):                  # une ligne vide (la page l'ignore) : un reverse proxy coupe un flux resté silencieux (modèle qui charge, commande longue, attente d'un accord)
@@ -1909,7 +1909,7 @@ class Handler(BaseHTTPRequestHandler):
         ident = str(donnees.get("conversation") or "")
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
-        r = _m.reglages()
+        r = _m.settings()
         conv = _m.conv_read(ident)                    # hors du « try » : une conversation inconnue est une demande invalide (400), pas une panne (500)
         try:
             return self._envoyer(200, {"texte": _m.document_de_reprise(conv, r), "modele": r["modele"]})
@@ -1926,7 +1926,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
         try:
-            return self._envoyer(200, {"titre": _m.titre_propose(conv, _m.reglages())})
+            return self._envoyer(200, {"titre": _m.titre_propose(conv, _m.settings())})
         except ValueError as erreur:          # the model answered nothing
             return self._envoyer(500, {"erreur": str(erreur)})
         except OSError as erreur:             # the engine does not answer

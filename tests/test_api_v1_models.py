@@ -14,7 +14,7 @@ T, A, api = U.T, U.A, U.api
 
 class Models(unittest.TestCase):
     def setUp(self):
-        installed, model = list(T.INSTALLES), A.reglages()["modele"]
+        installed, model = list(T.INSTALLES), A.settings()["modele"]
 
         def restore():
             T.INSTALLES[:] = installed
@@ -25,7 +25,7 @@ class Models(unittest.TestCase):
     def test_the_list_gives_what_the_model_selector_needs(self):
         status, answer = api("GET", "/api/v1/models")
         self.assertEqual((status, sorted(answer)), (200, ["current", "downloads", "engine", "models", "remote", "running"]))
-        self.assertEqual((answer["engine"], answer["running"], answer["current"], answer["downloads"]), ("ollama", True, A.reglages()["modele"], []))
+        self.assertEqual((answer["engine"], answer["running"], answer["current"], answer["downloads"]), ("ollama", True, A.settings()["modele"], []))
         self.assertEqual(answer["remote"], [], "no paired machine: no model of another machine (tests/test_api_v1_machines.py)")
         self.assertEqual([sorted(model) for model in answer["models"]], [["name", "size_bytes"]] * len(T.INSTALLES))
         self.assertEqual([model["name"] for model in answer["models"]], T.INSTALLES)

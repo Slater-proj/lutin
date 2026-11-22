@@ -211,17 +211,17 @@ class Api(Base):
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
-        cls.avant = A.SECURITE
-        A.SECURITE = S.Security(niveau=S.LOCAL)
+        cls.avant = A.SECURITY
+        A.SECURITY = S.Security(niveau=S.LOCAL)
 
     @classmethod
     def tearDownClass(cls):
-        A.SECURITE = cls.avant
+        A.SECURITY = cls.avant
         cls.serveur.shutdown()
 
     def appel(self, methode, chemin, corps=None, en_tetes=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
-        h = dict({"Host": "127.0.0.1:%d" % self.port, "X-Token": A.JETON}, **(en_tetes or {}))
+        h = dict({"Host": "127.0.0.1:%d" % self.port, "X-Token": A.TOKEN}, **(en_tetes or {}))
         donnees = json.dumps(corps).encode() if corps is not None else None
         if donnees:
             h["Content-Type"] = "application/json"

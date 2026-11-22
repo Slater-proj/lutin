@@ -21,7 +21,7 @@ def restore_file(dossier, chemin, e):
     """Remet un fichier dans l'état d'avant la demande. Renvoie (réussi, raison de l'échec)."""
     try:
         f = _m.safe_path(chemin, ecriture=True)
-    except _m.ErreurOutil:
+    except _m.ToolError:
         return False, "chemin refusé"
     if e.get("apres") and _m.file_sha(f) != e["apres"]:
         return False, "modifié depuis"
@@ -37,13 +37,13 @@ def restore_file(dossier, chemin, e):
 
 
 def undoable_manifest(ident):
-    if ident in _m.TOURS_ACTIFS:
+    if ident in _m.ACTIVE_TURNS:
         raise ValueError("Une réponse est en cours dans cette conversation : arrête-la d'abord.")
     conv = _m.conv_read(ident)
     info = conv.get("annulable")
     if not info:
         raise ValueError("Aucune modification de fichier à annuler dans cette conversation.")
-    dossier = _m.DONNEES / "sauvegardes" / info["id"]
+    dossier = _m.DATA / "sauvegardes" / info["id"]
     manifeste = _m.read_json(dossier / "_tour.json", None)
     if not manifeste:
         raise ValueError("Les sauvegardes de cette demande ont disparu (purge après 60 jours ?).")
@@ -55,7 +55,7 @@ def turn_review(ident):
     conv = _m.conv_read(ident)
     if not conv.get("annulable"):
         return {"fichiers": []}
-    dossier = _m.DONNEES / "sauvegardes" / conv["annulable"]["id"]
+    dossier = _m.DATA / "sauvegardes" / conv["annulable"]["id"]
     manifeste = _m.read_json(dossier / "_tour.json", None) or {"fichiers": {}}
     sortie = []
     for chemin, e in manifeste["fichiers"].items():
@@ -63,7 +63,7 @@ def turn_review(ident):
             continue
         try:
             f = _m.safe_path(chemin)
-        except _m.ErreurOutil:
+        except _m.ToolError:
             continue
         avant = read_utf8(dossier / chemin) if e.get("avant") else ""
         apres = read_utf8(f) if f.is_file() else ""
@@ -101,7 +101,7 @@ def undo_turn(ident, seulement=None):
     conv["messages"].append({"role": "user", "content": "[Note automatique : l'utilisateur a annulé des modifications de fichiers de la demande précédente. Rétablis : {}.{} Ne considère plus ces modifications comme faites.]".format(
         ", ".join(retablis) or "aucun", (" Non rétablis : " + ", ".join(ignores) + ".") if ignores else "")})
     _m.conv_write(conv)
-    _m.journaliser("Demande annulée (conversation {}) : {} rétabli(s), {} ignoré(s).".format(ident, len(retablis), len(ignores)))
+    _m.log_event("Demande annulée (conversation {}) : {} rétabli(s), {} ignoré(s).".format(ident, len(retablis), len(ignores)))
     return {"ok": True, "retablis": retablis, "ignores": ignores}
 
 
@@ -118,7 +118,7 @@ def git_state():
         return {"dispo": False, "raison": "git n'a pas répondu : {}".format(e)}
     if code != 0:
         if "dubious ownership" in erreur or "safe.directory" in erreur:
-            return {"dispo": False, "raison": "git refuse encore ce dossier (propriétaire différent, fréquent sur un partage réseau), malgré l'autorisation donnée à chaque appel : ta version de git est peut-être trop ancienne. Mets git à jour, ou lance une fois dans un terminal : git config --global --add safe.directory \"{}\"".format(str(_m.RACINE).replace("\\", "/"))}
+            return {"dispo": False, "raison": "git refuse encore ce dossier (propriétaire différent, fréquent sur un partage réseau), malgré l'autorisation donnée à chaque appel : ta version de git est peut-être trop ancienne. Mets git à jour, ou lance une fois dans un terminal : git config --global --add safe.directory \"{}\"".format(str(_m.ROOT).replace("\\", "/"))}
         return {"dispo": False, "raison": "Ce dossier n'est pas un dépôt git, ou git a échoué : " + erreur.strip()[:200]}
     modifies = []
     for ligne in sortie.splitlines():
@@ -140,7 +140,7 @@ def git_paths(fichiers):
     for x in fichiers:
         try:
             p = _m.safe_path(str(x))
-        except _m.ErreurOutil as e:
+        except _m.ToolError as e:
             raise ValueError(str(e))
         propres.append(_m.rel(p) if p.exists() else str(x).replace("\\", "/").strip("/"))
     return propres
@@ -148,7 +148,7 @@ def git_paths(fichiers):
 
 def git_message_of(fichiers, r=None):
     """Fait écrire par le modèle un message de commit à partir des changements des fichiers choisis (rien n'est commité)."""
-    r = r or _m.reglages()
+    r = r or _m.settings()
     fichiers = git_paths(fichiers)
     code, sortie, _ = _m.git(["status", "--porcelain=v1", "--"] + fichiers)
     nouveaux = [l[3:].strip().strip('"') for l in sortie.splitlines() if l.startswith("??")]
@@ -173,7 +173,7 @@ def git_message_of(fichiers, r=None):
                 "Format : une première ligne de 72 caractères au plus (ce qui change, en français, au présent ou à l'infinitif), une ligne vide, puis 2 à 6 puces « - » avec les changements importants.\n"
                 "Pas de guillemets autour, pas de blabla : réponds UNIQUEMENT avec le message.\n"
                 "Style des commits récents du projet :\n" + (journal.strip() or "(aucun)") + "\n\nCHANGEMENTS :\n" + diff)
-    corps = {"model": r["modele"], "messages": [{"role": "user", "content": consigne}], "stream": False, "think": False, "options": _m.options_modele(r, 0.3)}
+    corps = {"model": r["modele"], "messages": [{"role": "user", "content": consigne}], "stream": False, "think": False, "options": _m.model_options(r, 0.3)}
     from . import agent
     reponse = agent.moteur_actuel(r).chat(corps, 300)          # le moteur choisi (Ollama, llama.cpp, une autre machine), pas toujours Ollama
     texte = (reponse.get("message", {}).get("content") or "").strip()
@@ -192,7 +192,7 @@ def git_commit(message, fichiers):
     code, sortie, erreur = _m.git(["add", "--"] + fichiers)
     if code != 0:
         raise ValueError(_t("git add a échoué : {}").format((erreur or sortie).strip()[:400]))
-    fichier_message = _m.DONNEES / ("commit-" + secrets.token_hex(3) + ".txt")
+    fichier_message = _m.DATA / ("commit-" + secrets.token_hex(3) + ".txt")
     try:
         fichier_message.parent.mkdir(parents=True, exist_ok=True)
         fichier_message.write_text(message + "\n", encoding="utf-8")
@@ -205,7 +205,7 @@ def git_commit(message, fichiers):
         fichier_message.unlink(missing_ok=True)
     if code != 0:
         raise ValueError(_t("git commit a échoué : {}").format((erreur.strip() or sortie.strip())[:500]))
-    _m.journaliser("Commit de {} fichier(s) depuis l'assistant : {}".format(len(fichiers), message.splitlines()[0][:80]))
+    _m.log_event("Commit de {} fichier(s) depuis l'assistant : {}".format(len(fichiers), message.splitlines()[0][:80]))
     return {"ok": True, "sortie": sortie.strip()[:600]}
 
 
@@ -221,7 +221,7 @@ PINS_MAX = 8                 # messages épinglés au plus par conversation (ils
 
 def pin_message(ident, index, epingle):
     """Marque un message comme important : il n'est jamais retiré du contexte du modèle (ni par la réduction du contexte, ni par le résumé), dans la limite d'un quart de la fenêtre."""
-    if ident in _m.TOURS_ACTIFS:
+    if ident in _m.ACTIVE_TURNS:
         raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
     c = _m.conv_read(ident)
     try:
@@ -245,7 +245,7 @@ def delete_media(ident, media_id):
     """Retire une image créée par un outil : de la conversation, de la copie gardée par Lutin si plus rien ne la cite, et du dossier de sortie de ComfyUI (jamais un fichier hors de ce dossier)."""
     from pathlib import Path
     from . import addons, images
-    if ident in _m.TOURS_ACTIFS:
+    if ident in _m.ACTIVE_TURNS:
         raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
     c = _m.conv_read(ident)
     trouve = next((m for m in c["messages"] if media_id in (m.get("medias") or [])), None)
@@ -305,7 +305,7 @@ def search_conversations(q):
 
 def _call_tool(nom, args, ctx):
     if not isinstance(args, dict):
-        raise _m.ErreurOutil("Arguments invalides.")
+        raise _m.ToolError("Arguments invalides.")
     if nom.startswith("mcp__"):
         from . import mcp
         return mcp.call(nom, args, ctx)
@@ -351,18 +351,18 @@ def _call_tool(nom, args, ctx):
     if nom in ("mission_terminer", "mission_bloquee"):
         from . import mission
         if not ctx.get("mission"):
-            raise _m.ErreurOutil("Cet outil n'existe que pendant une mission longue.")
+            raise _m.ToolError("Cet outil n'existe que pendant une mission longue.")
         return mission.report(ctx["mission"], "terminee" if nom == "mission_terminer" else "bloquee", args.get("bilan") or args.get("question") or "")
     if nom == "suivi":
         from . import progress_sheet
         conv = ctx.get("conv")
         if conv is None:
-            raise _m.ErreurOutil("Pas de conversation active.")
+            raise _m.ToolError("Pas de conversation active.")
         return progress_sheet.modify(conv["id"], args.get("section", ""), args.get("texte", ""), args.get("mode", ""))
     if nom in ("comfy_modeles", "comfy_generer"):
         from . import addons, addons_comfyui
         if not addons.actif("comfyui"):
-            raise _m.ErreurOutil("L'addon ComfyUI n'est pas activé.")
+            raise _m.ToolError("L'addon ComfyUI n'est pas activé.")
         return addons_comfyui.text_models() if nom == "comfy_modeles" else addons_comfyui.generate_tool(args, ctx)
     if nom.startswith("voix_"):
         from . import addons_voicestudio
@@ -374,21 +374,21 @@ def _call_tool(nom, args, ctx):
         return _m.state_tool()
     if nom == "installer_module":
         return _m.install_module_tool(args.get("module", ""), ctx)
-    raise _m.ErreurOutil("Outil inconnu : " + str(nom))
+    raise _m.ToolError("Outil inconnu : " + str(nom))
 
 
 def call_tool(nom, args, ctx):
     """Exécute un outil ; les actions qui modifient quelque chose (fichiers, commandes, modules) sont inscrites au journal des actions."""
-    if nom not in _m.OUTILS_JOURNALISES or not isinstance(args, dict):
+    if nom not in _m.LOGGED_TOOLS or not isinstance(args, dict):
         return _call_tool(nom, args, ctx)
     ctx.pop("dernier_accord", None)
     try:
         resultat = _call_tool(nom, args, ctx)
-    except _m.ErreurOutil as e:
-        _m.noter_action(ctx, nom, args, "erreur : " + str(e))
+    except _m.ToolError as e:
+        _m.record_action(ctx, nom, args, "erreur : " + str(e))
         raise
-    except _m.Arret:
-        _m.noter_action(ctx, nom, args, "arrêté")
+    except _m.TurnStopped:
+        _m.record_action(ctx, nom, args, "arrêté")
         raise
-    _m.noter_action(ctx, nom, args, "refusé" if str(resultat).startswith("Refusé par l'utilisateur") else "ok")
+    _m.record_action(ctx, nom, args, "refusé" if str(resultat).startswith("Refusé par l'utilisateur") else "ok")
     return resultat

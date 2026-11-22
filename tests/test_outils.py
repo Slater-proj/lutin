@@ -193,17 +193,17 @@ class DonneesReservees(unittest.TestCase):
             donnees.mkdir()
             (donnees / "notifications.json").write_text("{}", encoding="utf-8")
             (racine / "ok.txt").write_text("x", encoding="utf-8")
-            avant = (m.RACINE, m.DONNEES)
-            m.RACINE, m.DONNEES = racine, donnees
+            avant = (m.ROOT, m.DATA)
+            m.ROOT, m.DATA = racine, donnees
             try:
                 self.assertEqual(tools.safe_path("ok.txt"), racine / "ok.txt")
                 for ecriture in (False, True):
-                    with self.assertRaises(m.ErreurOutil):
+                    with self.assertRaises(m.ToolError):
                         tools.safe_path("donnees/notifications.json", ecriture)
-                with self.assertRaises(m.ErreurOutil):
+                with self.assertRaises(m.ToolError):
                     tools.safe_path("donnees")
             finally:
-                m.RACINE, m.DONNEES = avant
+                m.ROOT, m.DATA = avant
 
 
 if __name__ == "__main__":

@@ -59,13 +59,13 @@ def file_summary(f, taille):
 def build_plan():
     """Parcourt le projet et renvoie {dossier de premier niveau: [lignes]}. Les fichiers inchangés ne sont pas relus."""
     sections = {}
-    for racine, sous, noms in os.walk(str(_m.RACINE)):
-        sous[:] = sorted(s for s in sous if s not in _m.DOSSIERS_IGNORES and not s.startswith(".") and not _m.ignore_chemin(Path(racine) / s))
+    for racine, sous, noms in os.walk(str(_m.ROOT)):
+        sous[:] = sorted(s for s in sous if s not in _m.IGNORED_FOLDERS and not s.startswith(".") and not _m.path_ignored(Path(racine) / s))
         dossier = Path(racine)
         fichiers = [n for n in sorted(noms) if Path(n).suffix.lower() in PLAN_EXT and not n.startswith(".")]
         if not fichiers:
             continue
-        chemin = dossier.relative_to(_m.RACINE).as_posix()
+        chemin = dossier.relative_to(_m.ROOT).as_posix()
         section = chemin.split("/")[0] if chemin != "." else "."
         lignes = sections.setdefault(section, [])
         lignes.append("" if chemin == "." else chemin + "/")
@@ -97,7 +97,7 @@ def refresh_plan(force=False):
         try:
             PLAN["sections"], PLAN["date"], PLAN["valide"] = build_plan(), time.time(), True
         except Exception as erreur:  # noqa: BLE001
-            _m.journaliser("Plan du projet impossible : {!r}".format(erreur))
+            _m.log_event("Plan du projet impossible : {!r}".format(erreur))
         finally:
             PLAN["en_cours"] = False
     threading.Thread(target=travail, daemon=True).start()

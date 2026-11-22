@@ -81,7 +81,7 @@ class PairedMachines(unittest.TestCase):
                          (["machine", "machine_name", "models", "state"], self.paired["id"], "Bureau", "operational"))
 
     def test_without_the_multi_machine_mode_no_remote_model(self):
-        before = A.reglages().get("cluster")
+        before = A.settings().get("cluster")
         A.save_settings({"cluster": False})
         self.addCleanup(lambda: A.save_settings({"cluster": before}))
         self.assertEqual(api("GET", "/api/v1/models")[1]["remote"], [])

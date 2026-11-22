@@ -38,67 +38,67 @@ from .i18n import t as _t
 from .i18n import translate as _tr
 from .ollama_client import Ollama as _Ollama  # noqa: F401  (client_banc et les tests s’en servent par ce module)
 
-ICI = Path(__file__).resolve().parent
-WEB = ICI / "web"
+HERE = Path(__file__).resolve().parent
+WEB = HERE / "web"
 # Read once from the environment by the application context (ADR 0014); these names read and write it (see _context.bind below).
 _SETTINGS = _context.current().settings
-RACINE = _SETTINGS.root          # le dossier de travail : la seule partie du disque que l'assistant peut lire et modifier
-DONNEES = _SETTINGS.data
-MEMOIRE = _SETTINGS.memory
+ROOT = _SETTINGS.root          # le dossier de travail : la seule partie du disque que l'assistant peut lire et modifier
+DATA = _SETTINGS.data
+MEMORY = _SETTINGS.memory
 OLLAMA = _SETTINGS.ollama_url
-OUTIL = _SETTINGS.tool_url          # extension facultative (outil d'images) : sans adresse, ses outils ne sont pas proposés au modèle
+TOOL_URL = _SETTINGS.tool_url          # extension facultative (outil d'images) : sans adresse, ses outils ne sont pas proposés au modèle
 PORT = _SETTINGS.port
 VERSION = _VERSION_LUTIN
-JETON = secrets.token_hex(16)                 # écrit dans la page : protège contre les requêtes venant d'autres sites
-JETON_CONSOLE = secrets.token_hex(16)         # écrit dans un fichier réservé à l'utilisateur : sert à la ligne de commande (lutin chat), n'est jamais dans la page
+TOKEN = secrets.token_hex(16)                 # écrit dans la page : protège contre les requêtes venant d'autres sites
+CONSOLE_TOKEN = secrets.token_hex(16)         # écrit dans un fichier réservé à l'utilisateur : sert à la ligne de commande (lutin chat), n'est jamais dans la page
 
 # Sécurité : le lanceur remplace ces valeurs avant de démarrer le serveur (voir lutin.security).
-SECURITE = _sec.Security()
-APPAREILS = _sec.Devices()
-LIMITEUR_PIN = _sec.RateLimiter(10, 60)
+SECURITY = _sec.Security()
+DEVICES = _sec.Devices()
+PIN_LIMITER = _sec.RateLimiter(10, 60)
 IP_LAN = ""
-VERIFICATEUR = None          # fonction(portee) -> propositions de modèles ; fournie par le lanceur (boutons « chercher » de l'onglet Modèles)
+MODEL_CHECKER = None          # fonction(portee) -> propositions de modèles ; fournie par le lanceur (boutons « chercher » de l'onglet Modèles)
 
 # Modèles proposés : le catalogue livré avec Lutin (lutin/data/modeles.json), pas du code. Le lanceur peut y ajouter une copie plus récente.
 _CATALOGUE = _catalogue.load(_SETTINGS.catalogue)
-MODELES = [{"id": m["id"], "nom": m["nom"], "phrase": m["phrase"], "go": m["go"], "role": max(m["notes"], key=m["notes"].get), "avance": bool(m.get("avance")),
+MODELS = [{"id": m["id"], "nom": m["nom"], "phrase": m["phrase"], "go": m["go"], "role": max(m["notes"], key=m["notes"].get), "avance": bool(m.get("avance")),
             "avertissement": m.get("avertissement", ""), "licence": m["licence"], "capacites": m["capacites"]} for m in _CATALOGUE["modeles"]]
-REGLAGES_DEFAUT = {"modele": _SETTINGS.default_model, "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "polyvalent", "num_predict": 0, "tours_max": 14, "web": True,
+DEFAULT_SETTINGS = {"modele": _SETTINGS.default_model, "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "polyvalent", "num_predict": 0, "tours_max": 14, "web": True,
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0, "budget_go": 0.0,          # budget_go : la mémoire que le mainteneur de la machine accepte de remplir avec un modèle (0 = calculée d'après la machine)
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
                     "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "conseil_machine": True, "routage": False, "cluster": None, "moteur": "ollama", "machine": "", "modeles_par_moteur": {}, "modele_annexe": "", "reflexion_tours": "toujours", "memoire_longue": "fichier", "fiche_part": 10, "fiche_scribe": True, "recherche_sens": False, "modele_embeddings": "nomic-embed-text"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
-CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
-BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
-BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0), "budget_go": (0.0, 4096.0)}
+REMINDER_CHOICES = ("scenario", "toujours", "jamais")
+LOAD_BOUNDS = {"num_thread": (1, 256), "garde_min": (0, 240)}
+RESOURCE_BOUNDS = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0), "budget_go": (0.0, 4096.0)}
 
-REGLAGES_DEFAUT.update(_reglages_outils.DEFAULTS)
+DEFAULT_SETTINGS.update(_reglages_outils.DEFAULTS)
 
 
-def nettoyer_ressources(r):
+def clean_resources(r):
     """Seuils de surveillance : des nombres dans leurs bornes (valeur par défaut si absurde)."""
     r["garde_ressources"] = bool(r.get("garde_ressources", True))
     r["liberer_si_comfy"] = bool(r.get("liberer_si_comfy", True))
-    if r.get("rappels_auto") not in CHOIX_RAPPELS:
+    if r.get("rappels_auto") not in REMINDER_CHOICES:
         r["rappels_auto"] = "scenario"
-    for cle, (bas, haut) in BORNES_RESSOURCES.items():
+    for cle, (bas, haut) in RESOURCE_BOUNDS.items():
         try:
-            r[cle] = max(bas, min(haut, float(r.get(cle, REGLAGES_DEFAUT[cle]))))
+            r[cle] = max(bas, min(haut, float(r.get(cle, DEFAULT_SETTINGS[cle]))))
         except (TypeError, ValueError):
-            r[cle] = REGLAGES_DEFAUT[cle]
-    for cle, (bas, haut) in BORNES_CHARGE.items():          # entiers, ou None = automatique
+            r[cle] = DEFAULT_SETTINGS[cle]
+    for cle, (bas, haut) in LOAD_BOUNDS.items():          # entiers, ou None = automatique
         v = r.get(cle)
         try:
             r[cle] = None if v in (None, "") else int(max(bas, min(haut, int(float(v)))))
         except (TypeError, ValueError):
             r[cle] = None
     return r
-BORNES_ECHANTILLONNAGE = {"top_p": (0.0, 1.0), "top_k": (0, 200), "min_p": (0.0, 1.0), "repeat_penalty": (0.8, 2.0)}
+SAMPLING_BOUNDS = {"top_p": (0.0, 1.0), "top_k": (0, 200), "min_p": (0.0, 1.0), "repeat_penalty": (0.8, 2.0)}
 
 
-def nettoyer_echantillonnage(r):
+def clean_sampling(r):
     """Chaque paramètre vaut None (automatique) ou un nombre dans ses bornes."""
-    for cle, (bas, haut) in BORNES_ECHANTILLONNAGE.items():
+    for cle, (bas, haut) in SAMPLING_BOUNDS.items():
         v = r.get(cle)
         if v is None or v == "":
             r[cle] = None
@@ -113,7 +113,7 @@ def nettoyer_echantillonnage(r):
     return r
 
 
-def profil_echantillonnage(modele, reflechit):
+def sampling_profile(modele, reflechit):
     """Réglages d'échantillonnage conseillés par les éditeurs pour la famille du modèle (à vérifier sur la fiche de ton modèle exact) : moins de boucles et de dérives
     qu'avec la température seule. Qwen : réflexion → top_p 0,95 ; sans réflexion → top_p 0,8. Gemma : top_k 64, top_p 0,95."""
     m = str(modele).lower()
@@ -124,7 +124,7 @@ def profil_echantillonnage(modele, reflechit):
     return {}
 
 
-def options_modele(r, temperature, **extra):
+def model_options(r, temperature, **extra):
     """Les options Ollama communes à TOUTES les requêtes au modèle : un seul jeu de valeurs, sinon Ollama recharge le modèle entre deux requêtes (lent, et risque de manquer de mémoire)."""
     options = {"num_ctx": r["num_ctx"], "temperature": temperature}
     if r.get("num_thread"):
@@ -138,23 +138,23 @@ def options_modele(r, temperature, **extra):
     return options
 
 
-def options_echantillonnage(r, reflechit):
+def sampling_options(r, reflechit):
     """Profil du modèle, puis les valeurs que l'utilisateur a fixées à la main par-dessus."""
-    options = profil_echantillonnage(r["modele"], reflechit)
-    for cle in BORNES_ECHANTILLONNAGE:
+    options = sampling_profile(r["modele"], reflechit)
+    for cle in SAMPLING_BOUNDS:
         if r.get(cle) is not None:
             options[cle] = r[cle]
     return options
 ENV_OLLAMA = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0", "OLLAMA_KEEP_ALIVE": "5m"}
-TOURS_MAX = 14
-AGE_TACHES_MAX = 3            # réponses de suite sans mise à jour avant que la liste de tâches soit fermée (le modèle est parti sur autre chose)
-GARDE_RESSOURCES_ACTIF = _SETTINGS.resource_guard          # désactivé dans les tests (qui ne doivent pas dépendre de l'état réel de la machine)
-AUTO_DEMARRAGE = _SETTINGS.auto_start          # démarre Ollama tout seul s'il est arrêté au moment d'une demande (désactivé dans les tests)
-_context.bind(__name__, {"RACINE": "root", "DONNEES": "data", "MEMOIRE": "memory", "OLLAMA": "ollama_url", "OUTIL": "tool_url", "PORT": "port",
-                         "GARDE_RESSOURCES_ACTIF": "resource_guard", "AUTO_DEMARRAGE": "auto_start"})
-LECTURE_MAX = 7000
-SORTIE_MAX = 9000
-def construire_commandes_lecture(posix, en_plus=()):
+MAX_TURNS = 14
+MAX_TASK_AGE = 3            # réponses de suite sans mise à jour avant que la liste de tâches soit fermée (le modèle est parti sur autre chose)
+RESOURCE_GUARD = _SETTINGS.resource_guard          # désactivé dans les tests (qui ne doivent pas dépendre de l'état réel de la machine)
+AUTO_START = _SETTINGS.auto_start          # démarre Ollama tout seul s'il est arrêté au moment d'une demande (désactivé dans les tests)
+_context.bind(__name__, {"ROOT": "root", "DATA": "data", "MEMORY": "memory", "OLLAMA": "ollama_url", "TOOL_URL": "tool_url", "PORT": "port",
+                         "RESOURCE_GUARD": "resource_guard", "AUTO_START": "auto_start"})
+READ_MAX = 7000
+OUTPUT_MAX = 9000
+def build_read_commands(posix, en_plus=()):
     """Les lectures simples lancées sans accord : git en lecture, echo, et les commandes de lecture du système (dir / type / where sous Windows ; ls / cat / pwd / which ailleurs).
     `en_plus` : des commandes sûres ajoutées par l'utilisateur (Réglages > Outils), déjà validées : la commande exacte, ou suivie d'arguments sans enchaînement."""
     a = r"[^|&;<>`$\x00-\x08\x0a-\x1f]"          # un argument : ni enchaînement, ni redirection, ni substitution, ni retour à la ligne (pour sh, une seconde commande)
@@ -165,30 +165,30 @@ def construire_commandes_lecture(posix, en_plus=()):
 
 
 # Cette liste blanche n'est qu'un premier filtre : ce qui la passe est ensuite relu argument par argument et lancé SANS shell (voir lutin.safe_commands, outils.plan_lecture).
-COMMANDES_LECTURE = construire_commandes_lecture(os.name != "nt")
-COMMANDES_SANS_ACCORD = ()          # les commandes que l'utilisateur a déclarées sûres (Réglages > Outils), posées par reglages_outils.appliquer
-DOSSIERS_IGNORES = {".git", "__pycache__", "node_modules", ".venv", "venv", ".idea", ".vscode", "dist", "build", ".pytest_cache", ".ruff_cache", ".mypy_cache", "target"}
-DOSSIERS_IGNORES_BASE = frozenset(DOSSIERS_IGNORES)          # ceux de Lutin ; Réglages > Outils peut en ajouter (voir reglages_outils)
-DELAI_COMMANDE_S = 240          # temps maximal d'une commande de l'outil « executer » (réglable : Réglages > Outils)
-CHEMINS_IGNORES = ()          # chemins précis à sauter (en plus des noms de DOSSIERS_IGNORES)
-CHERCHER_DELAI = 25                                              # secondes au plus pour une recherche (gros dossier sur le réseau)
-JOURNAL_MAX = 1_000_000
+READ_COMMANDS = build_read_commands(os.name != "nt")
+COMMANDS_WITHOUT_APPROVAL = ()          # les commandes que l'utilisateur a déclarées sûres (Réglages > Outils), posées par reglages_outils.appliquer
+IGNORED_FOLDERS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".idea", ".vscode", "dist", "build", ".pytest_cache", ".ruff_cache", ".mypy_cache", "target"}
+BASE_IGNORED_FOLDERS = frozenset(IGNORED_FOLDERS)          # ceux de Lutin ; Réglages > Outils peut en ajouter (voir reglages_outils)
+COMMAND_TIMEOUT_S = 240          # temps maximal d'une commande de l'outil « executer » (réglable : Réglages > Outils)
+IGNORED_PATHS = ()          # chemins précis à sauter (en plus des noms de DOSSIERS_IGNORES)
+SEARCH_TIMEOUT = 25                                              # secondes au plus pour une recherche (gros dossier sur le réseau)
+LOG_MAX = 1_000_000
 
 
-class ErreurOutil(Exception):
+class ToolError(Exception):
     """Une erreur que le modèle doit voir et corriger (chemin refusé, fichier absent...)."""
 
 
-class Arret(Exception):
+class TurnStopped(Exception):
     """L'utilisateur a appuyé sur Arrêter (ou a fermé la page) : le tour s'arrête là."""
 
 
-def journaliser(texte):
+def log_event(texte):
     """Trace dans donnees/lutin.log (erreurs d'Ollama, d'outils...) pour pouvoir diagnostiquer après coup. Ne plante jamais."""
     try:
-        f = DONNEES / "lutin.log"
+        f = DATA / "lutin.log"
         f.parent.mkdir(parents=True, exist_ok=True)
-        if f.is_file() and f.stat().st_size > JOURNAL_MAX:
+        if f.is_file() and f.stat().st_size > LOG_MAX:
             os.replace(str(f), str(f.with_name("lutin.log.1")))
         with open(f, "a", encoding="utf-8") as fh:
             fh.write("{} {}\n".format(datetime.now().strftime("%Y-%m-%d %H:%M:%S"), " ".join(str(texte).split())[:1200]))
@@ -196,16 +196,16 @@ def journaliser(texte):
         pass
 
 
-def ignore_chemin(p):
+def path_ignored(p):
     """Vrai si p (dans le projet) est un dossier technique à sauter (noms ignorés partout, ou chemins précis)."""
     try:
-        r = Path(p).resolve().relative_to(RACINE)
+        r = Path(p).resolve().relative_to(ROOT)
     except ValueError:                      # lien qui sort du projet : on ne s'en occupe pas ici (chemin_sur le refusera à la lecture)
         return True
-    if any(part in DOSSIERS_IGNORES for part in r.parts):
+    if any(part in IGNORED_FOLDERS for part in r.parts):
         return True
     posix = r.as_posix().lower()
-    return any(posix == c or posix.startswith(c + "/") for c in CHEMINS_IGNORES)
+    return any(posix == c or posix.startswith(c + "/") for c in IGNORED_PATHS)
 
 
 from .storage import (  # noqa: F401  (déplacé dans storage.py : moteur ré-exporte ses noms)
@@ -250,11 +250,11 @@ from .storage import (  # noqa: F401  (déplacé dans storage.py : moteur ré-ex
 )
 
 
-def reglages():
+def settings():
     """Les réglages en vigueur (valeurs par défaut des nouvelles conversations, et réglages de la machine). Les options propres à chaque conversation sont à part : voir donnees.options_lire."""
-    r = dict(REGLAGES_DEFAUT)
-    brut = read_json(DONNEES / "reglages.json", {})
-    r.update({k: v for k, v in brut.items() if k in REGLAGES_DEFAUT})
+    r = dict(DEFAULT_SETTINGS)
+    brut = read_json(DATA / "reglages.json", {})
+    r.update({k: v for k, v in brut.items() if k in DEFAULT_SETTINGS})
     if r.get("moteur") == "openai":          # ExLlamaV3, LM Studio or Colibri chosen inside the settings of the « openai » engine before ADR 0020: read as that engine, the file is not rewritten
         from . import engines as _mo, llamacpp_engine as _ml
         r["moteur"] = _mo.chosen_id(r["moteur"], _ml.old_server())
@@ -275,12 +275,12 @@ def reglages():
         r["fiche_part"] = 10
     _reglages_outils.clean(r)
     _reglages_outils.apply(r, sys.modules[__name__])          # les limites des outils suivent les réglages (sans rien refaire tant qu'ils ne changent pas)
-    return nettoyer_ressources(nettoyer_echantillonnage(r))
+    return clean_resources(clean_sampling(r))
 
 
 from . import hardware as _hardware  # noqa: E402
 
-_hardware.USER_BUDGET = lambda: reglages().get("budget_go") or ""          # la mémoire voulue par l'utilisateur pour les modèles (voir Profil.budget_go)
+_hardware.USER_BUDGET = lambda: settings().get("budget_go") or ""          # la mémoire voulue par l'utilisateur pour les modèles (voir Profil.budget_go)
 
 
 from .tools import (  # noqa: F401  (déplacé dans tools.py : moteur ré-exporte ses noms)
@@ -412,7 +412,7 @@ from .health import (  # noqa: F401  (déplacé dans health.py : moteur ré-expo
 )
 
 
-def etat_comfy():
+def comfy_state():
     """ComfyUI tourne-t-il, et est-il en train de générer ? (il se partage la carte graphique avec le modèle de langage)"""
     try:
         from . import local_ports
@@ -424,19 +424,19 @@ def etat_comfy():
         return {"actif": False, "en_cours": 0, "attente": 0}
 
 
-def mesurer_disques():
+def measure_disks():
     if os.environ.get("LUTIN_DEMO"):
         disque = {"total": 931 * 10 ** 9, "libre": 412 * 10 ** 9, "racine": "C:\\"}
         return {"Ollama (modèles)": disque, "Projet": disque, "Données de l'assistant": disque}
-    return {"Ollama (modèles)": disk_space(ollama_models_folder()), "Projet": disk_space(RACINE), "Données de l'assistant": disk_space(DONNEES)}
+    return {"Ollama (modèles)": disk_space(ollama_models_folder()), "Projet": disk_space(ROOT), "Données de l'assistant": disk_space(DATA)}
 
 
-def mesures_systeme():
+def system_measures():
     """Toutes les mesures brutes d'un coup (séparées de leur interprétation, pour pouvoir tester celle-ci). Les mesures lentes (carte graphique, ComfyUI, disques) se font en parallèle et
     sont gardées quelques secondes (sante.memo) ; la taille du dossier de données se refait en arrière-plan."""
     with ThreadPoolExecutor(max_workers=4) as pool:
-        vram, comfy, disques = pool.submit(memo, "vram", video_memory), pool.submit(memo, "comfy", etat_comfy), pool.submit(memo, "disques", mesurer_disques)
-        taille = pool.submit(folder_size, DONNEES)          # la toute première mesure d'un gros dossier (ou d'un partage réseau) peut prendre des secondes : en parallèle des autres
+        vram, comfy, disques = pool.submit(memo, "vram", video_memory), pool.submit(memo, "comfy", comfy_state), pool.submit(memo, "disques", measure_disks)
+        taille = pool.submit(folder_size, DATA)          # la toute première mesure d'un gros dossier (ou d'un partage réseau) peut prendre des secondes : en parallèle des autres
         ram = system_memory()
         return {"ram": ram, "vram": vram.result(), "comfy": comfy.result(), "disques": disques.result(), "donnees_octets": taille.result()}
 
@@ -465,7 +465,7 @@ def git(args, delai=60):
     """Lance git dans le projet. Renvoie (code, sortie, erreur).
     « -c safe.directory=* » : sur un partage réseau (NAS), git refuse sinon le dossier (« dubious ownership »). Le réglage ne vaut que pour cet appel, rien n'est écrit dans ta configuration git."""
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
-    r = subprocess.run(["git", "-c", "core.quotepath=false", "-c", "safe.directory=*", "-C", str(RACINE)] + args, capture_output=True, timeout=delai, env=env)
+    r = subprocess.run(["git", "-c", "core.quotepath=false", "-c", "safe.directory=*", "-C", str(ROOT)] + args, capture_output=True, timeout=delai, env=env)
     return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
 
 
@@ -524,7 +524,7 @@ from .agent import (  # noqa: F401  (déplacé dans agent.py : moteur ré-export
 )
 
 
-def _liberer_autres_moteurs(tout, sauf=None):
+def _free_other_engines(tout, sauf=None):
     """Arrête le serveur llama.cpp de Lutin s'il tourne (il redémarre tout seul au prochain message), et, si `tout`, le serveur compatible OpenAI que Lutin gère (ExLlamaV3, Colibri, LM Studio : à redémarrer à la main),
     sauf celui du moteur `sauf`. Rend les noms de ce qui a été libéré. Avant, « Libérer la VRAM » ne regardait qu'Ollama et répondait « aucun modèle en mémoire » avec un modèle llama.cpp de 22 Go chargé."""
     libres = []
@@ -538,11 +538,11 @@ def _liberer_autres_moteurs(tout, sauf=None):
             if gere is not None and gere.arreter_gere():
                 libres.append(gere.nom)
     except Exception as e:  # noqa: BLE001  (libérer est un confort : jamais une erreur de plus)
-        journaliser("Libération des autres moteurs impossible : {!r}".format(e))
+        log_event("Libération des autres moteurs impossible : {!r}".format(e))
     return libres
 
 
-def _ollama_ecoute():
+def _ollama_listens():
     """Faux si Ollama est sur cette machine et que personne n'écoute sur son port, vu en 0,3 s au plus (sous Windows, une requête vers un port fermé attend ~2 s)."""
     partie = urllib.parse.urlsplit(OLLAMA)
     if partie.hostname not in ("127.0.0.1", "localhost", "::1"):
@@ -554,11 +554,11 @@ def _ollama_ecoute():
         return False
 
 
-def modeles_retenus(sauf=None):
+def kept_models(sauf=None):
     """Ce que les moteurs de Lutin gardent chargé sur cette machine, à afficher : les modèles d'Ollama, le llama-server de Lutin, et les serveurs ExLlamaV3, LM Studio ou Colibri
     qui tournent, sauf celui du moteur `sauf` (la demande en cours en a besoin, et il ne redémarre pas tout seul). Ce que `liberer_vram(tout=True, sauf=…)` rendrait."""
     noms = []
-    if _ollama_ecoute():
+    if _ollama_listens():
         try:
             noms += [m.get("name") or m.get("model", "?") for m in ollama_json("/api/ps", None, 3).get("models", [])]
         except (urllib.error.URLError, OSError, ValueError):
@@ -573,14 +573,14 @@ def modeles_retenus(sauf=None):
             if i != sauf and gere is not None and _ml.OpenAIEngine.actif(gere):
                 noms.append(gere.nom)
     except Exception as e:  # noqa: BLE001  (une liste de confort : jamais une erreur de plus)
-        journaliser("Liste des modèles retenus impossible : {!r}".format(e))
+        log_event("Liste des modèles retenus impossible : {!r}".format(e))
     return noms
 
 
-def liberer_vram(tout=False, sauf=None):
+def free_vram(tout=False, sauf=None):
     """Décharge les modèles chargés en mémoire : ceux d'Ollama, le serveur llama.cpp de Lutin, et — avec `tout` (le bouton « Libérer la VRAM ») — le serveur ExLlamaV3, Colibri ou LM Studio qu'il gère,
     sauf celui du moteur `sauf`."""
-    autres = _liberer_autres_moteurs(tout, sauf)
+    autres = _free_other_engines(tout, sauf)
     try:
         charges = ollama_json("/api/ps", None, 3).get("models", [])
         ollama_ok = True
@@ -606,7 +606,7 @@ def liberer_vram(tout=False, sauf=None):
     return {"ok": True, "message": _t("Déchargé(s) : {}").format(", ".join(decharges))}
 
 
-def demarrer_ollama():
+def start_ollama():
     exe = chemin_ollama()
     if not exe:
         raise ValueError("Ollama n'est pas installé : lance installer-assistant.bat.")
@@ -635,7 +635,7 @@ def demarrer_ollama():
     raise ValueError("Ollama ne répond pas après 15 secondes.")
 
 
-def arreter_ollama():
+def stop_ollama():
     """Arrête Ollama (le service ou l'icône d'Ollama comprise), à la demande de l'utilisateur : nécessaire pour qu'il relise OLLAMA_MODELS. Renvoie True s'il ne répond plus ensuite."""
     if os.environ.get("LUTIN_DOCKER"):
         from . import docker_engines
@@ -653,13 +653,13 @@ def arreter_ollama():
     return False
 
 
-def redemarrer_ollama():
+def restart_ollama():
     """Arrête puis relance Ollama avec le dossier de modèles choisi. Les modèles chargés en mémoire sont perdus (rechargés à la prochaine question)."""
-    if TOURS_ACTIFS:
+    if ACTIVE_TURNS:
         raise ValueError(_t("Une réponse est en cours : attends sa fin avant de redémarrer Ollama."))
-    if not arreter_ollama():
+    if not stop_ollama():
         raise ValueError(_t("Ollama ne s'arrête pas : quitte-le toi-même (icône en bas à droite) puis clique sur « Démarrer Ollama »."))
-    return demarrer_ollama()
+    return start_ollama()
 
 
 # --------------------------------------------------------------------------- serveur HTTP
@@ -668,16 +668,16 @@ try:
 except OSError:
     ICONE_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0b0f14"/>'
                  '<circle cx="50" cy="50" r="38" fill="#5aa9ff" opacity=".18"/><circle cx="50" cy="50" r="27" fill="#5aa9ff"/></svg>')
-ICONES = {}
+ICONS = {}
 
 
-def icone_png(n):
+def icon_png(n):
     """Icône carrée n x n : le logo de Lutin (web/icones/icone-n.png). Sans ce fichier : un point lumineux dessiné à la main (PNG fabriqué avec zlib). Gardée en mémoire."""
-    if n in ICONES:
-        return ICONES[n]
+    if n in ICONS:
+        return ICONS[n]
     try:
-        ICONES[n] = (WEB / "icones" / "icone-{}.png".format(n)).read_bytes()
-        return ICONES[n]
+        ICONS[n] = (WEB / "icones" / "icone-{}.png".format(n)).read_bytes()
+        return ICONS[n]
     except OSError:
         pass
     centre, rayon, halo = n / 2, n * 0.27, n * 0.38
@@ -701,86 +701,86 @@ def icone_png(n):
 
     def bloc(genre, donnees):
         return struct.pack(">I", len(donnees)) + genre + donnees + struct.pack(">I", zlib.crc32(genre + donnees) & 0xFFFFFFFF)
-    ICONES[n] = b"\x89PNG\r\n\x1a\n" + bloc(b"IHDR", struct.pack(">IIBBBBB", n, n, 8, 2, 0, 0, 0)) + bloc(b"IDAT", zlib.compress(bytes(lignes), 9)) + bloc(b"IEND", b"")
-    return ICONES[n]
+    ICONS[n] = b"\x89PNG\r\n\x1a\n" + bloc(b"IHDR", struct.pack(">IIBBBBB", n, n, 8, 2, 0, 0, 0)) + bloc(b"IDAT", zlib.compress(bytes(lignes), 9)) + bloc(b"IEND", b"")
+    return ICONS[n]
 
 
-TOURS_SIMULTANES = 2       # au plus deux réponses à la fois (une seule carte graphique : plus, ce serait lent et risqué pour la mémoire)
-TOURS_ACTIFS = {}          # id de conversation -> threading.Event « stop » du tour en cours (une conversation = un tour à la fois)
-VERROU_TOURS = threading.Lock()
-RACINE_TOURS = {}          # id de conversation -> dossier de travail utilisé par sa réponse en cours (une seule racine à la fois, voir activer_travail)
-TACHES_FOND = {}          # clé -> texte : ce que Lutin fait en arrière-plan (mise à jour d'une fiche…), montré dans la barre d'état de la page
-VERROU_TACHES = threading.Lock()
+CONCURRENT_TURNS = 2       # au plus deux réponses à la fois (une seule carte graphique : plus, ce serait lent et risqué pour la mémoire)
+ACTIVE_TURNS = {}          # id de conversation -> threading.Event « stop » du tour en cours (une conversation = un tour à la fois)
+TURNS_LOCK = threading.Lock()
+TURNS_ROOT = {}          # id de conversation -> dossier de travail utilisé par sa réponse en cours (une seule racine à la fois, voir activer_travail)
+BACKGROUND_TASKS = {}          # clé -> texte : ce que Lutin fait en arrière-plan (mise à jour d'une fiche…), montré dans la barre d'état de la page
+TASKS_LOCK = threading.Lock()
 
 
-class tache_de_fond:
+class background_task:
     """`with tache_de_fond(cle, texte):` signale une tâche de fond pendant qu'elle dure (plusieurs en même temps possibles). Ne gêne jamais : la tâche se retire toujours, même sur erreur."""
 
     def __init__(self, cle, texte):
         self.cle, self.texte = cle, texte
 
     def __enter__(self):
-        with VERROU_TACHES:
-            TACHES_FOND[self.cle] = self.texte
+        with TASKS_LOCK:
+            BACKGROUND_TASKS[self.cle] = self.texte
         return self
 
     def __exit__(self, *_):
-        with VERROU_TACHES:
-            TACHES_FOND.pop(self.cle, None)
+        with TASKS_LOCK:
+            BACKGROUND_TASKS.pop(self.cle, None)
         return False
 
 
-def taches_en_cours():
-    with VERROU_TACHES:
-        return list(TACHES_FOND.values())
+def running_tasks():
+    with TASKS_LOCK:
+        return list(BACKGROUND_TASKS.values())
 
 
 BENCH = {"en_cours": "", "etape": "", "erreur": "", "file": []}          # file : les modèles qui attendent leur tour dans une série (comparaison)
 
 
 # --------------------------------------------------------------------------- dossiers de travail multiples
-def chemin_config():
+def config_path():
     c = os.environ.get("LUTIN_CONFIG")
     return Path(c) if c else None
 
 
-def config_lue():
-    c = chemin_config()
+def read_config():
+    c = config_path()
     return _config.migrate_config(read_json(c, {})) if c else _config.migrate_config({})
 
 
-def config_ecrire(cfg):
-    c = chemin_config()
+def write_config(cfg):
+    c = config_path()
     if not c:
         raise ValueError("Pas de fichier de configuration.")
     _config.save({"config": c.parent}, cfg)
 
 
-def dossiers_de_lutin():
+def lutin_folders():
     """Les dossiers de Lutin lui-même : un dossier de travail ne peut ni les contenir ni être dedans."""
-    c, cache = chemin_config(), os.environ.get("LUTIN_PROPOSITIONS")
-    return [p for p in (c.parent if c else None, DONNEES, MEMOIRE, Path(cache).parent if cache else None) if p]
+    c, cache = config_path(), os.environ.get("LUTIN_PROPOSITIONS")
+    return [p for p in (c.parent if c else None, DATA, MEMORY, Path(cache).parent if cache else None) if p]
 
 
-def definir_racine(chemin):
+def set_root(chemin):
     """Change le dossier de travail courant. Appelé avec VERROU_TOURS tenu."""
     nouveau = Path(chemin).resolve()
-    if nouveau != RACINE:
+    if nouveau != ROOT:
         _context.change(root=nouveau)          # not `global RACINE`: a write to the module's dictionary alone would leave the context behind
         PLAN["valide"] = False                      # le plan du projet et l'index de rappel appartiennent à l'ancien dossier
         RECALL["signature"] = None
 
 
 # --------------------------------------------------------------------------- journal des actions (qui a modifié quoi, lancé quelle commande, avec quel accord)
-JOURNAL_MAX = 5_000_000
-OUTILS_JOURNALISES = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module", "comfy_generer"}
+LOG_MAX = 5_000_000
+LOGGED_TOOLS = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module", "comfy_generer"}
 
 
-def chemin_journal():
-    return DONNEES / "journal-actions.jsonl"
+def log_path():
+    return DATA / "journal-actions.jsonl"
 
 
-def noter_action(ctx, outil, args, issue):
+def record_action(ctx, outil, args, issue):
     """Une ligne par action qui modifie quelque chose. Jamais le contenu des fichiers ni la sortie des commandes : seulement quoi, où, avec quel accord, pour qui. Ne plante jamais."""
     try:
         cible = ""
@@ -792,11 +792,11 @@ def noter_action(ctx, outil, args, issue):
             cible = str(args.get("module", ""))
         elif outil.startswith("mcp__"):
             cible = outil          # un outil d'un connecteur MCP : on garde son nom, jamais ses arguments
-        entree = {"ts": datetime.now().isoformat(timespec="seconds"), "conversation": (ctx.get("conv") or {}).get("id", ""), "dossier": str(RACINE), "outil": outil, "cible": cible[:300],
+        entree = {"ts": datetime.now().isoformat(timespec="seconds"), "conversation": (ctx.get("conv") or {}).get("id", ""), "dossier": str(ROOT), "outil": outil, "cible": cible[:300],
                   "issue": issue[:200], "accord": ctx.pop("dernier_accord", "aucun"), "qui": ctx.get("identite", "")}
-        f = chemin_journal()
+        f = log_path()
         f.parent.mkdir(parents=True, exist_ok=True)
-        if f.is_file() and f.stat().st_size > JOURNAL_MAX:
+        if f.is_file() and f.stat().st_size > LOG_MAX:
             os.replace(str(f), str(f.with_name(f.name + ".1")))
         with open(f, "a", encoding="utf-8") as h:
             h.write(json.dumps(entree, ensure_ascii=False) + "\n")
@@ -804,10 +804,10 @@ def noter_action(ctx, outil, args, issue):
         pass
 
 
-def lire_journal(n=200):
+def read_log(n=200):
     n = max(1, min(2000, int(n)))
     try:
-        lignes = chemin_journal().read_text(encoding="utf-8").splitlines()[-n:]
+        lignes = log_path().read_text(encoding="utf-8").splitlines()[-n:]
     except OSError:
         return []
     sortie = []
@@ -820,15 +820,15 @@ def lire_journal(n=200):
 
 
 # --------------------------------------------------------------------------- banc d'essai des modèles (vitesse et notes mesurées)
-def chemin_bench():
-    return Path(os.environ.get("LUTIN_BENCH") or DONNEES / "bench.json")
+def bench_path():
+    return Path(os.environ.get("LUTIN_BENCH") or DATA / "bench.json")
 
 
-def lancer_bench(modele, rapide):
+def start_bench(modele, rapide):
     if not RE_NOM_MODELE.match(modele or ""):
         raise ValueError("Nom de modèle invalide.")
-    with VERROU_TOURS:
-        if TOURS_ACTIFS:
+    with TURNS_LOCK:
+        if ACTIVE_TURNS:
             raise ValueError("Une réponse est en cours : le banc d'essai fausserait les mesures. Attends sa fin.")
         if BENCH["en_cours"]:
             raise ValueError("Un banc d'essai est déjà en cours ({}).".format(BENCH["en_cours"]))
@@ -836,33 +836,33 @@ def lancer_bench(modele, rapide):
 
     def travail():
         try:
-            _mesurer_un(modele, rapide)
+            _measure_one(modele, rapide)
         finally:
             BENCH.update(en_cours="", etape="")
     threading.Thread(target=travail, daemon=True, name="banc-essai").start()
     return {"ok": True}
 
 
-def _mesurer_un(modele, rapide):
+def _measure_one(modele, rapide):
     """Mesure un modèle et enregistre le résultat. Ne lève jamais : une panne est notée dans BENCH['erreur']."""
     BENCH.update(en_cours=modele, etape="démarrage")
     try:
         from .hardware import detecter
-        mesure = _bench.executer(client_banc(), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), reglages()["num_ctx"])
+        mesure = _bench.executer(client_banc(), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), settings()["num_ctx"])
         try:
             moteur = moteur_local()
             mesure["moteur"] = {"id": moteur.id, "version": str(getattr(moteur, "version", lambda: "")() or "")[:40]}          # pour dire, plus tard, si une baisse vient d'un changement de moteur
         except Exception:  # noqa: BLE001
             pass
-        _bench.save(chemin_bench(), mesure)
+        _bench.save(bench_path(), mesure)
         if mesure.get("erreur"):
             BENCH["erreur"] = mesure["erreur"]
     except Exception as erreur:  # noqa: BLE001
         BENCH["erreur"] = str(erreur)[:200]
-        journaliser("Banc d'essai de {} : {!r}".format(modele, erreur))
+        log_event("Banc d'essai de {} : {!r}".format(modele, erreur))
 
 
-def lancer_bench_serie(modeles, rapide=False):
+def start_bench_series(modeles, rapide=False):
     """Mesure plusieurs modèles l'un après l'autre (la comparaison côte à côte). Un seul à la fois : deux mesures en même temps se fausseraient."""
     modeles = [m for m in dict.fromkeys(modeles) if m]
     if len(modeles) < 1:
@@ -874,8 +874,8 @@ def lancer_bench_serie(modeles, rapide=False):
     absents = [m for m in modeles if m not in installes]
     if absents:
         raise ValueError("Ces modèles ne sont pas installés : " + ", ".join(absents))
-    with VERROU_TOURS:
-        if TOURS_ACTIFS:
+    with TURNS_LOCK:
+        if ACTIVE_TURNS:
             raise ValueError("Une réponse est en cours : le banc d'essai fausserait les mesures. Attends sa fin.")
         if BENCH["en_cours"]:
             raise ValueError("Un banc d'essai est déjà en cours ({}).".format(BENCH["en_cours"]))
@@ -885,42 +885,42 @@ def lancer_bench_serie(modeles, rapide=False):
         try:
             for i, m in enumerate(modeles):
                 BENCH["file"] = modeles[i + 1:]
-                _mesurer_un(m, rapide)
+                _measure_one(m, rapide)
         finally:
             BENCH.update(en_cours="", etape="", file=[])
     threading.Thread(target=travail, daemon=True, name="banc-serie").start()
     return {"ok": True, "modeles": modeles}
 
 
-def arreter_conversation(ident):
+def stop_conversation(ident):
     """Bouton Arrêter : déclenche le stop du tour en cours (le modèle, les outils et les accords en attente s'arrêtent)."""
-    with VERROU_TOURS:
-        stop = TOURS_ACTIFS.get(ident)
+    with TURNS_LOCK:
+        stop = ACTIVE_TURNS.get(ident)
     if stop is None:
         return {"ok": True, "actif": False}
     stop.set()
-    threading.Thread(target=_rendre_la_main, args=(ident, stop), daemon=True, name="arret-" + str(ident)).start()
+    threading.Thread(target=_hand_back, args=(ident, stop), daemon=True, name="arret-" + str(ident)).start()
     return {"ok": True, "actif": True}
 
 
-DELAI_ABANDON_S = 20          # un tour qui ne s'arrête pas 20 s après « Arrêter » est abandonné : l'utilisateur peut écrire de nouveau
-LOCAL_TOUR = threading.local()          # le « stop » du tour que ce fil exécute (pour ne rien enregistrer d'un tour abandonné)
+ABANDON_TIMEOUT_S = 20          # un tour qui ne s'arrête pas 20 s après « Arrêter » est abandonné : l'utilisateur peut écrire de nouveau
+TURN_LOCAL = threading.local()          # le « stop » du tour que ce fil exécute (pour ne rien enregistrer d'un tour abandonné)
 
 
-def _rendre_la_main(ident, stop):
+def _hand_back(ident, stop):
     """Après « Arrêter », le tour s'arrête normalement en quelques secondes. S'il est figé (un outil qui ne répond plus, un modèle bloqué), on le retire de la liste des tours actifs : la page
     redevient utilisable sans redémarrer Lutin. Le tour abandonné n'écrira plus dans la conversation s'il finit un jour."""
-    for _ in range(DELAI_ABANDON_S * 2):
+    for _ in range(ABANDON_TIMEOUT_S * 2):
         time.sleep(0.5)
-        with VERROU_TOURS:
-            if TOURS_ACTIFS.get(ident) is not stop:
+        with TURNS_LOCK:
+            if ACTIVE_TURNS.get(ident) is not stop:
                 return
-    with VERROU_TOURS:
-        if TOURS_ACTIFS.get(ident) is stop:
+    with TURNS_LOCK:
+        if ACTIVE_TURNS.get(ident) is stop:
             stop.abandonne = True
-            TOURS_ACTIFS.pop(ident, None)
-            RACINE_TOURS.pop(ident, None)
-            journaliser("Tour abandonné {} s après « Arrêter » (conversation {}) : la page est de nouveau utilisable.".format(DELAI_ABANDON_S, ident))
+            ACTIVE_TURNS.pop(ident, None)
+            TURNS_ROOT.pop(ident, None)
+            log_event("Tour abandonné {} s après « Arrêter » (conversation {}) : la page est de nouveau utilisable.".format(ABANDON_TIMEOUT_S, ident))
 
 
 from .workspace_manager import (  # noqa: F401  (déplacé dans workspace_manager.py : moteur ré-exporte ses noms)
@@ -943,7 +943,7 @@ from .server import (  # noqa: F401  (déplacé dans server.py : moteur ré-expo
 )
 
 
-def ip_locale():
+def local_ip():
     """Adresse IP du réseau local (pour ouvrir l'assistant depuis un téléphone/tablette)."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -955,10 +955,10 @@ def ip_locale():
         s.close()
 
 
-CLES_TEXTE_UI = {"erreur", "raison", "message", "nom", "valeur", "conseil", "detail", "phrase", "avertissement", "etape", "ancien_nom"}          # textes écrits par Lutin (jamais le contenu des conversations ni des fichiers)
+UI_TEXT_KEYS = {"erreur", "raison", "message", "nom", "valeur", "conseil", "detail", "phrase", "avertissement", "etape", "ancien_nom"}          # textes écrits par Lutin (jamais le contenu des conversations ni des fichiers)
 
 
-def nouvelle_version_lutin():
+def new_lutin_version():
     """La version de Lutin annoncée par la vérification au lancement (un fichier du cache, jamais le réseau) ; None s'il n'y en a pas de nouvelle ou si tu l'as ignorée."""
     chemin = os.environ.get("LUTIN_VERSION_CACHE")
     if not chemin:
@@ -967,44 +967,44 @@ def nouvelle_version_lutin():
     return updates.new_version(chemin, VERSION)
 
 
-def page_web():
+def web_page():
     """La page d'accueil, avec le jeton, la version, la langue et (en anglais) le dictionnaire de l'interface."""
     langue = _i18n.language()
     dico = _i18n.dictionary("interface") if langue != "fr" else {}
     donnees = json.dumps(dico, ensure_ascii=False).replace("</", "<\\/")          # une chaîne ne doit pas pouvoir fermer la balise <script>
     page = (WEB / "index.html").read_text(encoding="utf-8")
-    return page.replace("__TOKEN__", JETON).replace("__VERSION__", VERSION).replace("__LANGUE__", langue).replace("__DICO__", donnees)
+    return page.replace("__TOKEN__", TOKEN).replace("__VERSION__", VERSION).replace("__LANGUE__", langue).replace("__DICO__", donnees)
 
 
-def traduire_json(objet, cle=""):
+def translate_json(objet, cle=""):
     """Traduit, dans une réponse JSON, les textes que Lutin a écrits lui-même (messages d'erreur, mesures de santé, descriptions de modèles…) quand la langue n'est pas le français."""
     if isinstance(objet, dict):
-        return {k: traduire_json(v, k) for k, v in objet.items()}
+        return {k: translate_json(v, k) for k, v in objet.items()}
     if isinstance(objet, list):
-        return [traduire_json(v, cle) for v in objet]
-    if isinstance(objet, str) and cle in CLES_TEXTE_UI:
+        return [translate_json(v, cle) for v in objet]
+    if isinstance(objet, str) and cle in UI_TEXT_KEYS:
         return _tr(objet)
     return objet
 
 
-def traduire_evenement(e):
+def translate_event(e):
     """Évènements du flux de réponse : seuls les messages de Lutin (info, erreur, accord, état) sont traduits, jamais le texte du modèle."""
     if not isinstance(e, dict) or e.get("type") not in ("info", "erreur", "approbation", "etat") or _i18n.language() == "fr":
         return e
     return dict(e, **{k: _tr(e[k]) for k in ("texte", "titre") if isinstance(e.get(k), str)})
 
 
-def lire_propositions():
+def read_proposals():
     """Nouveautés de modèles trouvées par la vérification au lancement (voir lutin.updates) : un fichier du cache, jamais le réseau."""
     chemin = os.environ.get("LUTIN_PROPOSITIONS")
     d = read_json(Path(chemin), None) if chemin else None
     return d if isinstance(d, dict) else {"propositions": [], "erreurs": [], "date": 0}
 
 
-def traiter_proposition(cle, appliquer):
+def handle_proposal(cle, appliquer):
     """« Ne plus proposer » (appliquer=False) ou « installé : c'est maintenant mon modèle pour ce rôle » (appliquer=True). Les deux retirent la proposition de la liste."""
     config_f = os.environ.get("LUTIN_CONFIG")
-    prop = next((p for p in lire_propositions().get("propositions", []) if p.get("cle") == cle), None)
+    prop = next((p for p in read_proposals().get("propositions", []) if p.get("cle") == cle), None)
     if not config_f or not prop:
         raise ValueError("Proposition introuvable.")
     cfg = read_json(Path(config_f), {})
@@ -1017,59 +1017,59 @@ def traiter_proposition(cle, appliquer):
     write_atomic(Path(config_f), json.dumps(cfg, ensure_ascii=False, indent=1))
     chemin = os.environ.get("LUTIN_PROPOSITIONS")
     if chemin:
-        d = lire_propositions()
+        d = read_proposals()
         d["propositions"] = [p for p in d.get("propositions", []) if p.get("cle") != cle]
         write_atomic(Path(chemin), json.dumps(d, ensure_ascii=False, indent=1))
     return {"ok": True}
 
 
-ADRESSES_LOCALES = ("127.0.0.1", "localhost", "::1")
+LOCAL_ADDRESSES = ("127.0.0.1", "localhost", "::1")
 
 
-class ServeurLutin(ThreadingHTTPServer):
+class LutinServer(ThreadingHTTPServer):
     """Le serveur de Lutin. Sous Windows, l'option « réutiliser l'adresse » (activée par défaut par Python) autorise DEUX serveurs sur le même port : un second Lutin démarrait sans erreur et les connexions
     allaient à l'un ou à l'autre. Elle n'y sert à rien (Windows ne bloque pas un port à cause des connexions fermées) : on la coupe. Ailleurs, on la garde pour pouvoir redémarrer tout de suite."""
     allow_reuse_address = os.name != "nt"
 
 
-def lier_le_port(hote, essais=6, pause=0.5, dormir=time.sleep):
+def bind_port(hote, essais=6, pause=0.5, dormir=time.sleep):
     """Ouvre le port ; quelques essais rapprochés absorbent un redémarrage (l'ancien Lutin finit de s'arrêter). OSError si le port reste pris : c'est qu'un autre Lutin tourne."""
     for rang in range(essais):
         try:
-            return ServeurLutin((hote, PORT), Handler)
+            return LutinServer((hote, PORT), Handler)
         except OSError:
             if rang == essais - 1:
                 raise
             dormir(pause)
 
 
-def ecouter_aussi_en_local(hote):
+def also_listen_locally(hote):
     """Au niveau réseau (ou proxy distant) le serveur se lie à l'adresse du réseau local seulement : 127.0.0.1 ne répondrait plus, donc ni l'icône de la zone de notification ni
     `lutin pin` / `lutin chat` ne pourraient joindre le serveur de leur propre machine. On ouvre alors aussi 127.0.0.1 (même port, même protection). Renvoie ce second serveur, ou None."""
-    if hote in ADRESSES_LOCALES or hote in ("0.0.0.0", "", "::"):
+    if hote in LOCAL_ADDRESSES or hote in ("0.0.0.0", "", "::"):
         return None
     try:
-        local = ServeurLutin(("127.0.0.1", PORT), Handler)
+        local = LutinServer(("127.0.0.1", PORT), Handler)
     except OSError as erreur:
-        journaliser("Impossible d'écouter aussi sur 127.0.0.1:{} : {!r}".format(PORT, erreur))
+        log_event("Impossible d'écouter aussi sur 127.0.0.1:{} : {!r}".format(PORT, erreur))
         return None
     threading.Thread(target=local.serve_forever, daemon=True, name="ecoute-locale").start()
     return local
 
 
-def ecrire_fichier_console(hote):
+def write_console_file(hote):
     """Adresse et jeton de la console locale (lutin chat) : un fichier que seul l'utilisateur de cette machine peut lire."""
-    f = DONNEES / "console.json"
-    write_atomic(f, json.dumps({"adresse": "http://{}:{}".format("127.0.0.1" if hote in ("0.0.0.0", "") else hote, PORT), "jeton": JETON_CONSOLE, "pid": os.getpid()}))
+    f = DATA / "console.json"
+    write_atomic(f, json.dumps({"adresse": "http://{}:{}".format("127.0.0.1" if hote in ("0.0.0.0", "") else hote, PORT), "jeton": CONSOLE_TOKEN, "pid": os.getpid()}))
     try:
         os.chmod(f, 0o600)
     except OSError:
         pass
 
 
-TEXTES_PAGE_CONNEXION = ("Lutin : connexion", "Entre le code à 6 chiffres affiché sur l'ordinateur qui fait tourner Lutin (commande <code>lutin pin</code> pour en obtenir un nouveau).",
+LOGIN_PAGE_TEXTS = ("Lutin : connexion", "Entre le code à 6 chiffres affiché sur l'ordinateur qui fait tourner Lutin (commande <code>lutin pin</code> pour en obtenir un nouveau).",
                          "Nom de cet appareil (facultatif)", "Se connecter", "Erreur ")
-PAGE_CONNEXION = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lutin : connexion</title>
+LOGIN_PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lutin : connexion</title>
 <style>body{font-family:system-ui,sans-serif;background:#0b0f14;color:#e6edf3;display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:340px;padding:24px}
 input,button{font:inherit;padding:10px 12px;border-radius:8px;border:1px solid #30363d;background:#161b22;color:inherit;width:100%;box-sizing:border-box;margin-top:10px}
 button{background:#238636;border-color:#238636;cursor:pointer}#m{color:#f85149;min-height:1.4em;margin-top:8px}</style></head><body><main>
@@ -1080,29 +1080,29 @@ const d=await r.json().catch(()=>({}));if(r.ok)location.reload();else document.g
 const q=(location.hash.match(/pin=([0-9]{6})/)||[])[1];if(q){document.getElementById('pin').value=q;document.getElementById('nom').value=document.getElementById('nom').value;history.replaceState(null,'',location.pathname);document.querySelector('#f button').click();}</script></main></body></html>"""
 
 
-def principal():
-    for d in (DONNEES, MEMOIRE):
+def main():
+    for d in (DATA, MEMORY):
         d.mkdir(parents=True, exist_ok=True)
-    sys.excepthook = lambda genre, valeur, trace: (journaliser("Exception non gérée : {!r}".format(valeur)), sys.__excepthook__(genre, valeur, trace))
-    threading.excepthook = lambda a: journaliser("Exception dans un thread ({}) : {!r}".format(a.thread.name if a.thread else "?", a.exc_value))
+    sys.excepthook = lambda genre, valeur, trace: (log_event("Exception non gérée : {!r}".format(valeur)), sys.__excepthook__(genre, valeur, trace))
+    threading.excepthook = lambda a: log_event("Exception dans un thread ({}) : {!r}".format(a.thread.name if a.thread else "?", a.exc_value))
     # Le port est pris AVANT de lancer la surveillance, les missions, les tâches planifiées et les addons : un second Lutin (la tâche de démarrage ET un lancement à la main, par exemple) s'arrête ici,
     # au lieu de faire tourner un deuxième jeu de travaux de fond et un deuxième serveur de modèle.
     global IP_LAN
-    problemes = SECURITE.valider()
+    problemes = SECURITY.valider()
     if problemes:
         raise SystemExit(_t("Configuration de sécurité invalide : {}").format(" ; ".join(problemes)))
-    IP_LAN = ip_locale() if SECURITE.niveau != _sec.LOCAL else ""
-    hote = _sec.address_listening(SECURITE, IP_LAN)
+    IP_LAN = local_ip() if SECURITY.niveau != _sec.LOCAL else ""
+    hote = _sec.address_listening(SECURITY, IP_LAN)
     try:
-        serveur = lier_le_port(hote)
+        serveur = bind_port(hote)
     except OSError as erreur:
-        journaliser("Impossible d'écouter sur {}:{} : {!r}".format(hote, PORT, erreur))
+        log_event("Impossible d'écouter sur {}:{} : {!r}".format(hote, PORT, erreur))
         raise SystemExit(_t("Le port {} est déjà pris, sans doute par un autre Lutin déjà lancé sur cette machine : celui-ci s'arrête. ({})").format(PORT, erreur))
     purge_backups()
     try:
         purge_data()
     except OSError as erreur:
-        journaliser("Purge impossible : {!r}".format(erreur))
+        log_event("Purge impossible : {!r}".format(erreur))
     refresh_plan(force=True)
     threading.Thread(target=watch_loop, daemon=True).start()
     from . import scheduled_tasks
@@ -1112,28 +1112,28 @@ def principal():
     mission.start()
     from . import addons
     addons.start_active()
-    journaliser("Démarrage de Lutin (version {}, dossier de travail {}).".format(VERSION, RACINE))
-    boucle_locale = ecouter_aussi_en_local(hote)
-    en_local = boucle_locale is not None or hote in ADRESSES_LOCALES
-    ecrire_fichier_console("127.0.0.1" if en_local else hote)          # la console de cette machine (lutin pin, lutin chat, l'icône) passe toujours par 127.0.0.1
+    log_event("Démarrage de Lutin (version {}, dossier de travail {}).".format(VERSION, ROOT))
+    boucle_locale = also_listen_locally(hote)
+    en_local = boucle_locale is not None or hote in LOCAL_ADDRESSES
+    write_console_file("127.0.0.1" if en_local else hote)          # la console de cette machine (lutin pin, lutin chat, l'icône) passe toujours par 127.0.0.1
     adresse = "http://{}:{}".format("127.0.0.1" if en_local or hote in ("0.0.0.0", "") else hote, PORT)
-    print(_t("Lutin        : {}   (niveau de sécurité : {})").format(adresse, SECURITE.niveau))
+    print(_t("Lutin        : {}   (niveau de sécurité : {})").format(adresse, SECURITY.niveau))
     pin = ""
-    if SECURITE.niveau == _sec.RESEAU:
-        pin = APPAREILS.nouveau_pin()
+    if SECURITY.niveau == _sec.RESEAU:
+        pin = DEVICES.nouveau_pin()
         print(_t("Code PIN     : {}   (valable {} min ; pour appairer un appareil)").format(pin, _sec.DURATION_PIN_S // 60))
-    if SECURITE.niveau == _sec.PROXY:
-        print(_t("Adresse publique : {}   (proxy de confiance : {})").format(SECURITE.url_publique, ", ".join(SECURITE.proxy_ips)))
-    print(_t("Journal      : {}").format(DONNEES / "lutin.log"))
+    if SECURITY.niveau == _sec.PROXY:
+        print(_t("Adresse publique : {}   (proxy de confiance : {})").format(SECURITY.url_publique, ", ".join(SECURITY.proxy_ips)))
+    print(_t("Journal      : {}").format(DATA / "lutin.log"))
     try:
         from . import store as _store
         _store.connection()                                       # ouverte ici : une base illisible est mise de côté et dite au démarrage, pas à la première demande
         for _niveau, texte in _store.notices():
             print("⚠ " + texte)
-            journaliser(texte)
+            log_event(texte)
     except Exception as erreur:  # noqa: BLE001  (un avertissement de plus : jamais un démarrage empêché)
-        journaliser("Base des conversations : vérification au démarrage impossible ({!r}).".format(erreur))
-    print(_t("(dossier de travail : {})").format(RACINE))
+        log_event("Base des conversations : vérification au démarrage impossible ({!r}).".format(erreur))
+    print(_t("(dossier de travail : {})").format(ROOT))
     if "--no-browser" not in sys.argv and not os.environ.get("LUTIN_SANS_NAVIGATEUR"):
         try:
             import webbrowser
@@ -1147,4 +1147,4 @@ def principal():
 
 
 if __name__ == "__main__":
-    principal()
+    main()

@@ -39,7 +39,7 @@ class Files(unittest.TestCase):
     """Writes the two settings files as an older Lutin left them, and puts back what was there."""
 
     def setUp(self):
-        self.settings, self.engines = A.DONNEES / "reglages.json", A.DONNEES / "moteurs.json"
+        self.settings, self.engines = A.DATA / "reglages.json", A.DATA / "moteurs.json"
         kept = {f: (f.read_bytes() if f.is_file() else None) for f in (self.settings, self.engines)}
         self.addCleanup(lambda: [f.write_bytes(b) if b is not None else f.unlink(missing_ok=True) for f, b in kept.items()])
         quiet(self)
@@ -61,7 +61,7 @@ class OldSetting(Files):
 
     def test_an_old_openai_and_server_setting_opens_on_that_engine(self):
         before = (self.settings.read_bytes(), self.engines.read_bytes())
-        self.assertEqual(A.reglages()["moteur"], "exllamav3")
+        self.assertEqual(A.settings()["moteur"], "exllamav3")
         self.assertEqual(agent.moteur_actuel().id, "exllamav3")
         self.assertEqual(engines.ENGINES["exllamav3"].adresse(), "http://127.0.0.1:5123/v1")          # its port, kept in the old section of « openai »
         self.assertEqual(V.call("GET", "/api/v1/engines", V.OWNER)[1]["current"], "exllamav3")
@@ -69,7 +69,7 @@ class OldSetting(Files):
 
     def test_the_model_is_told_which_engine_and_model_answer(self):
         """Maintainer, 2026-11-21: asked, the model said it ran on Ollama while ExLlamaV3 answered; it had deduced it from the code and the processes."""
-        system = agent.consignes_systeme(A.reglages())
+        system = agent.consignes_systeme(A.settings())
         self.assertIn("ExLlamaV3", system.splitlines()[-1])
         self.assertIn("qwen3-8b-exl3", system.splitlines()[-1])
 
@@ -78,7 +78,7 @@ class OldSetting(Files):
         settings, servers = self.read()
         self.assertEqual((settings["moteur"], settings["num_ctx"]), ("openai", 8192))
         self.assertEqual(servers, self.OLD)
-        self.assertEqual(A.reglages()["moteur"], "exllamav3")
+        self.assertEqual(A.settings()["moteur"], "exllamav3")
 
     def test_choosing_the_address_engine_forgets_the_old_server_and_stops_it(self):
         with mock.patch.object(engines.ENGINES["exllamav3"], "arreter_gere", return_value=True) as stop:
@@ -88,7 +88,7 @@ class OldSetting(Files):
         self.assertEqual(settings["moteur"], "openai")
         self.assertNotIn("serveur", servers["openai"])
         self.assertEqual(servers["openai"]["url"], "http://192.0.2.1:8080/v1")
-        self.assertEqual(A.reglages()["moteur"], "openai")
+        self.assertEqual(A.settings()["moteur"], "openai")
 
     def test_choosing_the_engine_by_its_new_name_writes_it(self):
         storage.save_settings({"moteur": "lmstudio"})

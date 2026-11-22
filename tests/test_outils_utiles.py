@@ -20,27 +20,27 @@ class Calculer(unittest.TestCase):
 
     def test_rien_d_autre_que_des_calculs(self):
         for mauvais in ["__import__('os').system('dir')", "open('x')", "[1,2][0]", "'a' * 3", "x + 1", "lambda: 1", "(1).__class__", "sqrt(1, key=2)", "True + 1", "", "1 +", "abs.__call__(1)", "9" * 400]:
-            with self.assertRaises(_m.ErreurOutil, msg=mauvais[:30]):
+            with self.assertRaises(_m.ToolError, msg=mauvais[:30]):
                 u.tool_calculate(mauvais)
 
     def test_garde_fous(self):
         for abus in ["9 ** 9 ** 9", "10 ** 100000", "factorial(100000)", "2 ** 100000", "-" * 60 + "1"]:
-            with self.assertRaises(_m.ErreurOutil, msg=abus[:30]):
+            with self.assertRaises(_m.ToolError, msg=abus[:30]):
                 u.tool_calculate(abus)
-        with self.assertRaises(_m.ErreurOutil):
+        with self.assertRaises(_m.ToolError):
             u.tool_calculate("1 / 0")
         self.assertTrue(u.tool_calculate("1e300 * 10").endswith("= 1e+301"))
 
 
 class Trouver(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir=str(_m.RACINE))
+        self.tmp = tempfile.TemporaryDirectory(dir=str(_m.ROOT))
         self.dossier = Path(self.tmp.name)
         (self.dossier / "sous" / "profond").mkdir(parents=True)
         (self.dossier / "node_modules").mkdir()
         for f in ("a.py", "test_un.py", "sous/test_deux.py", "sous/profond/Notes.MD", "sous/univers.md", "node_modules/test_cache.py"):
             (self.dossier / f).write_text("x", encoding="utf-8")
-        self.rel = self.dossier.relative_to(_m.RACINE).as_posix()
+        self.rel = self.dossier.relative_to(_m.ROOT).as_posix()
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -57,7 +57,7 @@ class Trouver(unittest.TestCase):
     def test_sans_resultat_et_erreurs(self):
         self.assertIn("Aucun fichier", u.tool_find("*.zzz", self.rel))
         for mauvais in [("", "."), ("*.py", "../.."), ("*.py", self.rel + "/a.py")]:
-            with self.assertRaises(_m.ErreurOutil, msg=str(mauvais)):
+            with self.assertRaises(_m.ToolError, msg=str(mauvais)):
                 u.tool_find(*mauvais)
 
     def test_liste_coupee(self):

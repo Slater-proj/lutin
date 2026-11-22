@@ -25,7 +25,7 @@ class Base(unittest.TestCase):
     def setUp(self):
         R._path().unlink(missing_ok=True)
         R._CHAT.clear()
-        project = Path(A.RACINE) / R.PROJECT_FILE
+        project = Path(A.ROOT) / R.PROJECT_FILE
         project.unlink(missing_ok=True)
         self.project_file = project
 
@@ -74,22 +74,22 @@ class Project(Base):
     def test_a_rule_written_in_the_working_folder_can_ask_or_deny_but_never_allow(self):
         """The model can write this file, and a cloned repository can bring it: it must never grant anything."""
         self.project([{"effect": "allow", "command": "curl *"}, {"effect": "allow", "command": "npm test"}, {"effect": "deny", "command": "npm publish *"}, {"effect": "ask", "command": "git commit *"}])
-        self.assertEqual([rule["effect"] for rule in R.project_rules(A.RACINE)], ["deny", "ask"], "the two `allow` are ignored")
-        self.assertEqual(R.decide("npm test", root=A.RACINE)[0], "none", "the project did not allow it")
-        self.assertEqual(R.decide("npm publish --tag next", root=A.RACINE), ("deny", "project"))
-        self.assertEqual(R.decide("git commit -m x", root=A.RACINE), ("ask", "project"))
+        self.assertEqual([rule["effect"] for rule in R.project_rules(A.ROOT)], ["deny", "ask"], "the two `allow` are ignored")
+        self.assertEqual(R.decide("npm test", root=A.ROOT)[0], "none", "the project did not allow it")
+        self.assertEqual(R.decide("npm publish --tag next", root=A.ROOT), ("deny", "project"))
+        self.assertEqual(R.decide("git commit -m x", root=A.ROOT), ("ask", "project"))
 
     def test_a_project_rule_overrides_what_the_person_allowed_only_towards_caution(self):
         R.add("allow", "git commit *")
         self.project([{"effect": "ask", "command": "git commit *"}])
-        self.assertEqual(R.decide("git commit -m x", root=A.RACINE)[0], "ask")
+        self.assertEqual(R.decide("git commit -m x", root=A.ROOT)[0], "ask")
 
     def test_a_broken_or_huge_file_gives_no_rule_and_no_error(self):
         self.project_file.parent.mkdir(exist_ok=True)
         self.project_file.write_text("{not json", encoding="utf-8")
-        self.assertEqual(R.project_rules(A.RACINE), [])
+        self.assertEqual(R.project_rules(A.ROOT), [])
         self.project_file.write_text(json.dumps([{"effect": "deny", "command": 5}, "x", {"effect": "deny"}]), encoding="utf-8")
-        self.assertEqual(R.project_rules(A.RACINE), [])
+        self.assertEqual(R.project_rules(A.ROOT), [])
 
 
 class Hardline(Base):
@@ -135,7 +135,7 @@ class CommandTool(Base):
                 mock.patch.object(tools.subprocess, "run", side_effect=lambda *a, **k: ran.append(a) or (_ for _ in ()).throw(OSError("not run in a test"))):
             try:
                 result = tools.run_tool(command, ctx)
-            except (OSError, A.ErreurOutil) as stopped:
+            except (OSError, A.ToolError) as stopped:
                 result = str(stopped)
         return asked, ran, result
 

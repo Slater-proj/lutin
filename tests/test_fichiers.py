@@ -19,11 +19,11 @@ from lutin import produced_files, change_review  # noqa: E402
 class Fichiers(unittest.TestCase):
     def setUp(self):
         self.ouvertures = []
-        self.vrai_config = _m.config_lue
-        _m.config_lue = lambda: {}
+        self.vrai_config = _m.read_config
+        _m.read_config = lambda: {}
 
     def tearDown(self):
-        _m.config_lue = self.vrai_config
+        _m.read_config = self.vrai_config
 
     def conversation(self, *chemins):
         c = _m.conv_new()
@@ -32,7 +32,7 @@ class Fichiers(unittest.TestCase):
         return c["id"], [produced_files.entry(p)["id"] for p in chemins]
 
     def test_les_dossiers_d_une_conversation_s_ouvrent_sans_jamais_sortir_des_dossiers_permis(self):
-        f = _m.RACINE / "rapports" / "bilan.pdf"
+        f = _m.ROOT / "rapports" / "bilan.pdf"
         f.parent.mkdir(exist_ok=True)
         f.write_bytes(b"x")
         dehors = _TEMP / "ailleurs" / "secret.pdf"
@@ -53,7 +53,7 @@ class Fichiers(unittest.TestCase):
         self.assertIn("Docker", str(e.exception), "sous Docker : explication, pas d'échec muet")
 
     def test_telechargement_d_un_fichier_inscrit(self):
-        f = _m.RACINE / "docs" / "bilan.pdf"
+        f = _m.ROOT / "docs" / "bilan.pdf"
         f.parent.mkdir(exist_ok=True)
         f.write_bytes(b"%PDF-1.4 contenu")
         ident, (fid,) = self.conversation(f)
@@ -72,8 +72,8 @@ class Fichiers(unittest.TestCase):
             produced_files.open_item(ident, fid)
 
     def test_ouvrir_demande_au_systeme_et_refuse_les_programmes(self):
-        document = _m.RACINE / "docs" / "note.docx"
-        programme = _m.RACINE / "docs" / "outil.exe"
+        document = _m.ROOT / "docs" / "note.docx"
+        programme = _m.ROOT / "docs" / "outil.exe"
         document.parent.mkdir(exist_ok=True)
         document.write_bytes(b"PK")
         programme.write_bytes(b"MZ")
@@ -85,7 +85,7 @@ class Fichiers(unittest.TestCase):
         self.assertEqual(self.ouvertures, [["xdg-open", str(document.resolve())]])
 
     def test_supprimer_efface_le_fichier_et_la_carte(self):
-        f = _m.RACINE / "docs" / "a_effacer.md"
+        f = _m.ROOT / "docs" / "a_effacer.md"
         f.parent.mkdir(exist_ok=True)
         f.write_text("# x", encoding="utf-8")
         ident, (fid,) = self.conversation(f)
@@ -155,7 +155,7 @@ class Fichiers(unittest.TestCase):
             produced_files.part_read("../../etc/passwd", "x")
 
     def test_le_registre_liste_nettoie_et_supprime_pour_faire_le_menage(self):
-        a, b = _m.RACINE / "docs" / "a.pdf", _m.RACINE / "docs" / "b.docx"
+        a, b = _m.ROOT / "docs" / "a.pdf", _m.ROOT / "docs" / "b.docx"
         a.parent.mkdir(exist_ok=True)
         a.write_bytes(b"%PDF" + b"x" * 2000)
         b.write_bytes(b"PK" + b"y" * 500)
@@ -177,7 +177,7 @@ class Fichiers(unittest.TestCase):
         self.assertNotIn(a_id, restantes, "la carte du fichier supprimé a disparu de la conversation")
 
     def test_le_registre_supprime_aussi_quand_la_conversation_n_existe_plus_et_refuse_hors_des_dossiers(self):
-        f = _m.RACINE / "docs" / "orphelin.md"
+        f = _m.ROOT / "docs" / "orphelin.md"
         f.parent.mkdir(exist_ok=True)
         f.write_text("# x", encoding="utf-8")
         dehors = _TEMP / "intouchable.pdf"

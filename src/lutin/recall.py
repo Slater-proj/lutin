@@ -45,15 +45,15 @@ def singular(mot):
 
 def recall_sources():
     """Les documents interrogeables : docs/, skills/, mémoires de l'assistant, puis les conversations enregistrées."""
-    if (_m.RACINE / "CLAUDE.md").is_file():
-        yield _m.RACINE / "CLAUDE.md"
+    if (_m.ROOT / "CLAUDE.md").is_file():
+        yield _m.ROOT / "CLAUDE.md"
     texte = ("*.md", "*.txt")
-    sources = [(_m.RACINE / d, texte + tuple("*" + e for e in text_extraction.FORMATS)) for d in DOCUMENT_FOLDERS] + [(_m.RACINE / "skills", ("*.md",)), (_m.RACINE / ".claude", ("*.md",)), (_m.MEMOIRE, ("*.md",))]
+    sources = [(_m.ROOT / d, texte + tuple("*" + e for e in text_extraction.FORMATS)) for d in DOCUMENT_FOLDERS] + [(_m.ROOT / "skills", ("*.md",)), (_m.ROOT / ".claude", ("*.md",)), (_m.MEMORY, ("*.md",))]
     vus, documents = set(), 0
     for dossier, motifs in sources:
         if dossier.is_dir():
             for racine, sous, noms in os.walk(str(dossier)):
-                sous[:] = sorted(s for s in sous if s not in _m.DOSSIERS_IGNORES)
+                sous[:] = sorted(s for s in sous if s not in _m.IGNORED_FOLDERS)
                 for nom in sorted(noms):
                     if any(fnmatch.fnmatch(nom.lower(), p) for p in motifs):
                         f = Path(racine) / nom
@@ -125,7 +125,7 @@ def document_parts(f):
     cle = (str(f), st.st_mtime_ns, st.st_size)
     if cle in PARTS_CACHE:
         return PARTS_CACHE[cle]
-    fichier = _m.DONNEES / "cache-documents" / (hashlib.sha1("|".join(map(str, cle)).encode("utf-8")).hexdigest() + ".json")
+    fichier = _m.DATA / "cache-documents" / (hashlib.sha1("|".join(map(str, cle)).encode("utf-8")).hexdigest() + ".json")
     try:
         parties = [tuple(p) for p in json.loads(fichier.read_text(encoding="utf-8"))]
     except (OSError, ValueError, TypeError):
@@ -146,7 +146,7 @@ def recall_label(f):
         return _m.rel(f)
     except ValueError:
         try:
-            return "memoire/" + Path(f).resolve().relative_to(_m.MEMOIRE.resolve()).as_posix()
+            return "memoire/" + Path(f).resolve().relative_to(_m.MEMORY.resolve()).as_posix()
         except ValueError:
             return Path(f).name
 
@@ -472,7 +472,7 @@ def search_documents(requete, nombre=8):
 def recall_tool(requete, nombre=5, conv_id="", ici=False):
     """Les passages les plus pertinents dans docs/, skills/, les mémoires et les anciennes conversations."""
     if not words(requete):
-        raise _m.ErreurOutil(_t("Requête vide ou trop vague : donne quelques mots-clés."))
+        raise _m.ToolError(_t("Requête vide ou trop vague : donne quelques mots-clés."))
     try:
         nombre = max(1, min(10, int(nombre or 5)))
     except (TypeError, ValueError):

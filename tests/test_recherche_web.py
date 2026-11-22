@@ -82,7 +82,7 @@ class Relais(unittest.TestCase):
 
     def test_une_erreur_reseau_d_un_moteur_ne_bloque_pas_les_autres(self):
         def casse(q):
-            raise A.ErreurOutil("HTTP 429")
+            raise A.ToolError("HTTP 429")
         self.moteurs(duckduckgo=casse, bing=lambda q: [{"titre": "T", "url": "https://exemple.org/", "extrait": ""}])
         r, _ = web.search_results("x", 3)
         self.assertEqual(len(r), 1)

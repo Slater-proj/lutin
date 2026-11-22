@@ -51,10 +51,10 @@ def allowed_roots():
     from . import addons, workspaces
     racines = []
     try:
-        racines += [Path(t["chemin"]).resolve() for t in workspaces.entries(_m.config_lue())]
+        racines += [Path(t["chemin"]).resolve() for t in workspaces.entries(_m.read_config())]
     except (OSError, ValueError):
         pass
-    racines.append(_m.RACINE.resolve())
+    racines.append(_m.ROOT.resolve())
     dossier = addons.settings("comfyui").get("dossier") or ""
     if dossier:
         racines.append((Path(dossier) / "output").resolve())
@@ -133,7 +133,7 @@ def part_open(piece_id, nom):
     nom = attachments.clean_name(nom) if nom else p.name
     if Path(nom).suffix.lower() not in OPENABLE:
         raise ValueError(_t("Ce type de fichier ne s'ouvre pas d'ici (seuls les documents et les médias le permettent) : ouvre-le depuis son dossier."))
-    cible = _m.DONNEES / "pieces-ouvertes" / piece_id.split(".")[0][:10] / nom
+    cible = _m.DATA / "pieces-ouvertes" / piece_id.split(".")[0][:10] / nom
     cible.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(p, cible)
     _launch(cible)
@@ -142,7 +142,7 @@ def part_open(piece_id, nom):
 
 def remove(ident, fichier_id):
     """Retire la carte de la conversation et supprime le fichier."""
-    if ident in _m.TOURS_ACTIFS:
+    if ident in _m.ACTIVE_TURNS:
         raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
     c, m, e = find(ident, fichier_id)
     supprime = False
@@ -165,12 +165,12 @@ MAX_REGISTRY = 5000
 
 
 def _registry():
-    d = _m.read_json(_m.DONNEES / "fichiers_crees.json", {})
+    d = _m.read_json(_m.DATA / "fichiers_crees.json", {})
     return d if isinstance(d, dict) else {}
 
 
 def _write_registry(d):
-    _m.write_atomic(_m.DONNEES / "fichiers_crees.json", json.dumps(d, ensure_ascii=False))
+    _m.write_atomic(_m.DATA / "fichiers_crees.json", json.dumps(d, ensure_ascii=False))
 
 
 def image_entry(image_id, chemin):
@@ -270,7 +270,7 @@ def remove_selection(ids):
             pass
         conv = e.get("conversation", "")
         try:
-            if conv in _m.TOURS_ACTIFS:
+            if conv in _m.ACTIVE_TURNS:
                 raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
             try:
                 if conv and _m.conv_exists(conv):
@@ -280,7 +280,7 @@ def remove_selection(ids):
                 else:
                     _remove_directly(e)
             except ValueError:
-                if conv in _m.TOURS_ACTIFS:                              # une réponse a démarré entre-temps : on ne touche à rien
+                if conv in _m.ACTIVE_TURNS:                              # une réponse a démarré entre-temps : on ne touche à rien
                     raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
                 if Path(e["chemin"]).is_file():
                     _remove_directly(e)                            # la conversation n'a plus la carte : on supprime le fichier lui-même
@@ -307,7 +307,7 @@ def _name_folder_conversation(titre, ident):
 def folder_of_conversation(ident, titre="", creer=False):
     """Le dossier où ranger ce que cette conversation produit (documents, exports, images, audio…), dans le dossier de travail, à côté des autres conversations mais jamais mélangé avec elles.
     Retrouvé par la fin de l'identifiant s'il existe déjà. Créé seulement si `creer`."""
-    base = _m.RACINE / "conversations"
+    base = _m.ROOT / "conversations"
     fin = "-" + _name_folder_conversation("", ident).rsplit("-", 1)[-1]
     try:
         for d in base.iterdir() if base.is_dir() else ():
@@ -328,7 +328,7 @@ def instruction_folder(conv):
         return ""
     d = folder_of_conversation(ident, (conv or {}).get("titre", ""))
     try:
-        rel = d.relative_to(_m.RACINE).as_posix()
+        rel = d.relative_to(_m.ROOT).as_posix()
     except ValueError:
         return ""
     return _t("\n\n# DOSSIER DE CETTE CONVERSATION\nRange dans « {} » ce que tu produis POUR cette conversation (documents, exports, images, audio, résultats de recherche, brouillons) : il se crée tout seul à la première écriture et évite de mélanger les conversations. "
@@ -339,7 +339,7 @@ def folders_conversation(ident):
     """Les dossiers propres à une conversation : son dossier de travail, puis ceux où elle a créé des fichiers (cinq au plus). [{chemin, role}] ; seulement des dossiers qui existent et sont permis.
     Sert au menu « ⋯ » de la conversation : ouvrir l'endroit où elle travaille, sans chercher."""
     from . import workspaces
-    cfg = _m.config_lue()
+    cfg = _m.read_config()
     conv = _m.conv_read(ident)
     t = workspaces.by_id(cfg, conv["travail"]) if conv.get("travail") else None
     t = t or workspaces.active(cfg)

@@ -20,7 +20,7 @@ LIMIT_URL = "https://api.github.com/rate_limit"          # ne compte pas dans la
 
 def _path():
     from . import core as _m
-    return _m.DONNEES / "github.json"
+    return _m.DATA / "github.json"
 
 
 def _read():

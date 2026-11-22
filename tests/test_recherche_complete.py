@@ -218,12 +218,12 @@ class Searxng(Base):
         res = web_search.results_searxng("requete")
         self.assertTrue(res)
         autre = URL_PG + "/article"
-        with self.assertRaises(A.ErreurOutil) as e:
+        with self.assertRaises(A.ToolError) as e:
             web.web_download(autre)
         self.assertIn("Adresse locale refusée", str(e.exception), "la lecture d'une page locale reste interdite, même à côté de SearXNG")
-        with self.assertRaises(A.ErreurOutil):
+        with self.assertRaises(A.ToolError):
             A.tool_web_read(URL_SX + "/search?q=x", 0, {"web": True})
-        with self.assertRaises(A.ErreurOutil):
+        with self.assertRaises(A.ToolError):
             web.web_download(URL_PG + "/article", hote_autorise="un.autre.hote")
 
     def test_requete_envoyee_et_resultats_nettoyes(self):
@@ -245,7 +245,7 @@ class Searxng(Base):
     def test_reponse_non_json_dit_comment_corriger(self):
         web_search.save(URL_SX)
         ETAT["searxng"] = "html"
-        with self.assertRaises(A.ErreurOutil) as e:
+        with self.assertRaises(A.ToolError) as e:
             web_search.results_searxng("x")
         self.assertIn("settings.yml", str(e.exception))
 
@@ -261,7 +261,7 @@ class Searxng(Base):
             self.assertIn(attendu, texte)
         self.assertNotIn("utm_source", texte)
         for mauvais in ({"periode": "hier"}, {"site": "pas un site"}):
-            with self.assertRaises(A.ErreurOutil):
+            with self.assertRaises(A.ToolError):
                 A.tool_web_search("x", 3, {"web": True}, 0, mauvais.get("periode"), mauvais.get("site"))
 
     def test_une_instance_arretee_laisse_les_autres_moteurs_prendre_le_relais(self):
@@ -297,7 +297,7 @@ class Brave(Base):
 
     def test_mauvaise_cle_est_une_erreur_claire(self):
         web_search.save(brave_cle="mauvaise-cle-000000")
-        with self.assertRaises(A.ErreurOutil) as e:
+        with self.assertRaises(A.ToolError) as e:
             web_search.results_brave("x")
         self.assertIn("401", str(e.exception))
 
@@ -350,7 +350,7 @@ class LecturePages(Base):
                 self.assertIn("CONTENU WEB NON FIABLE", t)
 
     def test_liens_d_un_texte_brut_refuses(self):
-        with self.assertRaises(A.ErreurOutil):
+        with self.assertRaises(A.ToolError):
             A.tool_web_read(URL_PG + "/long", 0, {"web": True}, True)
 
     def test_hors_ligne_l_emporte_sur_le_cache(self):
@@ -362,7 +362,7 @@ class LecturePages(Base):
             raise offline.OfflineError("mode hors ligne")
         offline.guard = refuse
         try:
-            with self.assertRaises(A.ErreurOutil):
+            with self.assertRaises(A.ToolError):
                 A.tool_web_read(URL_PG + "/long", 0, {"web": True})
         finally:
             offline.guard = vrai
@@ -448,17 +448,17 @@ class Api(Base):
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
-        cls.avant = A.SECURITE
-        A.SECURITE = S.Security(niveau=S.LOCAL)
+        cls.avant = A.SECURITY
+        A.SECURITY = S.Security(niveau=S.LOCAL)
 
     @classmethod
     def tearDownClass(cls):
-        A.SECURITE = cls.avant
+        A.SECURITY = cls.avant
         cls.serveur.shutdown()
 
     def appel(self, methode, chemin, corps=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=60)
-        h = {"Host": "127.0.0.1:%d" % self.port, "X-Token": A.JETON}
+        h = {"Host": "127.0.0.1:%d" % self.port, "X-Token": A.TOKEN}
         donnees = json.dumps(corps).encode() if corps is not None else None
         if donnees:
             h["Content-Type"] = "application/json"

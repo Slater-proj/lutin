@@ -122,7 +122,7 @@ class RechercheEtJournal(unittest.TestCase):
 
     def test_un_echec_est_note_aussi(self):
         def casse(requete):
-            raise A.ErreurOutil("HTTP 500")
+            raise A.ToolError("HTTP 500")
         with mock.patch.object(web, "engines_of_search", lambda: [("perplexity", casse)]):
             web.search_results("question simple", 5)
         self.assertFalse(outbound.read()[0]["ok"])
@@ -135,17 +135,17 @@ class Api(unittest.TestCase):
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
-        cls.avant = A.SECURITE
-        A.SECURITE = S.Security(niveau=S.LOCAL)
+        cls.avant = A.SECURITY
+        A.SECURITY = S.Security(niveau=S.LOCAL)
 
     @classmethod
     def tearDownClass(cls):
-        A.SECURITE = cls.avant
+        A.SECURITY = cls.avant
         cls.serveur.shutdown()
 
     def appel(self, methode, chemin, corps=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
-        h = {"Host": "127.0.0.1:%d" % self.port, "X-Token": A.JETON}
+        h = {"Host": "127.0.0.1:%d" % self.port, "X-Token": A.TOKEN}
         donnees = json.dumps(corps).encode() if corps is not None else None
         if donnees:
             h["Content-Type"] = "application/json"

@@ -79,7 +79,7 @@ def routes(method):
 
 def setUpModule():
     global SERVER, PORT, DEVICE
-    patches = [mock.patch.object(A, "SECURITE", S.Security(niveau=S.RESEAU)), mock.patch.object(A, "APPAREILS", S.Devices()), mock.patch.object(A, "LIMITEUR_PIN", S.RateLimiter(10_000, 60)),
+    patches = [mock.patch.object(A, "SECURITY", S.Security(niveau=S.RESEAU)), mock.patch.object(A, "DEVICES", S.Devices()), mock.patch.object(A, "PIN_LIMITER", S.RateLimiter(10_000, 60)),
                mock.patch.object(power, "schedule_shutdown", marker("shutdown")), mock.patch.object(access, "update", marker("update")),
                mock.patch.object(access, "restart", marker("restart")), mock.patch.object(access, "restore_stream", marker("restore")), mock.patch.object(access, "apply", marker("access level"))]
     for patch in patches:
@@ -89,8 +89,8 @@ def setUpModule():
     threading.Thread(target=SERVER.serve_forever, daemon=True).start()
     unittest.addModuleCleanup(SERVER.shutdown)
     PORT = SERVER.server_address[1]
-    session = A.APPAREILS.appairer(A.APPAREILS.nouveau_pin(), "phone")
-    DEVICE = {"Cookie": "{}={}".format(S.NAME_COOKIE, session), "X-Token": A.JETON}
+    session = A.DEVICES.appairer(A.DEVICES.nouveau_pin(), "phone")
+    DEVICE = {"Cookie": "{}={}".format(S.NAME_COOKIE, session), "X-Token": A.TOKEN}
 
 
 class Nobody(unittest.TestCase):
@@ -120,8 +120,8 @@ class Nobody(unittest.TestCase):
     def test_the_page_itself_is_the_sign_in_page(self):
         status, page = request("GET", "/")
         self.assertEqual(status, 200)
-        self.assertNotIn(A.JETON, page, "the page token is only in the page given to a signed-in device")
-        self.assertIn(A.JETON, request("GET", "/", {"Cookie": DEVICE["Cookie"]})[1])
+        self.assertNotIn(A.TOKEN, page, "the page token is only in the page given to a signed-in device")
+        self.assertIn(A.TOKEN, request("GET", "/", {"Cookie": DEVICE["Cookie"]})[1])
 
 
 class PairedDevice(unittest.TestCase):
