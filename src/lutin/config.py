@@ -40,9 +40,21 @@ def system_info():
 
 
 def folders(env=None, os_=None):
-    """{config, donnees, memoire, cache} pour ce système."""
+    """{config, donnees, memoire, cache} for this system. LUTIN_DONNEES and LUTIN_MEMOIRE (or their English names LUTIN_DATA, LUTIN_MEMORY) win over the default,
+    as they do in `app_context`: without that, a data folder set by its variable left uv, Node.js, ExLlamaV3, Colibri and the backup in the default folder."""
     env = os.environ if env is None else env
-    os_ = os_ or system_info()
+    found = _default_folders(env, os_ or system_info())
+    data = env.get("LUTIN_DONNEES") or env.get("LUTIN_DATA")
+    memory = env.get("LUTIN_MEMOIRE") or env.get("LUTIN_MEMORY")
+    if data:
+        found["donnees"] = Path(data)
+        found["memoire"] = Path(data).parent / "memoire"          # beside it, as app_context.Settings.from_env does
+    if memory:
+        found["memoire"] = Path(memory)
+    return found
+
+
+def _default_folders(env, os_):
     home = env.get("LUTIN_HOME")
     if home:
         b = Path(home)

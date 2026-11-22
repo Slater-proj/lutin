@@ -35,6 +35,18 @@ class Chemins(unittest.TestCase):
         d = config.folders({"LUTIN_HOME": "/portable"}, "windows")
         self.assertTrue(all(str(v).replace("\\", "/").startswith("/portable") for v in d.values()))
 
+    def test_the_data_folder_set_by_its_variable_wins_as_in_app_context(self):
+        """Before, LUTIN_DONNEES moved the conversations (app_context) but not uv, Node.js, ExLlamaV3, Colibri nor the backup (config.folders): a test that set it
+        still read the real %APPDATA%\\Lutin\\donnees\\outils."""
+        from lutin import app_context
+        env = {"APPDATA": r"C:\U\AppData\Roaming", "LOCALAPPDATA": r"C:\U\AppData\Local", "USERPROFILE": r"C:\U", "LUTIN_DONNEES": r"D:\L\donnees"}
+        d = config.folders(env, "windows")
+        settings = app_context.Settings.from_env(env)
+        self.assertEqual((d["donnees"], d["memoire"]), (settings.data, settings.memory))
+        self.assertEqual(d["config"], Path(r"C:\U\AppData\Roaming") / "Lutin", "the configuration does not move with the data")
+        self.assertEqual(config.folders(dict(env, LUTIN_MEMOIRE=r"E:\M"), "windows")["memoire"], Path(r"E:\M"))
+        self.assertEqual(config.folders({"LUTIN_HOME": "/p", "LUTIN_DATA": "/x/donnees"}, "linux")["donnees"], Path("/x/donnees"), "the English name too")
+
 
 class Configuration(unittest.TestCase):
     def test_fichier_absent_abime_ou_inattendu_donne_les_valeurs_par_defaut(self):
