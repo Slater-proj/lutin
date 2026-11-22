@@ -7,7 +7,7 @@ whole step in 1.0 (2026-11-22, evening). This first part was written that evenin
 
 | Plan item | Where it stands |
 |---|---|
-| 1. How other assistants serve chat and prompts | Studied for the context of small models: [CONTEXT_RESEARCH.md](CONTEXT_RESEARCH.md) (Open WebUI, Cline, Goose, Manus, AnythingLLM, Gemini CLI, studies on multi-turn instructions and tool counts). Not yet written for the tool-call protocol and approvals as such. |
+| 1. How other assistants serve chat and prompts | Studied for the context of small models: [CONTEXT_RESEARCH.md](CONTEXT_RESEARCH.md) (Open WebUI, Cline, Goose, Manus, AnythingLLM, Gemini CLI, studies on multi-turn instructions and tool counts). The tool-call protocol and approvals were written during the review (section below). |
 | 2. Prompt assembly in one place | A request has a prefix that stays (system message, tools) and a tail that changes ([ADR 0013](../adr/0013-a-request-has-a-prefix-that-stays-and-a-tail-that-changes.md)); the tool list comes from one table ([ADR 0010](../adr/0010-tool-table.md)); on a small window a core of tools only ([ADR 0018](../adr/0018-keeping-the-thread-on-a-small-window.md)); one entry runs a turn whoever asks ([ADR 0015](../adr/0015-one-entry-runs-a-turn.md)). |
 | 3. Reliable tool use | A call missing a required argument is not run and the model is told what to fix (06a2fbd); the turn is made of parts and says where it is ([ADR 0012](../adr/0012-a-turn-says-where-it-is.md)); a model whose template refuses tools answers in text only, said to the person. |
 | 4. Bug sweep of the chat path | Each area has tests on the fake engine (stop, stop with a frozen model, approvals, edits and regeneration, attachments, images, memory choice, missions in a conversation, concurrent turns, work folders). |
@@ -44,12 +44,38 @@ whole step in 1.0 (2026-11-22, evening). This first part was written that evenin
     (4,096 tokens, thirteen reads after a first request).
 12. **A model whose template refuses tools lost its images** in the flattened request, even when it sees. They follow their message now. —
     0f20908, `tests/test_moteur.py`.
+13. **The files and folders of a conversation** (seen by the maintainer): the panel « Cette conversation » lists what it created and its folders
+    again, as the old page did; the button that opened a folder carried the name of the panel and said nothing once clicked. — 3816519,
+    `tests/test_api_v1_created_files.py`, `tests/test_web_app_chat.py` (3za).
+14. **A page opened again while an approval card waits shows it and answers it** (decided for 1.0 by the maintainer). The card went only to the
+    stream of the page that sent the message; `GET /conversations/{id}/approvals` gives it again, and the Chat shows the same card. — ff5927d,
+    `tests/test_api_v1_turns.py`, `tests/test_web_app_chat.py` (reload while a card waits, answer, the turn ends).
+15. **A model without tools can use them** (proposal 8a, measured). See « Proposal 8, measured » below. — 650746f, `tests/test_moteur.py`.
 
-## Found, not fixed yet
+## Proposal 8, measured
 
-- **A page opened again while an approval card waits cannot show it.** The card goes only to the stream of the page that sent the message; a
-  reloaded page says so (`chat.elsewhere.waiting`) and can only stop the answer. Fix proposed: `GET /conversations/{id}/approvals` (the pending
-  cards, from `PendingApproval.EN_COURS`) and the same card in the Chat. About half a day with its tests: for the maintainer to place in 1.0 or 1.x.
+`tools/measure_tool_prompt.py`, on this machine's Ollama, 2026-11-22: the six tool questions of the bench (`bench.CASES_TOOLS`: four that need a
+tool, two that do not), the seven tools Lutin sends on a 4,096-token window (`lire`, `chercher`, `rappeler`, `modifier`, `ecrire`, `executer`,
+`memoriser`), temperature 0, one run per question. The question that asks for `lister` cannot pass: that tool is not sent on this window.
+
+| Model | Tools given | Passed | Prompt tokens |
+|---|---|---|---|
+| gemma3:4b (no tools in `/api/show`) | none, as Lutin did | 2/6 | — |
+| gemma3:4b | full schemas in the prompt, `<tool_call>` answer | 5/6 | 955 |
+| gemma3:4b | one line per tool, `<tool_call>` answer | 5/6 | 387 |
+| gemma3:4b | one line per tool, JSON answer | 5/6 | 365 |
+| Qwen3.8 27B abliterated q4 (tools announced) | native `tools`, as Lutin does | 5/6 | 1,082 |
+| Qwen3.8 27B | full schemas, JSON answer | 4/6 (one answer cut at 150 tokens) | 941 |
+| Qwen3.8 27B | one line per tool, JSON answer | 5/6 | 361 |
+| Qwen3.8 27B | any `<tool_call>` answer without `tools` | Ollama ends the answer with « EOF » | — |
+
+- **(a) « UnTooled », kept.** A model whose `/api/show` does not announce tools now gets the one-line catalogue and the form of a call in its
+  system message; its request is flattened; its call is read by `extract_text_calls` and run. 2/6 → 5/6, every reachable tool question passed.
+- **(b) The one-line catalogue for a model that has native tools: tried, not kept for 1.0.** Same score and a third of the prompt on one model, but
+  it means giving up native calls: the tag breaks Ollama's own parser on Qwen, a JSON answer alone is a weaker signal, and several turns with tool
+  results were not measured. For 1.x, with more models and conversations of several turns.
+- Limits: six questions, two models, one run each; it says a direction, not a ranking. `tests/test_evaluation.py` (fake models, all with tools)
+  gives the same result before and after the change.
 
 ## Reviewed and kept as it is
 
@@ -90,10 +116,11 @@ copies of themselves (Continue's fallback, OpenAI's strict mode with parallel ca
 | Approvals, rules | Claude Code: deny → ask → allow, the first match wins, a bare tool name removes the tool; Goose: per tool always allow / ask / never | `approval_rules`: deny > ask > allow, a hardline list never remembered, project rules can only ask or deny, « once / this chat / always » | kept: the same precedence. Lutin's project rules cannot grant, which Claude Code's project settings can |
 | Sandbox | Codex runs commands in an OS sandbox; Atomic Agent says it is not one | no OS sandbox: paths checked against the working folder, a validator without shell, a copy before every edit, the strict offline net | left for 1.0: an OS sandbox differs on each system. Now said plainly in docs/SECURITY.md (« Workspace folders ») |
 
-## Left (the rest of step 7)
+## Step 7 closed for 1.0
 
-- Item 2: proposal 8, « UnTooled »: a model without tool support today answers in text only; describing the tools in the prompt and reading a
-  JSON answer would give it the tools. To measure with the bench before deciding (ADR 0007).
-- Item 2: proposal 8, the one-line catalogue of the tools on a 4,096-token window (today: a core of tools with full schemas).
-- Item 4: the line by line reading of `agent.turn` is done. Left: the approval card of a reloaded page, if the maintainer places it in 1.0.
-- Item 5: a before/after on the fake engine for every prompt change; the evaluation suite (`tests/test_evaluation.py`) is the reduced one.
+Every item of the review is done: the tool protocol and approvals of other assistants (item 1), proposal 8 measured (item 2: a kept, b for
+1.x), the line by line reading of `agent.turn` with a test for each bug (item 4), and a before/after for the one prompt change of this review
+(item 5: `tests/test_evaluation.py` unchanged, the measure above on real models).
+
+Moved to 1.x: the one-line catalogue for models with native tools (8b), a larger measure (more models, several turns, several runs), and the
+evaluation suite on a real small model as an opt-in suite (proposal 9).
