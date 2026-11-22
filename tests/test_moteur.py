@@ -229,7 +229,7 @@ from lutin import core as A  # noqa: E402
 from lutin import web as _web  # noqa: E402
 
 _web.AUTO_READ = 0          # les tests n'ouvrent aucune page du vrai internet : la lecture automatique des premiers résultats a son propre test
-from lutin.storage import DOSSIER_COPIES  # noqa: E402
+from lutin.storage import COPIES_FOLDER  # noqa: E402
 
 S_ASSISTANT = lancer(A.Handler)
 BASE = "http://127.0.0.1:%d" % S_ASSISTANT.server_address[1]
@@ -281,7 +281,7 @@ def texte_de(evenements):
 class Assistant(unittest.TestCase):
     def setUp(self):
         RECUES.clear()
-        A.enregistrer_reglages({"auto_ecriture": False, "num_ctx": 24576, "modele": "qwen3.8:27b", "mode": "technique", "reflexion": True})
+        A.save_settings({"auto_ecriture": False, "num_ctx": 24576, "modele": "qwen3.8:27b", "mode": "technique", "reflexion": True})
 
     def test_etat_et_jeton(self):
         e = lire("/api/etat")
@@ -390,7 +390,7 @@ class Assistant(unittest.TestCase):
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
         trace = [x for x in __import__("lutin.produced_files", fromlist=["x"]).entries()["liste"] if x["conversation"] == cid]
         self.assertEqual([x["nom"] for x in trace], ["docker-compose.yml"], "inscrit dans Réglages > Fichiers créés")
-        outil = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        outil = next(m["content"] for m in A.conv_read(cid)["messages"] if m.get("role") == "tool")
         self.assertIn(str(cible.resolve()), outil, "le modèle reçoit le chemin complet")
         ev = chat("Change-le", reponses=[[appel_outil("ecrire", chemin="docker-compose.yml", contenu="services: {a: {}}\n")], [{"content": "Fait."}]], options={"auto_ecriture": True})
         self.assertFalse(next(e for e in ev if e["type"] == "resultat").get("fichiers_joints"), "un fichier déjà là n'est pas présenté comme créé")
@@ -402,7 +402,7 @@ class Assistant(unittest.TestCase):
         self.assertTrue((PROJET / "swag" / "docker-compose.yml").is_file(), "le fichier existe vraiment après la remarque")
         self.assertTrue(any(e["type"] == "info" and "sans appeler d'outil" in e["texte"] for e in ev))
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        self.assertNotIn("J'ai créé le fichier", " ".join(m.get("content") or "" for m in A.conv_lire(cid)["messages"] if m.get("role") == "assistant"), "le mensonge n'est pas gardé dans la conversation")
+        self.assertNotIn("J'ai créé le fichier", " ".join(m.get("content") or "" for m in A.conv_read(cid)["messages"] if m.get("role") == "assistant"), "le mensonge n'est pas gardé dans la conversation")
         ev = chat("Crée-en un autre", reponses=[[appel_outil("ecrire", chemin="swag/autre.yml", contenu="a: 1\n")], [{"content": "J'ai créé swag/autre.yml."}]], options={"auto_ecriture": True})
         self.assertFalse(any(e["type"] == "info" and "sans appeler d'outil" in e["texte"] for e in ev), "il a vraiment écrit : pas de remarque")
 
@@ -418,7 +418,7 @@ class Assistant(unittest.TestCase):
         affiche = next(e for e in ev if e["type"] == "resultat")["texte"]
         self.assertIn("non affiché", affiche)
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        recu = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        recu = next(m["content"] for m in A.conv_read(cid)["messages"] if m.get("role") == "tool")
         self.assertIn("CONTENU EXTERNE NON FIABLE", recu)
         self.assertRegex(recu, r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d")
         ev = chat("Note-le", reponses=[[appel_outil("mcp__demo__noter", texte="x")], [{"content": "Fait."}]])
@@ -507,7 +507,7 @@ class Assistant(unittest.TestCase):
         de la fenêtre). Elle n'en prend plus qu'un dixième, coupée au milieu (début et fin gardés) avec un en-tête qui dit comment avoir le reste, et le
         texte complet va à l'archive, où « rappeler » avec ici=true retrouve ce que le modèle n'a pas vu."""
         from lutin import agent as AG
-        A.enregistrer_reglages({"num_ctx": 4096, "mode": "polyvalent", "reflexion": False})
+        A.save_settings({"num_ctx": 4096, "mode": "polyvalent", "reflexion": False})
         lignes = ["ligne {:05d} du journal de construction, tout va bien".format(i) for i in range(600)]
         lignes[300] = "ligne 00300 erreur : le module zorglub est introuvable"
         (PROJET / "journal-long.txt").write_text("\n".join(lignes), encoding="utf-8")
@@ -518,14 +518,14 @@ class Assistant(unittest.TestCase):
         finally:
             (PROJET / "journal-long.txt").unlink()
         resultat = next(e["conversation"] for e in lu if e["type"] == "debut")
-        resultat = next(m for m in A.conv_lire(resultat)["messages"] if m.get("role") == "tool")
+        resultat = next(m for m in A.conv_read(resultat)["messages"] if m.get("role") == "tool")
         self.assertLessEqual(AG.estimer([{"role": "tool", "tool_name": resultat["tool_name"], "content": resultat["content"]}]), 4096 // 10)
         if os.name == "nt":
             self.assertNotIn("Résultat coupé", resultat["content"])
             self.assertRegex(resultat["content"], r"debut=\d+\)$")
         cid = next(e["conversation"] for e in ev if e["type"] == "debut")
         self.assertGreater(len("\n".join(lignes)), 30000)
-        outil = next(m for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        outil = next(m for m in A.conv_read(cid)["messages"] if m.get("role") == "tool")
         self.assertLessEqual(AG.estimer([{"role": "tool", "tool_name": outil["tool_name"], "content": outil["content"]}]), 4096 // 10, "un dixième de la fenêtre au plus")
         self.assertIn("rappeler", outil["content"].split("\n")[0], "l'en-tête dit comment avoir le reste")
         self.assertIn("ligne 00000", outil["content"], "le début est gardé")
@@ -557,17 +557,17 @@ class Assistant(unittest.TestCase):
         (PROJET / "lignes.txt").write_text("\n".join("ligne numéro {} du fichier".format(i) for i in range(1, 201)), encoding="utf-8")
         (PROJET / "minifie.js").write_text("var a=1;" * 1000 + "\nfin();\n", encoding="utf-8")
         try:
-            self.assertNotIn("debut=1)", A.outil_lire("minifie.js"), "même sans limite (LECTURE_MAX), une ligne trop longue ne renvoie pas à elle-même")
-            lu = A.outil_lire("lignes.txt", None, None, 1000)
+            self.assertNotIn("debut=1)", A.read_tool("minifie.js"), "même sans limite (LECTURE_MAX), une ligne trop longue ne renvoie pas à elle-même")
+            lu = A.read_tool("lignes.txt", None, None, 1000)
             self.assertLessEqual(len(json.dumps(lu, ensure_ascii=False)), 1000 + 120)
             self.assertRegex(lu.splitlines()[-1], r"debut=\d+")
             suite = int(lu.splitlines()[-1].split("debut=")[1].rstrip(")"))
             self.assertIn("{}\tligne numéro {} ".format(suite - 1, suite - 1), lu, "la suite commence juste après la dernière ligne lue")
-            long = A.outil_lire("minifie.js", None, None, 1000)
+            long = A.read_tool("minifie.js", None, None, 1000)
             self.assertIn("ligne coupée : 8000 caractères", long)
             self.assertNotIn("debut=1)", long, "pas de renvoi à la ligne qu'on vient de lire")
             self.assertIn("debut=2", long)
-            self.assertEqual(A.outil_lire("lignes.txt").count("\n"), 200, "sans limite, rien ne change (LECTURE_MAX)")
+            self.assertEqual(A.read_tool("lignes.txt").count("\n"), 200, "sans limite, rien ne change (LECTURE_MAX)")
         finally:
             (PROJET / "lignes.txt").unlink()
             (PROJET / "minifie.js").unlink()
@@ -583,7 +583,7 @@ class Assistant(unittest.TestCase):
         finally:
             (PROJET / "notes-longues.md").unlink()
         cid = next(e["conversation"] for e in ev if e["type"] == "debut")
-        lu = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        lu = next(m["content"] for m in A.conv_read(cid)["messages"] if m.get("role") == "tool")
         self.assertIn("Paragraphe 59", lu)
         RECUES.clear()
         chat("Et maintenant ?", cid, reponses=[[{"content": "Rien."}]])
@@ -595,7 +595,7 @@ class Assistant(unittest.TestCase):
         outil = next(m for m in RECUES[0]["messages"] if m.get("role") == "tool")
         self.assertTrue(outil["content"].startswith("[Résultat de « lire » (chemin=notes-longues.md) : {} caractères".format(len(lu))), outil["content"])
         self.assertIn("rappeler", outil["content"])
-        self.assertEqual(next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool"), lu, "la conversation enregistrée garde le résultat entier")
+        self.assertEqual(next(m["content"] for m in A.conv_read(cid)["messages"] if m.get("role") == "tool"), lu, "la conversation enregistrée garde le résultat entier")
 
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])
@@ -633,11 +633,11 @@ class Assistant(unittest.TestCase):
             def emit(e):
                 evenements.append(e)
                 if e["type"] == "approbation":
-                    A.repondre_attente(e["id"], True)
-            conv = A.conv_nouvelle()
+                    A.answer_pending(e["id"], True)
+            conv = A.conv_new()
             if options:
-                A.options_ecrire(conv["id"], options)
-            A.tour(conv, "lance la commande", emit, A.appliquer_options(A.reglages(), conv["id"]), None)
+                A.options_write(conv["id"], options)
+            A.tour(conv, "lance la commande", emit, A.apply_options(A.reglages(), conv["id"]), None)
             return evenements, conv["id"]
         try:
             for niveau in (security.LOCAL, security.RESEAU, security.PROXY):
@@ -647,41 +647,41 @@ class Assistant(unittest.TestCase):
             ev, ident = lancer(security.PROXY, None)
             self.assertTrue(any(e["type"] == "approbation" for e in ev), "décoché par défaut : l'accord est demandé")
             # chaque conversation a les siennes
-            a, b = A.conv_nouvelle(), A.conv_nouvelle()
-            A.options_ecrire(a["id"], {"auto_commandes": True, "mode": "technique"})
-            self.assertTrue(A.appliquer_options(A.reglages(), a["id"])["auto_commandes"])
-            self.assertFalse(A.appliquer_options(A.reglages(), b["id"])["auto_commandes"], "l'autre conversation n'est pas touchée")
-            self.assertEqual(A.options_lire(b["id"]), {})
+            a, b = A.conv_new(), A.conv_new()
+            A.options_write(a["id"], {"auto_commandes": True, "mode": "technique"})
+            self.assertTrue(A.apply_options(A.reglages(), a["id"])["auto_commandes"])
+            self.assertFalse(A.apply_options(A.reglages(), b["id"])["auto_commandes"], "l'autre conversation n'est pas touchée")
+            self.assertEqual(A.options_read(b["id"]), {})
             # une valeur invalide est ignorée, et les cases cochées en réglage général n'ouvrent plus rien
-            A.options_ecrire(b["id"], {"mode": "pirate", "num_predict": 7, "inconnue": True, "web": 0})
-            self.assertEqual(A.options_lire(b["id"]), {"web": False})
-            A.enregistrer_reglages({"auto_commandes": True, "auto_ecriture": True})
+            A.options_write(b["id"], {"mode": "pirate", "num_predict": 7, "inconnue": True, "web": 0})
+            self.assertEqual(A.options_read(b["id"]), {"web": False})
+            A.save_settings({"auto_commandes": True, "auto_ecriture": True})
             try:
-                r = A.appliquer_options(A.reglages(), b["id"])
+                r = A.apply_options(A.reglages(), b["id"])
                 self.assertFalse(r["auto_commandes"] or r["auto_ecriture"], "l'ancien réglage général ne vaut plus : seule la conversation décide")
             finally:
-                A.enregistrer_reglages({"auto_commandes": False, "auto_ecriture": False})
-            A.conv_supprimer(a["id"])
-            self.assertEqual(A.options_lire(a["id"]), {}, "les options partent avec la conversation")
+                A.save_settings({"auto_commandes": False, "auto_ecriture": False})
+            A.conv_delete(a["id"])
+            self.assertEqual(A.options_read(a["id"]), {}, "les options partent avec la conversation")
         finally:
             A.SECURITE = vrai
 
     def test_une_case_cochee_pendant_la_reponse_compte_des_l_outil_suivant(self):
         """Décocher « Commandes auto » alors que la réponse continue : la commande suivante redemande l'accord."""
         import threading
-        c = A.conv_nouvelle()
-        A.options_ecrire(c["id"], {"auto_commandes": True})
+        c = A.conv_new()
+        A.options_write(c["id"], {"auto_commandes": True})
         SCENARIO[:] = [[appel_outil("executer", commande="echo un> un.txt")], [appel_outil("executer", commande="echo deux> deux.txt")], [{"content": "."}]]
         evenements = []
 
         def emit(e):
             evenements.append(e)
             if e["type"] == "resultat" and len([x for x in evenements if x["type"] == "resultat"]) == 1:
-                A.options_ecrire(c["id"], {"auto_commandes": False})                      # l'utilisateur décoche entre les deux commandes
+                A.options_write(c["id"], {"auto_commandes": False})                      # l'utilisateur décoche entre les deux commandes
             if e["type"] == "approbation":
-                A.repondre_attente(e["id"], False)
+                A.answer_pending(e["id"], False)
         try:
-            A.tour(c, "deux commandes", emit, A.appliquer_options(A.reglages(), c["id"]), threading.Event())
+            A.tour(c, "deux commandes", emit, A.apply_options(A.reglages(), c["id"]), threading.Event())
             self.assertEqual(len([e for e in evenements if e["type"] == "approbation"]), 1, "seule la seconde commande demande l'accord")
             self.assertTrue((PROJET / "un.txt").exists())
             self.assertFalse((PROJET / "deux.txt").exists(), "refusée")
@@ -693,25 +693,25 @@ class Assistant(unittest.TestCase):
         qu'une autre connexion écrit rend la dernière version enregistrée, jamais une copie de secours ni une moitié."""
         import sqlite3
         from lutin import store
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         c["messages"] = [{"role": "user", "content": "version récente"}]
-        A.conv_ecrire(c)
+        A.conv_write(c)
         autre = sqlite3.connect(str(store.database_path()), timeout=5, isolation_level=None)
         try:
             autre.execute("BEGIN IMMEDIATE")
             autre.execute("UPDATE conversations SET titre = 'pas encore écrite' WHERE id = ?", (c["id"],))
-            lue = A.conv_lire(c["id"])                                                     # pendant que l'autre écrit
+            lue = A.conv_read(c["id"])                                                     # pendant que l'autre écrit
             self.assertEqual((lue["messages"][0]["content"], lue["titre"]), ("version récente", c["titre"]), "la version enregistrée, pas la moitié de l'autre")
             autre.execute("ROLLBACK")
         finally:
             autre.close()
-        self.assertFalse(Path(str(A.conv_chemin(c["id"])) + ".bak").exists(), "plus de copie de secours de fichier : chaque écriture est une transaction")
-        A.conv_supprimer(c["id"])
+        self.assertFalse(Path(str(A.conv_path(c["id"])) + ".bak").exists(), "plus de copie de secours de fichier : chaque écriture est une transaction")
+        A.conv_delete(c["id"])
 
     def test_supprimer_renommer_epingler_refuses_pendant_une_reponse_et_une_demande_refusee_ne_laisse_rien(self):
         import threading
-        c = A.conv_nouvelle()
-        A.conv_ecrire(c)
+        c = A.conv_new()
+        A.conv_write(c)
         A.TOURS_ACTIFS[c["id"]] = threading.Event()
         try:
             post("/api/supprimer", {"id": c["id"]}, attendu=409)
@@ -719,7 +719,7 @@ class Assistant(unittest.TestCase):
             post("/api/epingler", {"id": c["id"], "epingle": True}, attendu=409)
         finally:
             A.TOURS_ACTIFS.pop(c["id"], None)
-        self.assertTrue(A.conv_existe(c["id"]), "la conversation est intacte")
+        self.assertTrue(A.conv_exists(c["id"]), "la conversation est intacte")
         post("/api/renommer", {"id": c["id"], "titre": "Autre"})
         avant = len(lire("/api/etat")["conversations"])
         req = urllib.request.Request(BASE + "/api/chat", data=json.dumps({"message": "x", "mode": "pirate"}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
@@ -762,18 +762,18 @@ class Assistant(unittest.TestCase):
     def test_conversation_longue_l_ancien_reglage_resume_vaut_la_fiche(self):
         """ADR 0019 : la fiche de suivi pour toute conversation. L'ancien réglage « resume » est accepté et vaut la fiche : le début sort en bloc
         (archivé), sans appel au modèle pour le résumer, et la demande de départ reste en tête de la requête, mot pour mot."""
-        A.enregistrer_reglages({"num_ctx": 16384, "memoire_longue": "resume", "fiche_scribe": False})          # le scribe : testé à part
+        A.save_settings({"num_ctx": 16384, "memoire_longue": "resume", "fiche_scribe": False})          # le scribe : testé à part
         try:
             self.assertEqual(A.reglages()["memoire_longue"], "fichier")
             ident = chat("Début", reponses=[[{"content": "Réponse initiale."}]])[-1]["conversation"]["id"]
-            c = A.conv_lire(ident)
+            c = A.conv_read(ident)
             for i in range(14):
                 c["messages"] += [{"role": "user", "content": "Question numéro %d. " % i + "mot " * 400}, {"role": "assistant", "content": "Réponse %d. " % i + "mot " * 400}]
-            A.conv_ecrire(c)
+            A.conv_write(c)
             RECUES.clear()
             ev = chat("Où en est-on ?", conversation=ident, reponses=[[{"content": "On en est là."}]])
             self.assertTrue(any(e["type"] == "info" and "sortent du contexte" in e["texte"] for e in ev), "le début sort en bloc")
-            c = A.conv_lire(ident)
+            c = A.conv_read(ident)
             self.assertFalse(c.get("resume"), "rien n'est résumé")
             self.assertLess(len(c["messages"]), 22)
             self.assertFalse(any("Tu résumes" in str((b.get("messages") or [{}])[0].get("content", "")) for b in RECUES), "aucun appel au modèle pour résumer")
@@ -783,7 +783,7 @@ class Assistant(unittest.TestCase):
             self.assertEqual(envoi[-1]["content"], "Où en est-on ?")
             post("/api/supprimer", {"id": ident})
         finally:
-            A.enregistrer_reglages({"fiche_scribe": True})
+            A.save_settings({"fiche_scribe": True})
 
     def test_installer_un_modele(self):
         r = post("/api/installer-modele", {"modele": "gemma4:12b"})
@@ -814,7 +814,7 @@ class Assistant(unittest.TestCase):
             self.assertEqual(lire("/api/etat")["installes"], [])
         finally:
             INSTALLES[:] = ["qwen3.8:27b"]
-            A.enregistrer_reglages({"modele": "qwen3.8:27b"})
+            A.save_settings({"modele": "qwen3.8:27b"})
 
     def test_outil_d_images(self):
         ev = chat("Où en est l'outil ?", reponses=[[appel_outil("etat_outil")], [{"content": "."}]])
@@ -877,7 +877,7 @@ class Assistant(unittest.TestCase):
 
     def test_gros_projet_le_contexte_ne_deborde_jamais(self):
         """Régression : en lisant beaucoup de fichiers, Ollama perdait la question (« no query found in message ») et tout était perdu."""
-        A.enregistrer_reglages({"num_ctx": 12288})
+        A.save_settings({"num_ctx": 12288})
         lectures = [[appel_outil("lire", chemin="docs/gros.md", debut=1 + 150 * i)] for i in range(8)]
         ev = chat("Analyse-moi le projet", reponses=lectures + [[{"content": "Voici l'analyse complète."}]])
         self.assertEqual(texte_de(ev), "Voici l'analyse complète.")
@@ -894,7 +894,7 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any(e["type"] == "erreur" for e in ev))
         self.assertTrue(any(e["type"] == "info" and "continue" in e["texte"] for e in ev), "on dit comment reprendre")
         fin = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
-        self.assertIn("user", [m["role"] for m in A.conv_lire(fin)["messages"]], "la demande est gardée")
+        self.assertIn("user", [m["role"] for m in A.conv_read(fin)["messages"]], "la demande est gardée")
 
     def test_un_modele_muet_avec_les_outils_repond_au_dernier_essai_sans_outils(self):
         """Capture du mini-PC : granite4:tiny-h ne produisait RIEN trois fois de suite (conversation à 4,7k sur 8,2k, donc pas de dépassement). Dernier essai sans outils, et message honnête."""
@@ -976,7 +976,7 @@ class Assistant(unittest.TestCase):
             self.assertFalse(A.reglages()["conseil_machine"])
             post("/api/conseil-machine", {"action": "danse"}, attendu=400)
         finally:
-            A.enregistrer_reglages({"conseil_machine": True, "num_ctx": reglages_avant["num_ctx"], "reflexion": reglages_avant["reflexion"]})
+            A.save_settings({"conseil_machine": True, "num_ctx": reglages_avant["num_ctx"], "reflexion": reglages_avant["reflexion"]})
         post("/api/bench-serie", {"modeles": []}, attendu=400)
         post("/api/bench-serie", {"modeles": ["pas-installe:1b"]}, attendu=400)
         post("/api/bench-serie", {"modeles": ["../mauvais"]}, attendu=400)
@@ -1009,48 +1009,48 @@ class Assistant(unittest.TestCase):
             post("/api/calibrage", {"action": "danse"}, attendu=400)
         finally:
             calibration.measure_threads, calibration.candidates = vrai, vrais_candidats
-            A.enregistrer_reglages({"num_thread": avant})
+            A.save_settings({"num_thread": avant})
             calibration.CALIBRATION.update(resultats=[], recommande=None)
             calibration.path().unlink(missing_ok=True)
 
     def test_reflexion_seulement_avant_la_premiere_reponse_si_demande(self):
         appel = appel_outil("lister", dossier="docs")
-        A.enregistrer_reglages({"reflexion": True, "reflexion_tours": "toujours"})
+        A.save_settings({"reflexion": True, "reflexion_tours": "toujours"})
         try:
             chat("Regarde", reponses=[[appel], [{"content": "Fait."}]])
             self.assertEqual((RECUES[-2].get("think"), RECUES[-1].get("think")), (True, True), "comportement actuel : à chaque étape")
-            A.enregistrer_reglages({"reflexion_tours": "premier"})
+            A.save_settings({"reflexion_tours": "premier"})
             chat("Regarde encore", reponses=[[appel], [{"content": "Fait."}]])
             self.assertEqual((RECUES[-2].get("think"), RECUES[-1].get("think")), (True, False), "après le retour d'outil, plus de réflexion")
-            A.enregistrer_reglages({"reflexion_tours": "n'importe quoi"})
+            A.save_settings({"reflexion_tours": "n'importe quoi"})
             self.assertEqual(A.reglages()["reflexion_tours"], "toujours", "valeur inconnue : le comportement actuel")
         finally:
-            A.enregistrer_reglages({"reflexion": False, "reflexion_tours": "toujours"})
+            A.save_settings({"reflexion": False, "reflexion_tours": "toujours"})
 
     def test_petit_modele_annexe_pour_la_fiche_seulement_s_il_est_installe(self):
         INSTALLES.append("petit:1b")
-        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True, "modele_annexe": "petit:1b"})
+        A.save_settings({"memoire_longue": "fichier", "fiche_scribe": True, "modele_annexe": "petit:1b"})
         try:
             cid = self.conversation_longue()
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             conv["memoire_longue"] = "fichier"
-            A.conv_ecrire(conv)
+            A.conv_write(conv)
             ops = json.dumps({"decisions": ["Le code est 4711"], "etape": [], "fait": [], "ouvert": []})
             principal = A.reglages()["modele"]
             chat("Quel est le code ?", conversation=cid, reponses=[[{"content": "4711-ZEBRE."}], [{"content": ops}]])
             self.assertEqual(RECUES[-2]["model"], principal, "la réponse reste au modèle de la conversation")
             self.assertEqual(RECUES[-1]["model"], "petit:1b", "la mise à jour de la fiche passe par le petit modèle")
             INSTALLES.remove("petit:1b")
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             conv["scribe_a"] = 0
-            A.conv_ecrire(conv)
+            A.conv_write(conv)
             chat("Et encore ?", conversation=cid, reponses=[[{"content": "Oui."}], [{"content": ops}]])
             self.assertEqual(RECUES[-1]["model"], principal, "modèle annexe absent : on retombe sur le modèle de la conversation")
             post("/api/supprimer", {"id": cid})
         finally:
             if "petit:1b" in INSTALLES:
                 INSTALLES.remove("petit:1b")
-            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True, "modele_annexe": ""})
+            A.save_settings({"memoire_longue": "resume", "fiche_scribe": True, "modele_annexe": ""})
 
     def test_le_modele_de_recherche_ne_peut_pas_devenir_le_modele_de_conversation(self):
         avant = A.reglages()["modele"]
@@ -1197,29 +1197,29 @@ class Assistant(unittest.TestCase):
         (PROJET / "skills" / "mon-jeu.md").write_text("# Mon jeu\nContenu long qui ne doit pas être copé dans le système.\n" + "x" * 500, encoding="utf-8")
         (PROJET / "skills" / "sans-titre.md").write_text("juste du texte sans titre", encoding="utf-8")
         try:
-            self.assertEqual(A.lister_skills(), [("mon-jeu.md", "Mon jeu"), ("sans-titre.md", "sans-titre")])
+            self.assertEqual(A.list_skills(), [("mon-jeu.md", "Mon jeu"), ("sans-titre.md", "sans-titre")])
             texte = A.consignes_systeme(A.reglages())
             self.assertIn("# SKILLS", texte)
             self.assertIn("skills/mon-jeu.md : Mon jeu", texte)
             self.assertNotIn("Contenu long qui ne doit pas être copé", texte, "seul le titre est listé, pas le contenu")
         finally:
             shutil.rmtree(PROJET / "skills")
-        self.assertEqual(A.lister_skills(), [])
+        self.assertEqual(A.list_skills(), [])
 
     def test_skills_crud(self):
         """Créer, lire, modifier et supprimer une fiche skills/ depuis les fonctions de l'API."""
         try:
-            A.ecrire_skill("nouveau-skill.md", "# Mon skill\nContenu initial.")
-            self.assertEqual(A.lire_skill("nouveau-skill.md"), "# Mon skill\nContenu initial.")
-            self.assertIn(("nouveau-skill.md", "Mon skill"), A.lister_skills())
-            A.ecrire_skill("nouveau-skill.md", "# Mon skill\nContenu modifié.")
-            self.assertIn("Contenu modifié", A.lire_skill("nouveau-skill.md"))
-            A.supprimer_skill("nouveau-skill.md")
-            self.assertNotIn("nouveau-skill.md", [n for n, _ in A.lister_skills()])
+            A.write_skill("nouveau-skill.md", "# Mon skill\nContenu initial.")
+            self.assertEqual(A.read_skill("nouveau-skill.md"), "# Mon skill\nContenu initial.")
+            self.assertIn(("nouveau-skill.md", "Mon skill"), A.list_skills())
+            A.write_skill("nouveau-skill.md", "# Mon skill\nContenu modifié.")
+            self.assertIn("Contenu modifié", A.read_skill("nouveau-skill.md"))
+            A.delete_skill("nouveau-skill.md")
+            self.assertNotIn("nouveau-skill.md", [n for n, _ in A.list_skills()])
             with self.assertRaises(ValueError):
-                A.ecrire_skill("../malveillant.md", "x")
+                A.write_skill("../malveillant.md", "x")
             with self.assertRaises(ValueError):
-                A.ecrire_skill("ok.md", "x" * 60001)
+                A.write_skill("ok.md", "x" * 60001)
         finally:
             f = PROJET / "skills" / "nouveau-skill.md"
             if f.exists():
@@ -1228,17 +1228,17 @@ class Assistant(unittest.TestCase):
     def test_skills_noms_avec_espaces_et_erreurs(self):
         """Un nom d'espace est accepté (l'API décode l'URL) ; nom vide ou skill absent = erreur claire."""
         try:
-            A.ecrire_skill("mon skill.md", "# Avec espace")
-            self.assertIn(("mon skill.md", "Avec espace"), A.lister_skills())
+            A.write_skill("mon skill.md", "# Avec espace")
+            self.assertIn(("mon skill.md", "Avec espace"), A.list_skills())
             # l'API reçoit le nom encodé et doit le décoder
-            self.assertEqual(A.lire_skill(urllib.parse.unquote("mon%20skill.md")), "# Avec espace")
-            A.supprimer_skill("mon skill.md")
+            self.assertEqual(A.read_skill(urllib.parse.unquote("mon%20skill.md")), "# Avec espace")
+            A.delete_skill("mon skill.md")
             with self.assertRaises(ValueError):
-                A.supprimer_skill("inexistant.md")
+                A.delete_skill("inexistant.md")
             with self.assertRaises(ValueError):
-                A.ecrire_skill("", "x")
+                A.write_skill("", "x")
             with self.assertRaises(ValueError):
-                A.ecrire_skill("a/b.md", "x")
+                A.write_skill("a/b.md", "x")
         finally:
             f = PROJET / "skills" / "mon skill.md"
             if f.exists():
@@ -1256,7 +1256,7 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any(e["type"] == "info" and e["texte"].startswith("Arrêté") for e in ev))
         self.assertEqual(texte_de(ev), "", "le modèle n'a pas été rappelé après l'arrêt")
         fin = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
-        self.assertEqual(A.conv_lire(fin)["messages"][-1]["role"], "tool", "l'appel d'outil interrompu a une réponse : la conversation reste cohérente")
+        self.assertEqual(A.conv_read(fin)["messages"][-1]["role"], "tool", "l'appel d'outil interrompu a une réponse : la conversation reste cohérente")
         self.assertEqual(A.TOURS_ACTIFS, {}, "le tour est libéré")
         self.assertFalse(post("/api/arreter", {"conversation": fin})["actif"])
 
@@ -1294,10 +1294,10 @@ class Assistant(unittest.TestCase):
             self.assertNotIn("conv-figee", A.TOURS_ACTIFS, "la conversation est rendue")
             self.assertTrue(getattr(stop, "abandonne", False))
             A.LOCAL_TOUR.stop = stop          # ce fil joue le rôle du tour abandonné : son enregistrement est ignoré
-            c = A.conv_nouvelle()
-            donnees.conv_ecrire(dict(c, titre="NE DOIT PAS ÊTRE ÉCRIT"))
+            c = A.conv_new()
+            donnees.conv_write(dict(c, titre="NE DOIT PAS ÊTRE ÉCRIT"))
             with self.assertRaises(ValueError):
-                A.conv_lire(c["id"])          # rien n'a été écrit
+                A.conv_read(c["id"])          # rien n'a été écrit
         finally:
             A.LOCAL_TOUR.stop = None
             A.DELAI_ABANDON_S = avant
@@ -1341,7 +1341,7 @@ class Assistant(unittest.TestCase):
     def test_demande_renvoyee_non_dupliquee(self):
         ident = next(e for e in chat("Bonjour", reponses=[[{"error": "model requires more system memory"}]]) if e["type"] == "fin")["conversation"]["id"]
         ev = chat("Bonjour", conversation=ident, reponses=[[{"content": "ok"}]])
-        self.assertEqual([m["role"] for m in A.conv_lire(ident)["messages"]], ["user", "assistant"])
+        self.assertEqual([m["role"] for m in A.conv_read(ident)["messages"]], ["user", "assistant"])
         self.assertTrue(any(e["type"] == "info" and "sans la dupliquer" in e["texte"] for e in ev))
 
     def test_plantage_d_ollama_reessaye(self):
@@ -1405,7 +1405,7 @@ class Assistant(unittest.TestCase):
                 f.unlink(missing_ok=True)
             else:
                 f.write_text(ancien, encoding="utf-8")
-            A.COUPURES.clear()
+            A.CUTS.clear()
 
     def test_capacites_du_modele(self):
         CAPACITES_FAUX["petit:1b"] = ["completion"]
@@ -1422,10 +1422,10 @@ class Assistant(unittest.TestCase):
         self.assertIn("ne sait pas appeler d'outils", textes)
 
     def test_commande_de_lecture_reste_dans_le_projet(self):
-        self.assertTrue(A.commande_lecture_sure("git status --short"))
-        self.assertTrue(A.commande_lecture_sure("dir docs" if os.name == "nt" else "ls docs"))          # la lecture simple du système : dir sous Windows, ls ailleurs
+        self.assertTrue(A.safe_read_command("git status --short"))
+        self.assertTrue(A.safe_read_command("dir docs" if os.name == "nt" else "ls docs"))          # la lecture simple du système : dir sous Windows, ls ailleurs
         for dangereuse in ("type C:\\Windows\\win.ini", "dir ..\\", "git log --output=x.txt", "type \\\\serveur\\partage\\x", "type D:/secret.txt"):
-            self.assertFalse(A.commande_lecture_sure(dangereuse), dangereuse)
+            self.assertFalse(A.safe_read_command(dangereuse), dangereuse)
 
     def test_liste_de_taches(self):
         ev = chat("Gros chantier", reponses=[[appel_outil("taches", liste=[{"texte": "Lire", "etat": "fait"}, {"texte": "Corriger", "etat": "en_cours"}, "Tester"])], [{"content": "En cours."}]])
@@ -1439,8 +1439,8 @@ class Assistant(unittest.TestCase):
         self.assertNotIn("Corriger", etape[0]["content"], "le message système ne suit pas la liste : le moteur garde ce qu'il a déjà lu (ADR 0013)")
         self.assertEqual(etape[:2], RECUES[0]["messages"], "créer la liste ne change rien à ce que le moteur avait lu")
         ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
-        self.assertEqual(len(A.conv_lire(ident)["taches"]), 3, "la liste est enregistrée avec la conversation")
-        self.assertNotIn("Tâches en cours", json.dumps(A.conv_lire(ident)["messages"], ensure_ascii=False), "elle n'est jamais écrite dans les messages enregistrés")
+        self.assertEqual(len(A.conv_read(ident)["taches"]), 3, "la liste est enregistrée avec la conversation")
+        self.assertNotIn("Tâches en cours", json.dumps(A.conv_read(ident)["messages"], ensure_ascii=False), "elle n'est jamais écrite dans les messages enregistrés")
         chat("Suite", conversation=ident, reponses=[[{"content": "ok"}]])
         suite = RECUES[-1]["messages"]
         self.assertIn("[x] Lire", suite[-1]["content"], "la liste survit d'un message à l'autre")
@@ -1475,13 +1475,13 @@ class Assistant(unittest.TestCase):
     def test_modifier_un_message_ou_regenerer(self):
         ident = next(e for e in chat("Un", reponses=[[{"content": "R1"}]]) if e["type"] == "fin")["conversation"]["id"]
         chat("Deux", conversation=ident, reponses=[[{"content": "R2"}]])
-        self.assertEqual([m["role"] for m in A.conv_lire(ident)["messages"]], ["user", "assistant", "user", "assistant"])
+        self.assertEqual([m["role"] for m in A.conv_read(ident)["messages"]], ["user", "assistant", "user", "assistant"])
         chat("Deux bis", conversation=ident, reponses=[[{"content": "R2 bis"}]], remplacer_depuis=2)
-        c = A.conv_lire(ident)
+        c = A.conv_read(ident)
         self.assertEqual([(m["role"], m["content"]) for m in c["messages"]], [("user", "Un"), ("assistant", "R1"), ("user", "Deux bis"), ("assistant", "R2 bis")])
         self.assertEqual([m["role"] for m in RECUES[-1]["messages"]], ["system", "user", "assistant", "user"], "le modèle ne voit pas l'ancienne suite")
         chat("Un", conversation=ident, reponses=[[{"content": "R1 autre"}]], remplacer_depuis=0)           # régénérer = renvoyer le même message
-        self.assertEqual([(m["role"], m["content"]) for m in A.conv_lire(ident)["messages"]], [("user", "Un"), ("assistant", "R1 autre")])
+        self.assertEqual([(m["role"], m["content"]) for m in A.conv_read(ident)["messages"]], [("user", "Un"), ("assistant", "R1 autre")])
         post("/api/chat", {"message": "x", "conversation": ident, "remplacer_depuis": 1}, attendu=400)      # 1 est une réponse, pas un message de l'utilisateur
         post("/api/chat", {"message": "x", "conversation": ident, "remplacer_depuis": 99}, attendu=400)
         post("/api/chat", {"message": "x", "conversation": ident, "remplacer_depuis": "abc"}, attendu=400)
@@ -1537,7 +1537,7 @@ class Assistant(unittest.TestCase):
         self.assertIn("non affiché", affiche, "la page lue sert à l'assistant : elle n'est pas recopiée dans la conversation")
         self.assertNotIn("Bienvenue", affiche)
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        res = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")          # ce que le MODÈLE a reçu
+        res = next(m["content"] for m in A.conv_read(cid)["messages"] if m.get("role") == "tool")          # ce que le MODÈLE a reçu
         for attendu in ("CONTENU WEB NON FIABLE", "Titre : Titre de test", "# Bienvenue", "Premier paragraphe écrit pour le test.", "- un", "- deux"):
             self.assertIn(attendu, res)
         self.assertNotIn("alert", res, "les scripts ne sont pas lus")
@@ -1585,7 +1585,7 @@ class Assistant(unittest.TestCase):
         self.assertIn("non affiché", affiche, "les résultats de recherche sont pour l'assistant, pas pour la conversation")
         self.assertNotIn("exemple.org", affiche)
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        res = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")          # ce que le MODÈLE a reçu
+        res = next(m["content"] for m in A.conv_read(cid)["messages"] if m.get("role") == "tool")          # ce que le MODÈLE a reçu
         self.assertIn("CONTENU WEB NON FIABLE", res)
         self.assertIn("1. Doc officielle", res)
         self.assertIn("https://exemple.org/doc", res, "l'adresse réelle est retrouvée derrière le lien de redirection")
@@ -1605,7 +1605,7 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any(e["type"] == "outil" and e["nom"] == "web_chercher" for e in ev), "la recherche est lancée par Lutin")
         self.assertIn("non affiché", next(e for e in ev if e["type"] == "resultat")["texte"])
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        messages = A.conv_lire(cid)["messages"]
+        messages = A.conv_read(cid)["messages"]
         self.assertEqual([m["role"] for m in messages], ["user", "assistant", "tool", "assistant"])
         self.assertIn("CONTENU WEB NON FIABLE", messages[2]["content"])
         self.assertEqual(messages[3]["content"], "Voici la synthèse du jour.")
@@ -1700,7 +1700,7 @@ class Assistant(unittest.TestCase):
             self.assertEqual(sorted(r["retablis"]), ["docs/a.txt", "docs/b.txt"])
             self.assertEqual(a.read_bytes(), b"avant\n", "la version d'avant la demande, pas celle d'entre deux modifications")
             self.assertFalse(b.exists(), "un fichier créé par la demande est supprimé")
-            c = A.conv_lire(ident)
+            c = A.conv_read(ident)
             self.assertNotIn("annulable", c)
             self.assertIn("Rétablis", c["messages"][-1]["content"], "le modèle est prévenu de l'annulation")
             post("/api/annuler-tour", {"conversation": ident}, attendu=400)
@@ -1783,26 +1783,26 @@ class Assistant(unittest.TestCase):
         from lutin import store
         ids = []
         for i in range(25):
-            c = A.conv_nouvelle()
+            c = A.conv_new()
             c["titre"] = "Conversation %d" % i
-            A.conv_ecrire(c)
+            A.conv_write(c)
             ids.append(c["id"])
         store.close()                                          # « redémarrage » : plus rien en mémoire
         lus = []
         vrai = store.read
         store.read = lambda ident: lus.append(ident) or vrai(ident)
         try:
-            titres = {e["id"]: e["titre"] for e in A.conv_liste() if e["id"] in ids}
+            titres = {e["id"]: e["titre"] for e in A.conv_list() if e["id"] in ids}
             self.assertEqual(lus, [], "aucune conversation n'est relue : la liste est une requête")
             self.assertEqual(titres, {i: "Conversation %d" % n for n, i in enumerate(ids)})
             c = vrai(ids[0])
             c["titre"] = "Renommée"
-            A.conv_ecrire(c)
-            self.assertEqual(next(e["titre"] for e in A.conv_liste() if e["id"] == ids[0]), "Renommée")
+            A.conv_write(c)
+            self.assertEqual(next(e["titre"] for e in A.conv_list() if e["id"] == ids[0]), "Renommée")
         finally:
             store.read = vrai
             for i in ids:
-                A.conv_supprimer(i)
+                A.conv_delete(i)
 
     def test_le_mode_mission_lance_une_mission_dans_la_conversation_puis_lui_donne_des_consignes(self):
         """Mode « Mission longue » : le message envoyé démarre une mission menée dans cette conversation ; le suivant (réponse, consigne) lui est transmis ; un message dans un autre mode se passe normalement."""
@@ -1834,7 +1834,7 @@ class Assistant(unittest.TestCase):
             for m in mission.read():
                 mission.action("supprimer", {"id": m["id"]})
             if ident:
-                A.conv_supprimer(ident)
+                A.conv_delete(ident)
         post("/api/reglages", {"mode": "mission"})
         self.assertNotEqual(lire("/api/etat")["reglages"]["mode"], "mission", "« mission » n'est jamais le mode des nouvelles conversations")
 
@@ -1843,7 +1843,7 @@ class Assistant(unittest.TestCase):
         v = next(e for e in ev if e["type"] == "vitesse")
         self.assertEqual((v["ecriture"], v["lecture"], v["chargement"], v["total"]), (33.0, 2468, 1.5, 4.0))
         ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
-        self.assertEqual(A.conv_lire(ident)["vitesse"]["ecriture"], 33.0)
+        self.assertEqual(A.conv_read(ident)["vitesse"]["ecriture"], 33.0)
         self.assertIsNone(A.calculer_vitesse({"eval_count": 2, "eval_duration": 1_000_000_000}), "trop court pour mesurer")
         self.assertIsNone(A.calculer_vitesse({"eval_count": 50, "eval_duration": 0}))
 
@@ -1865,41 +1865,41 @@ class Assistant(unittest.TestCase):
         self.assertEqual(A.plan_text(100), "", "un budget minuscule ne met rien")
 
     def test_outils_de_recherche_ameliores(self):
-        res = A.outil_chercher("Marly", "docs", 1)
+        res = A.search_tool("Marly", "docs", 1)
         self.assertIn("docs/univers.md:2: Marly est une ville.", res)
         self.assertIn("docs/univers.md-1- # Univers", res, "ligne de contexte avant")
         self.assertIn("docs/univers.md-3- Le Tonnerre", res, "ligne de contexte après")
-        self.assertEqual(A.outil_chercher("Marly", "docs", 0, "*.py"), "Aucun résultat.", "le filtre de noms de fichiers")
-        self.assertIn("docs/univers.md:2:", A.outil_chercher("Marly", ".", 0, "*.md,*.py"))
+        self.assertEqual(A.search_tool("Marly", "docs", 0, "*.py"), "Aucun résultat.", "le filtre de noms de fichiers")
+        self.assertIn("docs/univers.md:2:", A.search_tool("Marly", ".", 0, "*.md,*.py"))
         outils = PROJET / "docs" / "tools.py"
         try:
             outils.write_text("def calculer_total(a):\n    return a\n\nx = calculer_total(2)\ny = calculer_total(3)\n", encoding="utf-8")
-            res = A.outil_symboles("calculer_total")
+            res = A.symbols_tool("calculer_total")
             self.assertIn("Définitions (1)", res)
             self.assertIn("docs/tools.py:1: def calculer_total(a):", res)
             self.assertIn("Utilisations (2 lignes dans 1 fichier(s))", res)
-            self.assertIn("«", A.outil_symboles("nom_qui_nexiste_pas_du_tout"))
+            self.assertIn("«", A.symbols_tool("nom_qui_nexiste_pas_du_tout"))
             with self.assertRaises(A.ErreurOutil):
-                A.outil_symboles("a b; rm")
+                A.symbols_tool("a b; rm")
         finally:
             outils.unlink(missing_ok=True)
-        multi = A.outil_lire_plusieurs([{"chemin": "docs/univers.md", "fin": 2}, "appli/moteur/code.py", "absent.txt"])
+        multi = A.read_many_tool([{"chemin": "docs/univers.md", "fin": 2}, "appli/moteur/code.py", "absent.txt"])
         self.assertIn("Marly est une ville.", multi)
         self.assertIn("def f", multi)
         self.assertIn("Erreur : Fichier introuvable", multi)
         self.assertEqual(multi.count("====="), 2)
         with self.assertRaises(A.ErreurOutil):
-            A.outil_lire_plusieurs([])
+            A.read_many_tool([])
         ev = chat("Cherche", reponses=[[appel_outil("symboles", nom="Univers"), appel_outil("lire_plusieurs", fichiers=["docs/univers.md"])], [{"content": "."}]])
         self.assertEqual(len([e for e in ev if e["type"] == "resultat"]), 2)
 
     def test_rappeler_dans_les_documents_et_les_conversations(self):
         (PROJET / "docs" / "arc.md").write_text("# La Orion\nOrion est une androïde de trente ans, tatouage à la cheville gauche.\n\n# Les robots\nLes robots de Marly sont gris mat.\n", encoding="utf-8")
         (PROJET / "docs" / "autre.md").write_text("# Cuisine\nLa soupe de légumes cuit doucement.\n", encoding="utf-8")
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         c["titre"] = "Décision pivot"
         c["messages"] = [{"role": "user", "content": "On garde le pivot de fin de saison fixe, jamais modifiable."}, {"role": "assistant", "content": "Noté : le pivot reste fixe."}]
-        A.conv_ecrire(c)
+        A.conv_write(c)
         try:
             res = A.recall_tool("tatouage cheville androide")
             self.assertTrue(res.startswith("1. docs/arc.md — La Orion"), res)
@@ -1913,7 +1913,7 @@ class Assistant(unittest.TestCase):
         finally:
             (PROJET / "docs" / "arc.md").unlink(missing_ok=True)
             (PROJET / "docs" / "autre.md").unlink(missing_ok=True)
-            A.conv_supprimer(c["id"])
+            A.conv_delete(c["id"])
 
     def test_echantillonnage_par_modele(self):
         chat("Salut", reponses=[[{"content": "ok"}]])
@@ -1991,13 +1991,13 @@ class Assistant(unittest.TestCase):
             self.assertEqual(r["retablis"], ["docs/ra.txt"])
             self.assertEqual(a.read_bytes(), b"avant\n")
             self.assertTrue(b.exists(), "l'autre fichier n'est pas touché")
-            self.assertEqual(A.conv_lire(ident)["annulable"]["fichiers"], ["docs/rb.txt"])
+            self.assertEqual(A.conv_read(ident)["annulable"]["fichiers"], ["docs/rb.txt"])
             self.assertEqual([f["chemin"] for f in lire("/api/revue?id=" + ident)["fichiers"]], ["docs/rb.txt"])
             post("/api/annuler-fichier", {"conversation": ident, "chemin": "docs/ra.txt"}, attendu=400)           # déjà annulé
             post("/api/annuler-fichier", {"conversation": ident, "chemin": "docs/inconnu.txt"}, attendu=400)
             post("/api/annuler-tour", {"conversation": ident})
             self.assertFalse(b.exists())
-            self.assertNotIn("annulable", A.conv_lire(ident))
+            self.assertNotIn("annulable", A.conv_read(ident))
             self.assertEqual(lire("/api/revue?id=" + ident), {"fichiers": []})
         finally:
             a.unlink(missing_ok=True)
@@ -2101,13 +2101,13 @@ class Assistant(unittest.TestCase):
     def test_epingler_et_chercher_les_conversations(self):
         ident = next(e for e in chat("Parlons de la Orion androïde", reponses=[[{"content": "Avec plaisir, la Orion."}]]) if e["type"] == "fin")["conversation"]["id"]
         autre = next(e for e in chat("Une conversation plus récente sur autre chose", reponses=[[{"content": "ok"}]]) if e["type"] == "fin")["conversation"]["id"]
-        maj = A.conv_lire(ident)["maj"]
+        maj = A.conv_read(ident)["maj"]
         try:
             self.assertEqual(lire("/api/etat")["conversations"][0]["id"], autre, "la plus récente d'abord")
             self.assertTrue(post("/api/epingler", {"id": ident, "epingle": True})["epingle"])
             premiere = lire("/api/etat")["conversations"][0]
             self.assertEqual((premiere["id"], premiere["epingle"]), (ident, True), "une conversation épinglée passe en haut")
-            self.assertEqual(A.conv_lire(ident)["maj"], maj, "épingler ne change pas la date")
+            self.assertEqual(A.conv_read(ident)["maj"], maj, "épingler ne change pas la date")
             res = lire("/api/recherche?q=orion+androide")["resultats"] or lire("/api/recherche?q=Orion")["resultats"]
             trouve = next(r for r in res if r["id"] == ident)
             self.assertIn("Orion", trouve["extrait"])
@@ -2180,7 +2180,7 @@ class Assistant(unittest.TestCase):
             self.assertIn("Mémoire vive", erreur)
             self.assertEqual(RECUES, [], "le modèle n'a pas été appelé")
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
-            self.assertEqual([m["content"] for m in A.conv_lire(ident)["messages"]], ["Fais un gros travail"], "la demande est gardée")
+            self.assertEqual([m["content"] for m in A.conv_read(ident)["messages"]], ["Fais un gros travail"], "la demande est gardée")
             self.assertIn("Demande suspendue", (TEMP / "donnees" / "lutin.log").read_text(encoding="utf-8"))
             # le problème est réglé : « continue » relance
             etat["ram"] = 10 * GO
@@ -2298,38 +2298,38 @@ class Assistant(unittest.TestCase):
             ev = chat("Encore", reponses=[[{"content": "ne doit pas arriver"}]])
             self.assertTrue(any(e["type"] == "erreur" and "Demande suspendue" in e["texte"] for e in ev))
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
-            self.assertEqual(A.conv_lire(ident)["messages"][-1]["content"], "Encore", "la demande est gardée")
+            self.assertEqual(A.conv_read(ident)["messages"][-1]["content"], "Encore", "la demande est gardée")
         finally:
             A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.modeles_retenus = False, vrai_mesures, vrais_retenus
             health.RESOURCE_WAIT_S, health.WAIT_STEP_S = vraie_attente, vrai_pas
 
     def test_conversation_robuste(self):
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         try:
             c["messages"] = [{"role": "user", "content": "Lance"}, {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "lister", "arguments": {}}}, {"function": {"name": "lire", "arguments": {}}}]},
                              {"role": "tool", "tool_name": "lister", "content": "résultat"}]
-            self.assertEqual(A.reparer_conversation(c), 1)
+            self.assertEqual(A.repair_conversation(c), 1)
             self.assertEqual([m["role"] for m in c["messages"]], ["user", "assistant", "tool", "tool"])
             self.assertEqual(c["messages"][3]["tool_name"], "lire")
             self.assertIn("Interrompu", c["messages"][3]["content"])
-            self.assertEqual(A.reparer_conversation(c), 0, "rien à réparer la deuxième fois")
+            self.assertEqual(A.repair_conversation(c), 0, "rien à réparer la deuxième fois")
             # chaque écriture est une transaction (ADR 0017) : la dernière version est celle qu'on relit, entière ; un fichier 0.x abîmé est repris de sa
             # copie de secours à l'import (tests/test_store.py)
             c["titre"] = "v2"
-            A.conv_ecrire(c)
+            A.conv_write(c)
             c["titre"] = "v3"
-            A.conv_ecrire(c)
-            relue = A.conv_lire(c["id"])
+            A.conv_write(c)
+            relue = A.conv_read(c["id"])
             self.assertEqual((relue["titre"], [m["role"] for m in relue["messages"]]), ("v3", ["user", "assistant", "tool", "tool"]))
         finally:
-            A.conv_supprimer(c["id"])
-        self.assertFalse(A.conv_existe(c["id"]), "supprimée")
+            A.conv_delete(c["id"])
+        self.assertFalse(A.conv_exists(c["id"]), "supprimée")
         # enregistré à chaque étape : au moment de demander un accord, le premier outil est déjà dans le fichier
         vu = []
 
         def regarder(e):
             ident = next(iter(A.TOURS_ACTIFS))
-            vu.append([m["role"] for m in A.conv_lire(ident)["messages"]])
+            vu.append([m["role"] for m in A.conv_read(ident)["messages"]])
             return False
         chat("Lis puis écris", reponses=[[appel_outil("lister", dossier="docs")], [appel_outil("ecrire", chemin="docs/jamais.txt", contenu="x")], [{"content": "."}]], decider=regarder)
         self.assertEqual(vu[0], ["user", "assistant", "tool", "assistant"][:3], "la conversation est enregistrée après chaque outil, pas seulement à la fin")
@@ -2350,19 +2350,19 @@ class Assistant(unittest.TestCase):
 
     def test_commandes_bornees(self):
         t = time.time()
-        code, sortie, raison = A.lancer_processus('"{}" -c "print(\'x\' * 3000000)"'.format(sys.executable), True, None)
+        code, sortie, raison = A.start_process('"{}" -c "print(\'x\' * 3000000)"'.format(sys.executable), True, None)
         self.assertEqual((code, raison), (0, None))
         self.assertLess(len(sortie), 500_000, "3 Mo écrits, mais jamais plus de 400 Ko gardés")
         self.assertIn(b"octets omis", sortie)
         self.assertTrue(sortie.startswith(b"xxxx") and sortie.rstrip().endswith(b"xxxx"), "début et fin gardés")
-        code, sortie, raison = A.lancer_processus("echo bonjour-borne", True, None)
+        code, sortie, raison = A.start_process("echo bonjour-borne", True, None)
         self.assertIn(b"bonjour-borne", sortie)
         self.assertNotIn(b"omis", sortie)
-        code, sortie, raison = A.lancer_processus('"{}" -c "import time; time.sleep(30)"'.format(sys.executable), True, None, delai=1)
+        code, sortie, raison = A.start_process('"{}" -c "import time; time.sleep(30)"'.format(sys.executable), True, None, delai=1)
         self.assertEqual(raison, "delai")
         stop = threading.Event()
         threading.Timer(0.6, stop.set).start()
-        code, sortie, raison = A.lancer_processus('"{}" -c "import time; time.sleep(30)"'.format(sys.executable), True, None, stop)
+        code, sortie, raison = A.start_process('"{}" -c "import time; time.sleep(30)"'.format(sys.executable), True, None, stop)
         self.assertEqual(raison, "stop")
         self.assertLess(time.time() - t, 20, "les commandes arrêtées ne sont pas attendues jusqu'au bout")
         # Une commande finie rend ses deux tubes tout de suite : sans cela, chaque commande laissait deux fichiers ouverts jusqu'au ramasse-miettes (ResourceWarning sous Linux).
@@ -2373,16 +2373,16 @@ class Assistant(unittest.TestCase):
             lances.append(vrai(*a, **k))
             return lances[-1]
         with mock.patch.object(o.subprocess, "Popen", lancer):
-            code, sortie, raison = o.lancer_processus("echo tubes-rendus", True, None)
+            code, sortie, raison = o.start_process("echo tubes-rendus", True, None)
         self.assertIn(b"tubes-rendus", sortie)
         self.assertEqual([(p.stdout.closed, p.stderr.closed) for p in lances], [(True, True)])
-        self.assertIsNone(A.limiter_memoire_processus(None, 0), "limite à 0 : aucune limite posée")
+        self.assertIsNone(A.limit_process_memory(None, 0), "limite à 0 : aucune limite posée")
         gros = PROJET / "docs" / "enorme.txt"
         try:
             with open(gros, "wb") as f:
                 f.truncate(5_000_001)
             with self.assertRaises(A.ErreurOutil) as cm:
-                A.outil_modifier("docs/enorme.txt", "a", "b", {"accord": lambda *a, **k: True, "auto_ecriture": True})
+                A.edit_tool("docs/enorme.txt", "a", "b", {"accord": lambda *a, **k: True, "auto_ecriture": True})
             self.assertIn("trop gros", str(cm.exception))
         finally:
             gros.unlink(missing_ok=True)
@@ -2392,17 +2392,17 @@ class Assistant(unittest.TestCase):
         A.reglages = lambda: dict(original(), plafond_donnees_go=0.001)          # plafond d'environ 1 Mo
         base = TEMP / "donnees" / "sauvegardes"
         noms = ["zz-test-%d" % i for i in range(1, 9)]
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         try:
             for i, nom in enumerate(noms, 1):
                 (base / nom).mkdir(parents=True, exist_ok=True)
                 (base / nom / "gros.bin").write_bytes(b"x" * 300_000)
                 os.utime(base / nom, (time.time() + 1000 + i, time.time() + 1000 + i))          # les plus récentes de toutes
             c["annulable"] = {"id": "zz-test-2", "fichiers": ["docs/x.txt"]}
-            A.conv_ecrire(c)
+            A.conv_write(c)
             (TEMP / "donnees" / "verif-vieux.js").write_text("x", encoding="utf-8")
             os.utime(TEMP / "donnees" / "verif-vieux.js", (time.time() - 7200, time.time() - 7200))
-            supprimes = A.purger_donnees()
+            supprimes = A.purge_data()
             self.assertGreaterEqual(supprimes, 2)
             self.assertFalse((base / "zz-test-1").exists(), "la plus ancienne est supprimée")
             self.assertFalse((base / "zz-test-3").exists())
@@ -2410,10 +2410,10 @@ class Assistant(unittest.TestCase):
             for protegee in noms[3:]:
                 self.assertTrue((base / protegee).exists(), "les 5 plus récentes sont toujours gardées")
             self.assertFalse((TEMP / "donnees" / "verif-vieux.js").exists(), "les restes temporaires sont nettoyés")
-            self.assertTrue(A.conv_existe(c["id"]), "les conversations ne sont jamais supprimées")
+            self.assertTrue(A.conv_exists(c["id"]), "les conversations ne sont jamais supprimées")
         finally:
             A.reglages = original
-            A.conv_supprimer(c["id"])
+            A.conv_delete(c["id"])
             for nom in noms:
                 shutil.rmtree(base / nom, ignore_errors=True)
             A.SIZE_CACHE.clear()
@@ -2445,7 +2445,7 @@ class Assistant(unittest.TestCase):
         """La fiche de suivi (ADR 0019) : rien tant que la conversation est courte (ni bloc, ni outil, ni scribe) ; une fois remplie (ici à la main),
         elle est tenue (outil + automatique), donnée au modèle AVANT la dernière question, « oui » ordonne d'exécuter, et elle disparaît avec la conversation."""
         from lutin import progress_sheet
-        A.enregistrer_reglages({"fiche_scribe": False})          # le scribe fait un appel de plus : testé à part
+        A.save_settings({"fiche_scribe": False})          # le scribe fait un appel de plus : testé à part
         try:
             ev = chat("On prépare la saison 2", reponses=[[{"content": "D'accord."}]])
             cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
@@ -2463,9 +2463,9 @@ class Assistant(unittest.TestCase):
             self.assertIn("Écrire la saison 2", msgs[i]["content"])
             self.assertEqual((msgs[i + 1]["role"], msgs[i + 2]["role"], msgs[i + 2]["content"]), ("assistant", "user", "Continuons"), "la fiche est juste avant la dernière question")
             self.assertNotIn("Fiche de suivi", msgs[0]["content"], "pas dans le message système : le début reste identique, le cache d'Ollama sert")
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             conv["taches"] = [{"texte": "Écrire le chapitre 1", "etat": "en_cours"}]
-            A.conv_ecrire(conv)
+            A.conv_write(conv)
             ev = chat("ok vas-y", conversation=cid, reponses=[[{"content": "Je m'y mets."}]])
             self.assertIn("chapitre 1", RECUES[-1]["messages"][-1]["content"], "un « oui » ordonne d'exécuter la tâche en cours")
             self.assertIn("Validation reçue", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
@@ -2480,29 +2480,29 @@ class Assistant(unittest.TestCase):
             post("/api/supprimer", {"id": cid})
             self.assertFalse(progress_sheet.path(cid).exists(), "supprimer la conversation supprime sa fiche")
         finally:
-            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+            A.save_settings({"memoire_longue": "resume", "fiche_scribe": True})
 
     @staticmethod
     def conversation_longue(secret="Le code du coffre est 4711-ZEBRE.", part=0.6):
         """Une conversation qui dépasse 60 % de la fenêtre de contexte (le secret est dans le tout premier message).
         part : 0.6 fait des messages qui pèsent ensemble 1,4 fois 60 % de la fenêtre ; une part plus petite les allège d'autant."""
-        conv = A.conv_nouvelle()
+        conv = A.conv_new()
         taille = int(A.reglages()["num_ctx"] * part * 3 * 1.4 / 12 / 4)          # 12 messages qui pèsent bien plus de 60 % de la fenêtre (avec part=0.6)
         for i in range(12):
             conv["messages"].append({"role": "user" if i % 2 == 0 else "assistant", "content": (secret + " " if i == 0 else "") + "mot " * taille + str(i)})
-        A.conv_ecrire(conv)
+        A.conv_write(conv)
         return conv["id"]
 
     def test_mode_fiche_le_debut_sort_en_bloc_sans_resume_et_le_cache_d_ollama_sert(self):
         """Mode fiche de suivi : pas de résumé par le modèle, le début est retiré EN BLOC (archivé), puis le début de la requête ne change plus d'une réponse à l'autre
         (sinon Ollama relit tout à chaque fois et la jauge reste pleine). /compact fait la même chose sans solliciter le modèle."""
         from lutin import archive
-        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": False})
+        A.save_settings({"memoire_longue": "fichier", "fiche_scribe": False})
         try:
             cid = self.conversation_longue()
-            nb = len(A.conv_lire(cid)["messages"])
+            nb = len(A.conv_read(cid)["messages"])
             chat("Et la suite ?", conversation=cid, reponses=[[{"content": "Voilà."}]])
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             self.assertFalse(conv.get("resume"), "pas de résumé : la fiche garde le fil")
             self.assertNotEqual(RECUES[-1].get("stream"), False, "et aucun appel au modèle pour résumer")
             self.assertLess(len(conv["messages"]), nb, "le début est sorti du contexte")
@@ -2511,26 +2511,26 @@ class Assistant(unittest.TestCase):
             chat("Autre question", conversation=cid, reponses=[[{"content": "Réponse."}]])
             debut1 = [m.get("content") for m in RECUES[-1]["messages"][:3]]
             chat("Encore une", conversation=cid, reponses=[[{"content": "Ok."}]])
-            self.assertEqual(len(A.conv_lire(cid)["messages"]), avant + 4, "pas de nouveau retrait tant que ça tient : le début ne change pas")
+            self.assertEqual(len(A.conv_read(cid)["messages"]), avant + 4, "pas de nouveau retrait tant que ça tient : le début ne change pas")
             self.assertEqual([m.get("content") for m in RECUES[-1]["messages"][:3]], debut1, "début de requête identique : le cache d'Ollama sert")
             SCENARIO[:] = []
             r = post("/api/compacter", {"conversation": cid})
             self.assertTrue(r["fiche"])
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             self.assertFalse(conv.get("resume"), "/compact en mode fiche ne résume pas")
             self.assertLessEqual(len(conv["messages"]), (avant + 4) // 2 + 2, "au moins la moitié est sortie")
             self.assertGreaterEqual(len(conv["messages"]), 2)
             self.assertEqual(conv["messages"][-1]["content"], "Ok.", "les vrais messages récents restent, ils ne sont pas résumés")
             self.assertFalse(r["jauge"]["reel"])
         finally:
-            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+            A.save_settings({"memoire_longue": "resume", "fiche_scribe": True})
 
     def test_mode_fiche_attend_le_scribe_sauf_si_la_fenetre_est_presque_pleine(self):
         """Entre le seuil du retrait et la place que la requête laisse aux messages, le retrait n'emporte que des messages déjà passés dans la fiche.
         Au-delà (ou à 80 % d'après Ollama), il ne doit PLUS attendre : un scribe qui échoue (modèle sans mémoire pendant une génération d'image)
         laissait sinon la conversation grossir jusqu'à ne plus pouvoir répondre. Les seuils comptent les outils et le système (ADR 0018)."""
         from lutin import agent as AG
-        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True})
+        A.save_settings({"memoire_longue": "fichier", "fiche_scribe": True})
         try:
             ctx = A.reglages()["num_ctx"]
             r = dict(A.reglages(), memoire_longue="fichier")
@@ -2565,7 +2565,7 @@ class Assistant(unittest.TestCase):
             A.elaguer(c, r, lambda e: None)
             self.assertLess(len(c["messages"]), avant, "85 % d'après Ollama : on retire aussi")
         finally:
-            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+            A.save_settings({"memoire_longue": "resume", "fiche_scribe": True})
 
     def test_une_demande_sans_aucune_reponse_ecrite_le_dit(self):
         from lutin import agent
@@ -2584,11 +2584,11 @@ class Assistant(unittest.TestCase):
         """Le début retiré de la conversation est archivé, le modèle sait qu'il peut le retrouver, « rappeler » (ici=true) le retrouve, et l'archive
         disparaît avec la conversation."""
         from lutin import archive
-        A.enregistrer_reglages({"fiche_scribe": False})
+        A.save_settings({"fiche_scribe": False})
         try:
             cid = self.conversation_longue()
             chat("Et la suite ?", conversation=cid, reponses=[[{"content": "Voilà."}]])
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             self.assertLess(len(conv["messages"]), 12, "le début est sorti du contexte")
             self.assertIn("4711-ZEBRE", archive.text_of(cid), "mais il reste sur le disque")
             self.assertIn("DÉBUT DE LA CONVERSATION", RECUES[-1]["messages"][0]["content"], "le modèle sait qu'il peut retrouver le début")
@@ -2600,7 +2600,7 @@ class Assistant(unittest.TestCase):
             post("/api/supprimer", {"id": cid})
             self.assertFalse(archive.path_of(cid).exists(), "l'archive disparaît avec la conversation")
         finally:
-            A.enregistrer_reglages({"fiche_scribe": True})
+            A.save_settings({"fiche_scribe": True})
 
     def test_le_systeme_ne_parle_du_debut_retire_qu_une_fois_qu_il_est_retire(self):
         """Une conversation courte voit tout : pas de consigne « les premiers échanges ne sont plus sous tes yeux » dans le système (elle était là dès le
@@ -2635,7 +2635,7 @@ class Assistant(unittest.TestCase):
         finally:
             progress_sheet.delete("yyyyyyyy")
         self.assertNotIn("suivi", {t["function"]["name"] for t in AG.outils_du_mode(r)}, "ni son outil tant qu'elle ne sert pas")
-        A.enregistrer_reglages({"fiche_scribe": True})
+        A.save_settings({"fiche_scribe": True})
         RECUES.clear()
         cid = next(e for e in chat("Question 0", reponses=[[{"content": "Réponse 0"}]]) if e["type"] == "debut")["conversation"]
         for i in range(1, 4):
@@ -2649,7 +2649,7 @@ class Assistant(unittest.TestCase):
         attendait son appel au modèle : des minutes sur processeur). Une nouvelle demande l'annule sans l'attendre : ce qu'il rapporte ensuite est
         jeté, rien n'est écrit dans la fiche ni dans la conversation, et ce qu'il n'a pas lu l'est au passage suivant."""
         from lutin import agent as AG, progress_sheet
-        A.enregistrer_reglages({"fiche_scribe": True})
+        A.save_settings({"fiche_scribe": True})
         cid = self.conversation_longue()
         ops = json.dumps({"decisions": ["Le code du coffre est 4711-ZEBRE"], "etape": [], "fait": [], "ouvert": []})
         appele, libere, rendu = threading.Event(), threading.Event(), threading.Event()
@@ -2667,18 +2667,18 @@ class Assistant(unittest.TestCase):
             self.assertEqual(ev[-1]["type"], "fin")
             self.assertTrue(appele.wait(10), "le scribe est parti après la réponse")
             self.assertFalse(rendu.is_set(), "« fin » est arrivé pendant que le scribe travaillait encore")
-            avant = A.conv_lire(cid).get("scribe_a")
+            avant = A.conv_read(cid).get("scribe_a")
             ev = chat("Autre question", conversation=cid, attendre_le_scribe=False)          # la nouvelle demande ne l'attend pas
             self.assertEqual(ev[-1]["type"], "fin")
             self.assertFalse(rendu.is_set(), "la nouvelle demande a eu sa réponse sans attendre le scribe")
             libere.set()
             self.assertTrue(AG.attendre_scribe(cid, 20))
             self.assertNotIn("Le code du coffre est 4711-ZEBRE", progress_sheet.read(cid)["decisions"], "annulé : rien n'est écrit dans la fiche")
-            self.assertEqual(A.conv_lire(cid).get("scribe_a"), avant, "ni dans la conversation")
-            self.assertTrue(AG.messages_non_lus(A.conv_lire(cid)), "ce qu'il n'a pas gardé reste à lire")
+            self.assertEqual(A.conv_read(cid).get("scribe_a"), avant, "ni dans la conversation")
+            self.assertTrue(AG.messages_non_lus(A.conv_read(cid)), "ce qu'il n'a pas gardé reste à lire")
             chat("Encore une", conversation=cid)
             self.assertIn("Le code du coffre est 4711-ZEBRE", progress_sheet.read(cid)["decisions"], "le passage suivant le lit")
-            c = A.conv_lire(cid)
+            c = A.conv_read(cid)
             self.assertEqual(c["scribe_a"], len(c["messages"]), "et le rang lu est écrit dans la conversation enregistrée")
         finally:
             libere.set()
@@ -2691,17 +2691,17 @@ class Assistant(unittest.TestCase):
         (sinon il referait la fiche d'une conversation supprimée, ou noterait un rang qui ne désigne plus les mêmes messages)."""
         from lutin import agent as AG, progress_sheet
         cid = self.conversation_longue()
-        conv = A.conv_lire(cid)
+        conv = A.conv_read(cid)
         travail = {"annule": threading.Event()}
         ops = {"decisions": ["Une décision"]}
-        autre = A.conv_lire(cid)
+        autre = A.conv_read(cid)
         autre["messages"][0]["content"] = "Un autre début."
-        A.conv_ecrire(autre)
+        A.conv_write(autre)
         self.assertIsNone(AG._garder_lot(conv, travail, ops, 4), "messages changés : rien n'est gardé")
         self.assertTrue(travail["annule"].is_set())
-        conv = A.conv_lire(cid)
+        conv = A.conv_read(cid)
         self.assertEqual(AG._garder_lot(conv, {"annule": threading.Event()}, ops, 4), 1)
-        self.assertEqual(A.conv_lire(cid)["scribe_a"], 4)
+        self.assertEqual(A.conv_read(cid)["scribe_a"], 4)
         post("/api/supprimer", {"id": cid})
         self.assertIsNone(AG._garder_lot(conv, {"annule": threading.Event()}, {"decisions": ["Après"]}, 6), "conversation supprimée")
         self.assertFalse(progress_sheet.path(cid).exists(), "sa fiche n'est pas refaite")
@@ -2710,35 +2710,35 @@ class Assistant(unittest.TestCase):
         """ADR 0019 : la fiche de suivi pour toute conversation. L'ancien réglage « demander » ne pose plus de question et rien n'est résumé ; une
         conversation résumée avant garde son résumé en tête de la requête et continue avec la fiche, sans que rien soit migré."""
         from lutin import progress_sheet
-        A.enregistrer_reglages({"memoire_longue": "demander", "fiche_scribe": False})
+        A.save_settings({"memoire_longue": "demander", "fiche_scribe": False})
         try:
             self.assertEqual(A.reglages()["memoire_longue"], "fichier", "l'ancienne valeur est acceptée et vaut la fiche")
             cid = self.conversation_longue()
-            nb = len(A.conv_lire(cid)["messages"])
+            nb = len(A.conv_read(cid)["messages"])
             RECUES.clear()
             ev = chat("Continue", conversation=cid, reponses=[[{"content": "Je continue."}]])
             self.assertFalse(any(e["type"] == "choix_memoire" for e in ev), "plus de question")
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             self.assertFalse(conv.get("resume"), "rien n'est résumé")
             self.assertLess(len(conv["messages"]), nb, "le début sort en bloc")
             self.assertFalse(any("Tu résumes" in str((b.get("messages") or [{}])[0].get("content", "")) for b in RECUES), "aucun appel au modèle pour résumer")
             post("/api/memoire-choix", {"conversation": cid, "choix": "fichier"}, attendu=409)
             post("/api/memoire-choix", {"conversation": cid, "choix": "pirate"}, attendu=400)
-            ancien = A.conv_nouvelle()
+            ancien = A.conv_new()
             ancien["messages"] = [{"role": "user", "content": "Où en était le coffre ?"}, {"role": "assistant", "content": "Il est fermé."}]
             ancien.update(resume="RÉSUMÉ : le code du coffre est 4711-ZEBRE.", depart="Ouvrir le coffre", memoire_longue="resume")
-            A.conv_ecrire(ancien)
+            A.conv_write(ancien)
             chat("Et maintenant ?", conversation=ancien["id"], reponses=[[appel_outil("suivi", section="objectif", texte="Ouvrir le coffre")], [{"content": "On l'ouvre."}]])
             envoi = RECUES[-1]["messages"]
             self.assertTrue(envoi[1]["content"].startswith("[Résumé de la conversation jusqu'ici]") and "4711-ZEBRE" in envoi[1]["content"], "le résumé reste en tête de la requête")
             self.assertIn("Demande de départ : Ouvrir le coffre", envoi[1]["content"])
             self.assertEqual(progress_sheet.read(ancien["id"])["objectif"], ["Ouvrir le coffre"], "et la conversation continue avec la fiche")
-            garde = A.conv_lire(ancien["id"])
+            garde = A.conv_read(ancien["id"])
             self.assertEqual((garde["resume"], garde["memoire_longue"]), ("RÉSUMÉ : le code du coffre est 4711-ZEBRE.", "resume"), "rien n'est migré")
             for c in (cid, ancien["id"]):
                 post("/api/supprimer", {"id": c})
         finally:
-            A.enregistrer_reglages({"fiche_scribe": True})
+            A.save_settings({"fiche_scribe": True})
 
     def test_les_anciens_reglages_resume_et_demander_valent_la_fiche(self):
         """ADR 0019 : un réglage enregistré avant (« resume », « demander ») est lu comme la fiche, sans réécrire le fichier ; un nouvel
@@ -2750,10 +2750,10 @@ class Assistant(unittest.TestCase):
                 fichier.write_text(json.dumps({"memoire_longue": valeur}), encoding="utf-8")
                 self.assertEqual(A.reglages()["memoire_longue"], "fichier", valeur)
                 self.assertEqual(json.loads(fichier.read_text(encoding="utf-8"))["memoire_longue"], valeur, "le fichier n'est pas réécrit à la lecture")
-            A.enregistrer_reglages({"memoire_longue": "resume"})
+            A.save_settings({"memoire_longue": "resume"})
             self.assertEqual(json.loads(fichier.read_text(encoding="utf-8"))["memoire_longue"], "fichier")
             with self.assertRaises(ValueError):
-                A.enregistrer_reglages({"memoire_longue": "pirate"})
+                A.save_settings({"memoire_longue": "pirate"})
         finally:
             if ancien is None:
                 fichier.unlink(missing_ok=True)
@@ -2802,12 +2802,12 @@ class Assistant(unittest.TestCase):
     def test_le_fil_de_la_conversation_est_retrouve_tout_seul_et_le_scribe_tient_la_fiche(self):
         """Mode fiche : les passages anciens qui touchent à la demande sont remis au modèle sans qu'il les demande, et un appel séparé (le scribe) met la fiche à jour."""
         from lutin import progress_sheet
-        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True})
+        A.save_settings({"memoire_longue": "fichier", "fiche_scribe": True})
         try:
             cid = self.conversation_longue("Le code du coffre est 4711-ZEBRE.")
-            conv = A.conv_lire(cid)
+            conv = A.conv_read(cid)
             conv["memoire_longue"] = "fichier"
-            A.conv_ecrire(conv)
+            A.conv_write(conv)
             ops = json.dumps({"decisions": ["Le code du coffre est 4711-ZEBRE"], "etape": ["Ouvrir le coffre"], "fait": [], "ouvert": ["Qui garde la clé ?"]})
             chat("Quel est le code du coffre ZEBRE ?", conversation=cid, reponses=[[{"content": "Le code est 4711-ZEBRE."}], [{"content": ops}]])
             msgs = RECUES[-2]["messages"]
@@ -2817,21 +2817,21 @@ class Assistant(unittest.TestCase):
             fiche = progress_sheet.read(cid)
             self.assertIn("Le code du coffre est 4711-ZEBRE", fiche["decisions"], "le scribe a écrit la décision sans que le modèle ait appelé l'outil")
             self.assertEqual((fiche["etape"], fiche["ouvert"]), (["Ouvrir le coffre"], ["Qui garde la clé ?"]))
-            self.assertEqual(A.conv_lire(cid).get("scribe_a"), len(A.conv_lire(cid)["messages"]), "le scribe retient jusqu'où il a lu (et son rang suit le retrait du début)")
+            self.assertEqual(A.conv_read(cid).get("scribe_a"), len(A.conv_read(cid)["messages"]), "le scribe retient jusqu'où il a lu (et son rang suit le retrait du début)")
             chat("Merci", conversation=cid, reponses=[[{"content": "De rien."}]])
-            c = A.conv_lire(cid)
+            c = A.conv_read(cid)
             self.assertEqual(c["scribe_a"], len(c["messages"]) - 2, "pas de nouveau passage du scribe avant trois échanges (son rang suit le retrait du début)")
-            A.enregistrer_reglages({"fiche_scribe": False})
+            A.save_settings({"fiche_scribe": False})
             cid2 = self.conversation_longue()
-            conv2 = A.conv_lire(cid2)
+            conv2 = A.conv_read(cid2)
             conv2["memoire_longue"] = "fichier"
-            A.conv_ecrire(conv2)
+            A.conv_write(conv2)
             chat("Continue", conversation=cid2, reponses=[[{"content": "Voilà."}]])
-            self.assertFalse(A.conv_lire(cid2).get("scribe_a"), "scribe coupé : aucun appel supplémentaire")
+            self.assertFalse(A.conv_read(cid2).get("scribe_a"), "scribe coupé : aucun appel supplémentaire")
             for c in (cid, cid2):
                 post("/api/supprimer", {"id": c})
         finally:
-            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+            A.save_settings({"memoire_longue": "resume", "fiche_scribe": True})
 
     def test_apres_une_boucle_le_modele_doit_conclure_sans_outil(self):
         """Au lieu de couper net, un dernier tour SANS outil demande au modèle de conclure avec ce qu'il a obtenu."""
@@ -2845,14 +2845,14 @@ class Assistant(unittest.TestCase):
         """Le modèle est parti sur autre chose : la liste ne reste pas affichée pour toujours ; elle lui est rappelée comme périmée, puis fermée."""
         ev = chat("Prépare le travail", reponses=[[appel_outil("taches", liste=[{"texte": "A", "etat": "en_cours"}, {"texte": "B", "etat": "a_faire"}])], [{"content": "Liste faite."}]])
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        self.assertEqual(len(A.conv_lire(cid)["taches"]), 2)
+        self.assertEqual(len(A.conv_read(cid)["taches"]), 2)
         for i in range(2):
             ev = chat("Autre chose %d" % i, conversation=cid, reponses=[[{"content": "Voilà %d." % i}]])
-            self.assertEqual(len(A.conv_lire(cid)["taches"]), 2, "pas encore fermée")
+            self.assertEqual(len(A.conv_read(cid)["taches"]), 2, "pas encore fermée")
         self.assertIn("NON mise à jour", RECUES[-1]["messages"][-1]["content"], "le modèle est prévenu que la liste est périmée")
         self.assertNotIn("NON mise à jour", RECUES[-1]["messages"][0]["content"], "à la fin de la requête, pas dans le message système (ADR 0013)")
         ev = chat("Et encore", conversation=cid, reponses=[[{"content": "Ok."}]])
-        self.assertEqual(A.conv_lire(cid)["taches"], [])
+        self.assertEqual(A.conv_read(cid)["taches"], [])
         self.assertTrue(any(e["type"] == "taches" and e["liste"] == [] for e in ev), "la page est prévenue : l'encart disparaît")
 
     def test_un_oui_valide_la_derniere_proposition_meme_sans_fiche_ni_tache(self):
@@ -2862,9 +2862,9 @@ class Assistant(unittest.TestCase):
         self.assertIn("Validation reçue", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
         dernier = RECUES[-1]["messages"][-1]["content"]
         self.assertIn("ce que tu viens de lui proposer", dernier)
-        conv = A.conv_lire(cid)
+        conv = A.conv_read(cid)
         conv["taches"] = [{"texte": "Réécrire les prompts", "etat": "en_cours"}]
-        A.conv_ecrire(conv)
+        A.conv_write(conv)
         chat("ok", conversation=cid, reponses=[[{"content": "Voilà ?"}]])
         self.assertIn("peut être déjà faite", RECUES[-1]["messages"][-1]["content"], "l'étape de la fiche n'est qu'un rappel : elle peut être déjà faite")
         cid2 = [e for e in chat("Bonjour", reponses=[[{"content": "Salut, bienvenue."}]]) if e["type"] == "debut"][0]["conversation"]
@@ -2878,7 +2878,7 @@ class Assistant(unittest.TestCase):
         textes = " ".join(e.get("texte", "") for e in ev if e["type"] == "info")
         self.assertIn("tourne en rond", textes, "le tour est arrêté après cinq appels identiques")
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        outils = [m["content"] for m in A.conv_lire(cid)["messages"] if m["role"] == "tool"]
+        outils = [m["content"] for m in A.conv_read(cid)["messages"] if m["role"] == "tool"]
         self.assertEqual(len(outils), 5)
         self.assertNotIn("exactement cet appel", outils[0] + outils[1])
         self.assertTrue(all("exactement cet appel" in o for o in outils[2:]), "à partir du troisième, le résultat est remplacé par l'ordre de passer à autre chose")
@@ -2887,10 +2887,10 @@ class Assistant(unittest.TestCase):
         cid2 = [e for e in chat("On prépare la sortie", reponses=[[{"content": plan}]]) if e["type"] == "debut"][0]["conversation"]
         ev = chat("oui", conversation=cid2, reponses=[[{"content": plan + " Dis-moi."}]])
         self.assertIn("presque mot pour mot", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
-        self.assertTrue(A.conv_lire(cid2).get("boucle"))
+        self.assertTrue(A.conv_read(cid2).get("boucle"))
         chat("alors ?", conversation=cid2, reponses=[[{"content": "J'ai lu le fichier de configuration : deux erreurs de syntaxe, je les corrige tout de suite."}]])
         self.assertIn("Tu viens de répéter", RECUES[-1]["messages"][-1]["content"], "l'ordre d'agir est donné à la demande suivante")
-        self.assertFalse(A.conv_lire(cid2).get("boucle"), "une réponse différente met fin à l'alerte")
+        self.assertFalse(A.conv_read(cid2).get("boucle"), "une réponse différente met fin à l'alerte")
         for c in (cid, cid2):
             post("/api/supprimer", {"id": c})
 
@@ -2899,7 +2899,7 @@ class Assistant(unittest.TestCase):
         cid = self.conversation_longue("Règle d'or : ne jamais toucher à la production.")
         r = post("/api/epingler-message", {"conversation": cid, "index": 0, "epingle": True})
         self.assertEqual(r["epingles"], 1)
-        self.assertTrue(A.conv_lire(cid)["messages"][0]["epingle"])
+        self.assertTrue(A.conv_read(cid)["messages"][0]["epingle"])
         post("/api/epingler-message", {"conversation": cid, "index": 99, "epingle": True}, attendu=400)
         post("/api/epingler-message", {"conversation": cid, "index": "x", "epingle": True}, attendu=400)
         post("/api/epingler-message", {"conversation": "inconnu", "index": 0, "epingle": True}, attendu=400)
@@ -2921,17 +2921,17 @@ class Assistant(unittest.TestCase):
         enorme = dict(court, content="mot " * 3000)                                       # un épinglé plus gros qu'un quart du budget n'est pas protégé : il ne doit pas étouffer le reste
         self.assertFalse(any("mot mot mot" in (m.get("content") or "") and m.get("content") == enorme["content"] for m in A.ajuster_contexte([msgs[0], enorme] + msgs[2:], 4096, 1.0, [])))
         # le retrait du début garde les messages épinglés
-        A.enregistrer_reglages({"fiche_scribe": False})
+        A.save_settings({"fiche_scribe": False})
         try:
-            nb = len(A.conv_lire(cid)["messages"])
+            nb = len(A.conv_read(cid)["messages"])
             chat("Et la suite ?", conversation=cid, reponses=[[{"content": "Ok."}]])
         finally:
-            A.enregistrer_reglages({"fiche_scribe": True})
-        conv = A.conv_lire(cid)
+            A.save_settings({"fiche_scribe": True})
+        conv = A.conv_read(cid)
         self.assertLess(len(conv["messages"]), nb + 2, "le début est sorti")
         self.assertTrue(conv["messages"][0].get("epingle") and "Règle d'or" in conv["messages"][0]["content"], "épinglé : gardé tel quel après le retrait")
         post("/api/epingler-message", {"conversation": cid, "index": 0, "epingle": False})
-        self.assertFalse(A.conv_lire(cid)["messages"][0].get("epingle"))
+        self.assertFalse(A.conv_read(cid)["messages"][0].get("epingle"))
         A.TOURS_ACTIFS[cid] = threading.Event()
         try:
             post("/api/epingler-message", {"conversation": cid, "index": 0, "epingle": True}, attendu=400)
@@ -3011,7 +3011,7 @@ class Assistant(unittest.TestCase):
         self.assertLessEqual(poids, int(4096 * AG.PART_MAX), "système, outils, question et rappels tiennent sous le plafond")
         self.assertEqual(AG.limite_contexte(4096), 614, "5 % de 4 096 jetons")
         self.assertEqual(AG.limite_contexte(1024), AG.CONTEXTE_MIN)
-        self.assertEqual(AG.limite_contexte(131072), A.LIMITE_CONTEXTE)
+        self.assertEqual(AG.limite_contexte(131072), A.CONTEXT_LIMIT)
         self.assertIn("CONTEXTE.md coupé", AG.consignes_systeme(r), "le CONTEXTE.md livré est coupé sur 4 096 jetons, et le modèle le sait")
         self.assertNotIn("CONTEXTE.md coupé", AG.consignes_systeme(dict(r, num_ctx=32768)), "entier sur une grande fenêtre")
 
@@ -3093,7 +3093,7 @@ class Assistant(unittest.TestCase):
         avec = A.jauge_contexte(conv, dict(A.reglages(), mode="polyvalent"))["utilise"]
         sans = A.jauge_contexte(conv, dict(A.reglages(), mode="discussion"))["utilise"]
         self.assertGreater(avec - sans, 1000, "le mode discussion n'envoie aucun outil : la jauge ne les compte pas")
-        tous = len(json.dumps(A.OUTILS, ensure_ascii=False)) // 3
+        tous = len(json.dumps(A.TOOLS, ensure_ascii=False)) // 3
         self.assertLess(avec - sans, tous, "seuls les outils du mode comptent, pas toute la liste")
 
     def test_mise_a_jour_depuis_la_page(self):
@@ -3309,23 +3309,23 @@ class Assistant(unittest.TestCase):
         finally:
             shutil.rmtree(PROJET / "skills", ignore_errors=True)
         # mémoire : les décisions (partie fixe) sont toujours relues, seule la fin des notes est coupée
-        long = "# Mémoire\n\n## Décisions\n- DECISION-IMPORTANTE à toujours respecter\n" + A.MARQUE_NOTES + "\n" + "".join("- note numéro %03d %s\n" % (i, "x" * 60) for i in range(200))
-        lu = A.texte_memoire(long)
+        long = "# Mémoire\n\n## Décisions\n- DECISION-IMPORTANTE à toujours respecter\n" + A.NOTES_MARKER + "\n" + "".join("- note numéro %03d %s\n" % (i, "x" * 60) for i in range(200))
+        lu = A.memory_text(long)
         self.assertIn("DECISION-IMPORTANTE", lu)
         self.assertIn("note numéro 199", lu)
         self.assertNotIn("note numéro 000", lu)
         self.assertLessEqual(len(lu), 6000)
-        self.assertEqual(A.texte_memoire("court sans section"), "court sans section")
+        self.assertEqual(A.memory_text("court sans section"), "court sans section")
         # la section des notes est limitée à 40 lignes
         ancien = (MEMOIRE / "MEMOIRE.md").read_text(encoding="utf-8") if (MEMOIRE / "MEMOIRE.md").exists() else None
-        (MEMOIRE / "MEMOIRE.md").write_text("# M\n\n## Décisions\n- fixe\n" + A.MARQUE_NOTES + "\n" + "".join("- vieille %d\n" % i for i in range(80)), encoding="utf-8")
+        (MEMOIRE / "MEMOIRE.md").write_text("# M\n\n## Décisions\n- fixe\n" + A.NOTES_MARKER + "\n" + "".join("- vieille %d\n" % i for i in range(80)), encoding="utf-8")
         try:
-            A.noter("toute dernière note")
+            A.add_note("toute dernière note")
             contenu = (MEMOIRE / "MEMOIRE.md").read_text(encoding="utf-8")
             self.assertIn("- fixe", contenu)
             self.assertIn("toute dernière note", contenu)
             self.assertNotIn("vieille 0\n", contenu)
-            self.assertLessEqual(contenu.split(A.MARQUE_NOTES)[1].count("\n"), 44)
+            self.assertLessEqual(contenu.split(A.NOTES_MARKER)[1].count("\n"), 44)
         finally:
             if ancien is None:
                 (MEMOIRE / "MEMOIRE.md").unlink(missing_ok=True)
@@ -3339,7 +3339,7 @@ class Assistant(unittest.TestCase):
         for outil in ("taches", "symboles", "rappeler", "modifier_plusieurs", "lire_plusieurs", "web_chercher"):
             self.assertIn(outil, contexte, outil + " doit être expliqué au modèle")
         memoire = (ICI.parent / "src" / "lutin" / "data" / "MEMOIRE.md").read_text(encoding="utf-8")
-        self.assertIn(A.MARQUE_NOTES.strip(), memoire, "la section des notes existe")
+        self.assertIn(A.NOTES_MARKER.strip(), memoire, "la section des notes existe")
         self.assertIn("Décisions de l'utilisateur", memoire)
         for fichier in (contexte, memoire):
             for personnel in ("RTX", "C:\\Users\\", "/home/", "@gmail", "@hotmail"):
@@ -3352,7 +3352,7 @@ class Assistant(unittest.TestCase):
 
         def noms(mode):
             return {t["function"]["name"] for t in A.outils_du_mode(dict(base, mode=mode))}
-        tous = {t["function"]["name"] for t in A.OUTILS} - {"comfy_modeles", "comfy_generer", "voix_liste", "voix_parler", "voix_transcrire", "voix_cloner", "musique_generer"}          # ces outils n'existent que si l'addon ComfyUI, VoiceStudio ou ACE-Step est activé
+        tous = {t["function"]["name"] for t in A.TOOLS} - {"comfy_modeles", "comfy_generer", "voix_liste", "voix_parler", "voix_transcrire", "voix_cloner", "musique_generer"}          # ces outils n'existent que si l'addon ComfyUI, VoiceStudio ou ACE-Step est activé
         self.assertEqual(A.REGLAGES_DEFAUT["mode"], "polyvalent", "un nouveau Lutin démarre en polyvalent")
         self.assertEqual(modes.mode_ids(), ("polyvalent", "technique", "scenario", "recherche", "discussion", "mission"))
         self.assertIn("executer", noms("polyvalent"))
@@ -3399,7 +3399,7 @@ class Assistant(unittest.TestCase):
         """Réglage coché : un fichier .md par conversation dans conversations-lutin/, mis à jour, renommé avec le titre, sans jamais empêcher d'enregistrer."""
         import shutil
         from lutin import storage as donnees
-        dossier = PROJET / DOSSIER_COPIES
+        dossier = PROJET / COPIES_FOLDER
         shutil.rmtree(dossier, ignore_errors=True)
         chat("Pas de copie par défaut", reponses=[[{"content": "ok"}]])
         self.assertFalse(dossier.exists(), "rien n'est écrit dans ton dossier tant que la case n'est pas cochée")
@@ -3416,17 +3416,17 @@ class Assistant(unittest.TestCase):
             self.assertIn("Voici le résumé.", texte)
             self.assertIn("`lire`", texte, "les outils sont cités en une ligne")
             avant = copies[0].stat().st_mtime_ns
-            c = A.conv_lire(ident)
-            donnees.copier_dans_le_dossier_de_travail(c)
+            c = A.conv_read(ident)
+            donnees.copy_to_work_folder(c)
             self.assertEqual(copies[0].stat().st_mtime_ns, avant, "une copie inchangée n'est pas réécrite")
             post("/api/renommer", {"id": ident, "titre": "Résumé de l'univers"})
-            c = A.conv_lire(ident)
-            A.conv_ecrire(c)
+            c = A.conv_read(ident)
+            A.conv_write(c)
             copies = list(dossier.glob("*-{}.md".format(ident)))
-            self.assertEqual([f.name for f in copies], [donnees.nom_de_copie(c)], "le titre a changé : l'ancien nom disparaît")
+            self.assertEqual([f.name for f in copies], [donnees.copy_name(c)], "le titre a changé : l'ancien nom disparaît")
             self.assertIn("resume-de-l-univers", copies[0].name)
-            with mock.patch.object(donnees, "ecrire_atomique", side_effect=[None, OSError("disque plein")]):        # la conversation s'écrit, la copie échoue : rien ne casse
-                A.conv_ecrire(A.conv_lire(ident))
+            with mock.patch.object(donnees, "write_atomic", side_effect=[None, OSError("disque plein")]):        # la conversation s'écrit, la copie échoue : rien ne casse
+                A.conv_write(A.conv_read(ident))
         finally:
             post("/api/reglages", {"copie_conversations": False})
             shutil.rmtree(dossier, ignore_errors=True)
@@ -3471,7 +3471,7 @@ class Assistant(unittest.TestCase):
             self.assertNotIn("docs/arc.md", recue[0]["content"])
             self.assertTrue(any(e["type"] == "info" and e["texte"].startswith("📎") and "docs/arc.md" in e["texte"] for e in ev), "l'utilisateur voit ce qui a été ajouté")
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
-            self.assertNotIn("RAPPELS POSSIBLEMENT", json.dumps(A.conv_lire(ident)["messages"], ensure_ascii=False), "ils ne sont jamais enregistrés dans la conversation")
+            self.assertNotIn("RAPPELS POSSIBLEMENT", json.dumps(A.conv_read(ident)["messages"], ensure_ascii=False), "ils ne sont jamais enregistrés dans la conversation")
             # la demande suivante de la même conversation : un autre rappel, et tout ce qui précède la question d'avant est resté identique
             chat("Et de quelle couleur sont les robots de Marly, gris mat ?", conversation=ident, reponses=[[{"content": "ok"}]], mode="scenario")
             suivante = RECUES[-1]["messages"]
@@ -3623,7 +3623,7 @@ class Assistant(unittest.TestCase):
         SCENARIO[:] = [[{"content": json.dumps({"decisions": ["Garder la discussion courte"], "etape": [], "fait": [], "ouvert": []})}]]          # le scribe lit d'abord ce qui va sortir
         r = post("/api/compacter", {"conversation": ident})
         self.assertEqual((r["avant"], r["apres"], r["fiche"]), (8, 4, True), "la moitié sort, sans résumé (ADR 0019) : les vrais messages récents restent")
-        c = A.conv_lire(ident)
+        c = A.conv_read(ident)
         self.assertFalse(c.get("resume"))
         self.assertEqual(c["messages"][0]["content"], "Question 1")
         self.assertIn("Garder la discussion courte", progress_sheet.read(ident)["decisions"], "la fiche est passée sur ce qui sort")
@@ -3677,11 +3677,11 @@ class Assistant(unittest.TestCase):
             ev = chat("Écris dans A", reponses=[[appel_outil("ecrire", chemin="a.txt", contenu="A\n")], [{"content": "ok"}]])
             conv_a = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
             self.assertTrue((wa / "a.txt").is_file() and not (wb / "a.txt").exists())
-            self.assertEqual(A.conv_lire(conv_a)["travail"], "principal")
+            self.assertEqual(A.conv_read(conv_a)["travail"], "principal")
             ev = chat("Écris dans B", reponses=[[appel_outil("ecrire", chemin="b.txt", contenu="B\n")], [{"content": "ok"}]], travail="b")
             conv_b = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
             self.assertTrue((wb / "b.txt").is_file() and not (wa / "b.txt").exists())
-            self.assertEqual(A.conv_lire(conv_b)["travail"], "b")
+            self.assertEqual(A.conv_read(conv_b)["travail"], "b")
             chat("Suite dans A", conversation=conv_a, reponses=[[appel_outil("ecrire", chemin="a2.txt", contenu="A2\n")], [{"content": "ok"}]], travail="b")
             self.assertTrue((wa / "a2.txt").is_file(), "la conversation A reste dans son dossier, même si on demande B")
             self.assertFalse((wb / "a2.txt").exists())
@@ -3754,7 +3754,7 @@ class Assistant(unittest.TestCase):
         """Simulation : on voit ce que Lutin ferait, rien n'est écrit ni lancé, personne n'a rien à accepter, et le modèle sait qu'il ne doit pas réessayer."""
         cible = A.RACINE / "docs" / "essai-a-blanc.txt"
         cible.unlink(missing_ok=True)
-        A.enregistrer_reglages({"essai_a_blanc": True})
+        A.save_settings({"essai_a_blanc": True})
         try:
             ev = chat("Écris un fichier", reponses=[[appel_outil("ecrire", chemin="docs/essai-a-blanc.txt", contenu="bonjour\n")], [appel_outil("executer", commande="echo simulation > docs/essai-commande.txt")], [{"content": "Proposé."}]])
             self.assertFalse([e for e in ev if e["type"] == "approbation"], "aucune demande d'accord en essai à blanc")
@@ -3776,7 +3776,7 @@ class Assistant(unittest.TestCase):
             entrees = lire("/api/journal?n=10")["entrees"]
             self.assertEqual(entrees[0]["accord"], "essai")
         finally:
-            A.enregistrer_reglages({"essai_a_blanc": False})
+            A.save_settings({"essai_a_blanc": False})
         ev = chat("Écris pour de bon", reponses=[[appel_outil("ecrire", chemin="docs/essai-a-blanc.txt", contenu="bonjour\n")], [{"content": "Fait."}]])
         self.assertTrue([e for e in ev if e["type"] == "approbation"])
         self.assertTrue(cible.exists())
@@ -3868,10 +3868,10 @@ class Assistant(unittest.TestCase):
             self.assertEqual(recu["images"], [base64.b64encode(png).decode("ascii")], "Ollama reçoit du base64, pas un nom")
             self.assertEqual(recu["content"], "Et là ?")
             # le modèle courant voit : pas de bascule
-            A.enregistrer_reglages({"modele": "qwen3-vl:8b"})
+            A.save_settings({"modele": "qwen3-vl:8b"})
             ev = chat("Encore", images=[ident], reponses=[[{"content": "Oui."}]])
             self.assertNotIn("je passe sur", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
-            conv = A.conv_lire([e for e in ev if e["type"] == "debut"][0]["conversation"])
+            conv = A.conv_read([e for e in ev if e["type"] == "debut"][0]["conversation"])
             self.assertEqual(conv["messages"][0]["images"], [ident], "la conversation ne garde que le nom")
             # les vieilles images ne sont plus rejouées : sept messages plus tard, l'image du début est remplacée par une mention
             msgs = [{"role": "user", "content": "a", "images": [ident]}] + [{"role": "assistant", "content": "x"}] * 7 + [{"role": "user", "content": "b"}]
@@ -3882,15 +3882,15 @@ class Assistant(unittest.TestCase):
             INSTALLES.remove("qwen3-vl:8b")
             CAPACITES_FAUX.pop("qwen3-vl:8b", None)
             A.CAPACITES.pop("qwen3-vl:8b", None)
-            A.enregistrer_reglages({"modele": "qwen3.8:27b"})
+            A.save_settings({"modele": "qwen3.8:27b"})
 
     def test_nettoyage_des_images_orphelines(self):
         from lutin import images
         orpheline = images.save(b"\xff\xd8\xff" + b"orpheline-unique" * 3)
         citee = images.save(b"\xff\xd8\xff" + b"citee-unique" * 3)
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         c["messages"].append({"role": "user", "content": "x", "images": [citee]})
-        A.conv_ecrire(c)
+        A.conv_write(c)
         vieux = time.time() - 5 * 86400
         for i in (orpheline, citee):
             os.utime(images.folder() / i, (vieux, vieux))
@@ -3923,7 +3923,7 @@ class Assistant(unittest.TestCase):
         self.assertIn("Résume", recu)
         self.assertIn("voici ma note", recu)
         self.assertNotIn("pieces", RECUES[-1]["messages"][-1])
-        conv = A.conv_lire([e for e in ev if e["type"] == "debut"][0]["conversation"])
+        conv = A.conv_read([e for e in ev if e["type"] == "debut"][0]["conversation"])
         self.assertEqual(conv["messages"][0]["content"], "Résume", "la conversation enregistrée ne contient pas le texte du fichier")
         self.assertEqual(conv["messages"][0]["pieces"], [{"id": ident, "nom": "note.txt"}])
         # borne : un long fichier est coupé avec mention, sans toucher la conversation
@@ -3942,9 +3942,9 @@ class Assistant(unittest.TestCase):
         # nettoyage : l'orpheline ancienne part, la citée reste
         orpheline, _, _ = attachments.save(b"orpheline unique\n", "o.txt")
         citee, _, _ = attachments.save(b"citee unique\n", "c.txt")
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         c["messages"].append({"role": "user", "content": "x", "pieces": [{"id": citee, "nom": "c.txt"}]})
-        A.conv_ecrire(c)
+        A.conv_write(c)
         vieux = time.time() - 5 * 86400
         for i in (orpheline, citee):
             os.utime(attachments.folder() / i, (vieux, vieux))

@@ -29,7 +29,7 @@ def path():
 
 
 def read():
-    e = _m.lire_json(path(), {})
+    e = _m.read_json(path(), {})
     for cle, defaut in (("depuis", ""), ("reponses", []), ("publications", []), ("jours", {}), ("vus", [])):
         e.setdefault(cle, defaut)
     return e
@@ -37,7 +37,7 @@ def read():
 
 def write(e):
     path().parent.mkdir(parents=True, exist_ok=True)
-    _m.ecrire_atomique(path(), json.dumps(e, ensure_ascii=False, indent=1))
+    _m.write_atomic(path(), json.dumps(e, ensure_ascii=False, indent=1))
 
 
 def truncate(texte, taille=MAX_LENGTH):

@@ -561,10 +561,10 @@ def command_trial_engine(args):
     from . import engine_trial, core as _moteur, llamacpp_engine, engines  # noqa: F401  (importer le moteur enregistre les moteurs)
     mo = engines.by_id(args.moteur)
     if args.variante:
-        llamacpp_engine.regler(mo.id, variante=args.variante)
+        llamacpp_engine.configure(mo.id, variante=args.variante)
     if args.dossier:
         try:
-            llamacpp_engine.regler_dossier(mo.id, args.dossier)
+            llamacpp_engine.set_folder(mo.id, args.dossier)
         except ValueError as e:
             print("✘ " + str(e), file=sys.stderr)
             return 1

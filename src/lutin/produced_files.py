@@ -63,7 +63,7 @@ def allowed_roots():
 
 def find(ident, fichier_id):
     """(message, entrée) du fichier inscrit dans cette conversation, ou ValueError."""
-    c = _m.conv_lire(ident)
+    c = _m.conv_read(ident)
     for m in c["messages"]:
         for e in m.get("fichiers_joints") or []:
             if e.get("id") == fichier_id:
@@ -155,7 +155,7 @@ def remove(ident, fichier_id):
     m["fichiers_joints"] = [x for x in m["fichiers_joints"] if x.get("id") != fichier_id]
     if not m["fichiers_joints"]:
         m.pop("fichiers_joints", None)
-    _m.conv_ecrire_telle_quelle(c)
+    _m.conv_write_as_is(c)
     return {"ok": True, "fichier_supprime": supprime}
 
 
@@ -165,12 +165,12 @@ MAX_REGISTRY = 5000
 
 
 def _registry():
-    d = _m.lire_json(_m.DONNEES / "fichiers_crees.json", {})
+    d = _m.read_json(_m.DONNEES / "fichiers_crees.json", {})
     return d if isinstance(d, dict) else {}
 
 
 def _write_registry(d):
-    _m.ecrire_atomique(_m.DONNEES / "fichiers_crees.json", json.dumps(d, ensure_ascii=False))
+    _m.write_atomic(_m.DONNEES / "fichiers_crees.json", json.dumps(d, ensure_ascii=False))
 
 
 def image_entry(image_id, chemin):
@@ -236,7 +236,7 @@ def entries():
                 continue
             gardes.append(e)
             sortie.append({"id": e["id"], "genre": e.get("genre", "fichier"), "nom": e.get("nom") or p.name, "chemin": str(p), "taille": taille, "date": e.get("date", 0),
-                           "conversation": e.get("conversation", ""), "conversation_existe": _m.conv_existe(e.get("conversation", "")) if e.get("conversation") else False})
+                           "conversation": e.get("conversation", ""), "conversation_existe": _m.conv_exists(e.get("conversation", "")) if e.get("conversation") else False})
         if len(gardes) != len(liste) or not _registry().get("rempli"):
             reg["liste"] = gardes
             _write_registry(reg)
@@ -273,7 +273,7 @@ def remove_selection(ids):
             if conv in _m.TOURS_ACTIFS:
                 raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
             try:
-                if conv and _m.conv_existe(conv):
+                if conv and _m.conv_exists(conv):
                     (change_review.delete_media(conv, e["id"]) if e.get("genre") == "image" else remove(conv, e["id"]))
                     if Path(e["chemin"]).is_file():
                         _remove_directly(e)                        # la conversation ne montrait plus ce fichier : on l'efface quand même
@@ -340,7 +340,7 @@ def folders_conversation(ident):
     Sert au menu « ⋯ » de la conversation : ouvrir l'endroit où elle travaille, sans chercher."""
     from . import workspaces
     cfg = _m.config_lue()
-    conv = _m.conv_lire(ident)
+    conv = _m.conv_read(ident)
     t = workspaces.by_id(cfg, conv["travail"]) if conv.get("travail") else None
     t = t or workspaces.active(cfg)
     permises = allowed_roots()

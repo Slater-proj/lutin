@@ -92,7 +92,7 @@ class LangueDuServeur(unittest.TestCase):
             self.assertIn("## Assistant notes", memoire)
             self.assertIn("Answer in the user's language", (_TEMP / "memoire-en" / "CONTEXTE.md").read_text(encoding="utf-8"))
             # le moteur retrouve la section des notes, quelle que soit la langue du modèle de départ
-            self.assertEqual(A.position_notes(memoire), memoire.index("## Assistant notes") - 1)
+            self.assertEqual(A.notes_position(memoire), memoire.index("## Assistant notes") - 1)
             os.environ["LUTIN_LANGUE"] = "fr"
             dossiers_fr = {"memoire": str(_TEMP / "memoire-fr"), "donnees": str(_TEMP / "d-fr"), "config": str(_TEMP / "c-fr"), "cache": str(_TEMP / "ca-fr")}
             config.prepare(dossiers_fr)
@@ -107,16 +107,16 @@ class LangueDuServeur(unittest.TestCase):
         os.environ["LUTIN_LANGUE"] = "en"
         try:
             with self.assertRaisesRegex(A.ErreurOutil, "Path refused: outside the project"):
-                A.chemin_sur("../x")
+                A.safe_path("../x")
             with self.assertRaisesRegex(A.ErreurOutil, "File not found: absent.txt"):
-                A.outil_lire("absent.txt")
-            self.assertIn("lines 1 to 2 of 2", A.outil_lire("a.txt"))
-            self.assertEqual(A.outil_chercher("introuvable_xyz"), "No result.")
+                A.read_tool("absent.txt")
+            self.assertIn("lines 1 to 2 of 2", A.read_tool("a.txt"))
+            self.assertEqual(A.search_tool("introuvable_xyz"), "No result.")
         finally:
             os.environ["LUTIN_LANGUE"] = "fr"
         with self.assertRaisesRegex(A.ErreurOutil, "Fichier introuvable : absent.txt"):
-            A.outil_lire("absent.txt")
-        self.assertEqual(A.outil_chercher("introuvable_xyz"), "Aucun résultat.")
+            A.read_tool("absent.txt")
+        self.assertEqual(A.search_tool("introuvable_xyz"), "Aucun résultat.")
 
 
 if __name__ == "__main__":

@@ -381,10 +381,10 @@ class Carte(unittest.TestCase):
         self.addCleanup(self.remettre)
 
     def remettre(self):
-        cfg = ml.lire_config()
+        cfg = ml.read_config()
         for identifier in ("openai", "exllamav3", "lmstudio", "colibri"):
             cfg.pop(identifier, None)
-        ml.ecrire_config(cfg)
+        ml.write_config(cfg)
         engines.CONTEXT.clear()
         engines.CONTEXT.update(self.ancien)
 
@@ -423,57 +423,57 @@ class Carte(unittest.TestCase):
         info = engines.ENGINES["lmstudio"].info_dossier()
         self.assertEqual((info["par"], info["modeles"]["modifiable"]), ("programme", False))
         self.assertEqual(engines.ENGINES["openai"].info_dossier(), {}, "un serveur que Lutin ne gère pas n'a pas de dossier")
-        self.assertNotIn("dossier", ml.vue_reglages("openai"))
+        self.assertNotIn("dossier", ml.settings_view("openai"))
 
     def test_le_dossier_des_modeles_se_choisit_et_arrete_le_serveur_qui_le_lit(self):
         ailleurs = self.tmp / "autre-disque"
         arrets = []
         with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append(1)):
-            ml.regler_dossier_modeles("exllamav3", str(ailleurs))
+            ml.set_models_folder("exllamav3", str(ailleurs))
         self.assertEqual(arrets, [1])
         self.assertEqual(self.mo._dossiers()["modeles"], str(ailleurs))
         self.assertEqual(self.mo.info_dossier()["modeles"]["actuel"], str(ailleurs))
         self.assertTrue(self.mo.info_dossier()["modeles"]["personnalise"])
-        ml.regler_dossier_modeles("exllamav3", "")
+        ml.set_models_folder("exllamav3", "")
         self.assertNotIn("modeles", self.mo._dossiers())
-        with self.assertRaises(ml.ErreurMoteur):
-            ml.regler_dossier_modeles("exllamav3", "pas/absolu")
+        with self.assertRaises(ml.EngineError):
+            ml.set_models_folder("exllamav3", "pas/absolu")
 
     def test_choisir_un_autre_serveur_arrete_celui_qui_tourne_au_lieu_de_refuser(self):
         """The old select of the « openai » engine, as an older client still sends it (ADR 0020 reads it): the server it left is stopped."""
-        ml.regler_serveur("openai", {"serveur": "exllamav3"})
+        ml.configure_server("openai", {"serveur": "exllamav3"})
         arrets = []
         with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("exllamav3")):
-            self.assertTrue(ml.regler_serveur("openai", {"serveur": "colibri"}))
+            self.assertTrue(ml.configure_server("openai", {"serveur": "colibri"}))
         self.assertEqual(arrets, ["exllamav3"])
-        self.assertEqual(ml.serveur_ancien(), "colibri")
+        self.assertEqual(ml.old_server(), "colibri")
         arrets.clear()
         with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("x")):
-            ml.regler_serveur("openai", {"serveur": "colibri"})          # le même serveur : rien n'est arrêté
+            ml.configure_server("openai", {"serveur": "colibri"})          # le même serveur : rien n'est arrêté
         self.assertEqual(arrets, [])
 
     def test_changer_de_serveur_eteint_ne_demande_rien(self):
         with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: False), mock.patch.object(X, "stop", lambda dossiers=None, **k: self.fail("rien ne tourne")):
-            ml.regler_serveur("openai", {"serveur": "lmstudio"})
-        self.assertEqual(ml.serveur_ancien(), "lmstudio")
+            ml.configure_server("openai", {"serveur": "lmstudio"})
+        self.assertEqual(ml.old_server(), "lmstudio")
 
     def test_supprimer_un_modele_passe_par_le_moteur_et_dit_pourquoi_il_refuse(self):
         self.faux_modeles()
-        with self.assertRaises(ml.ErreurMoteur):
+        with self.assertRaises(ml.EngineError):
             self.mo.supprimer_modele("../x")
         self.mo.supprimer_modele("A-exl3")
         self.assertEqual(X.modeles(self.mo._dossiers()), [])
         with mock.patch.object(X, "remove_model", mock.Mock(side_effect=PermissionError())):
-            with self.assertRaises(ml.ErreurMoteur) as e:
+            with self.assertRaises(ml.EngineError) as e:
                 self.mo.supprimer_modele("A-exl3")
         self.assertIn("arrête ExLlamaV3", str(e.exception))
-        with self.assertRaises(ml.ErreurMoteur):
+        with self.assertRaises(ml.EngineError):
             engines.ENGINES["colibri"].supprimer_modele("A-exl3")
 
     def test_le_dossier_des_moteurs_compte_exllamav3_parmi_ce_qui_est_installe(self):
-        with mock.patch.object(ml.MoteurExterne, "_exl", lambda self: {"tabby": SHA, "lib": "1"}):
-            self.assertIn("ExLlamaV3", ml.moteurs_installes_par_lutin())
-        self.assertNotIn("ExLlamaV3", ml.moteurs_installes_par_lutin())
+        with mock.patch.object(ml.ExternalEngine, "_exl", lambda self: {"tabby": SHA, "lib": "1"}):
+            self.assertIn("ExLlamaV3", ml.engines_installed_by_lutin())
+        self.assertNotIn("ExLlamaV3", ml.engines_installed_by_lutin())
 
     def test_supprimer_un_modele_tenu_par_le_serveur_l_arrete_puis_reessaie(self):
         suivi = []
@@ -491,19 +491,19 @@ class Carte(unittest.TestCase):
 
     def test_si_le_fichier_reste_utilise_le_modele_reste_entier_et_l_erreur_est_dite(self):
         with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: False), mock.patch.object(X, "remove_model", mock.Mock(side_effect=PermissionError())), mock.patch.object(ml.time, "sleep", lambda s: None):
-            with self.assertRaises(ml.ErreurMoteur) as e:
+            with self.assertRaises(ml.EngineError) as e:
                 self.mo.supprimer_modele("A-exl3")
         self.assertIn("arrête ExLlamaV3", str(e.exception))
 
     def test_le_demarrage_donne_au_serveur_le_contexte_des_reglages(self):
         vus = []
-        with mock.patch.object(X, "start", lambda port, dossiers=None, **k: vus.append(k.get("contexte"))), mock.patch.object(ml.MoteurExterne, "_contexte", lambda self: 20480):
+        with mock.patch.object(X, "start", lambda port, dossiers=None, **k: vus.append(k.get("contexte"))), mock.patch.object(ml.ExternalEngine, "_contexte", lambda self: 20480):
             self.mo.faire("demarrer", lambda *a: None)
         self.assertEqual(vus, [20480])
 
     def test_les_serveurs_installes_sont_dits_pour_la_liste_deroulante(self):
-        with mock.patch.object(ml.MoteurExterne, "_exl", lambda self: {"tabby": SHA, "lib": "1"}), mock.patch.object(ml.MoteurExterne, "_colibri", lambda self: None), mock.patch.object(ml.MoteurExterne, "_lms", lambda self: None):
-            self.assertEqual(ml.vue_reglages("openai")["serveurs_geres"], {"exllamav3": True, "colibri": False, "lmstudio": False})
+        with mock.patch.object(ml.ExternalEngine, "_exl", lambda self: {"tabby": SHA, "lib": "1"}), mock.patch.object(ml.ExternalEngine, "_colibri", lambda self: None), mock.patch.object(ml.ExternalEngine, "_lms", lambda self: None):
+            self.assertEqual(ml.settings_view("openai")["serveurs_geres"], {"exllamav3": True, "colibri": False, "lmstudio": False})
 
     def test_la_grille_dit_que_lutin_telecharge_et_installe_exllamav3(self):
         g = self.mo.grille()

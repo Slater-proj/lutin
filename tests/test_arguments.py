@@ -7,7 +7,7 @@ from lutin.agent import normaliser_arguments as norm
 
 
 def schema(nom):
-    return next(t["function"]["parameters"] for t in M.OUTILS if t["function"]["name"] == nom)
+    return next(t["function"]["parameters"] for t in M.TOOLS if t["function"]["name"] == nom)
 
 
 class ArgumentsDOutil(unittest.TestCase):

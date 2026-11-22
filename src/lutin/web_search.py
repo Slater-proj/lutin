@@ -38,7 +38,7 @@ def _path():
 
 
 def config():
-    c = _donnees.lire_json(_path(), {})
+    c = _donnees.read_json(_path(), {})
     sortie = {"searxng": str(c.get("searxng") or ""), "brave_cle": str(c.get("brave_cle") or "")}
     for nom in KEYED_PROVIDERS:
         sortie[nom + "_cle"] = str(c.get(nom + "_cle") or "")
@@ -83,7 +83,7 @@ def save(searxng=None, brave_cle=None, tavily_cle=None, exa_cle=None, perplexity
                     raise ValueError(_t("Clé {} invalide (des lettres, des chiffres, - _ et . seulement).").format(nom.capitalize()))
                 c[nom + "_cle"] = cle
         chemin = _path()
-        _donnees.ecrire_atomique(chemin, json.dumps(c, ensure_ascii=False, indent=1))
+        _donnees.write_atomic(chemin, json.dumps(c, ensure_ascii=False, indent=1))
         try:
             os.chmod(chemin, 0o600)          # la clé n'est lisible que par son propriétaire (là où le système le permet)
         except OSError:

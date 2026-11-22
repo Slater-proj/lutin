@@ -43,13 +43,13 @@ class SmallGaps(unittest.TestCase):
         self.assertEqual(done, [("install", "uv"), ("uninstall", "uv")])
 
     def test_one_message_is_pinned_and_unpinned(self):
-        conversation = A.conv_nouvelle()
+        conversation = A.conv_new()
         conversation["messages"] = [{"role": "user", "content": "Ne jamais toucher à la production."}, {"role": "assistant", "content": "Compris."}]
-        A.conv_ecrire(conversation)
-        self.addCleanup(lambda: A.conv_supprimer(conversation["id"]))
+        A.conv_write(conversation)
+        self.addCleanup(lambda: A.conv_delete(conversation["id"]))
         path = "/api/v1/conversations/%s/messages/0" % conversation["id"]
         self.assertEqual(V.call("PATCH", path, V.DEVICE, {"pinned": True})[1], {"pinned": True, "count": 1})
-        self.assertTrue(A.conv_lire(conversation["id"])["messages"][0].get("epingle"))
+        self.assertTrue(A.conv_read(conversation["id"])["messages"][0].get("epingle"))
         self.assertEqual(V.call("PATCH", path, V.DEVICE, {"pinned": False})[1], {"pinned": False, "count": 0})
         # built, not path.replace("/0", "/9"): an id starting with 0 (token_hex, one in sixteen) became another conversation, 404 instead of 400
         self.assertEqual(V.call("PATCH", "/api/v1/conversations/%s/messages/9" % conversation["id"], V.DEVICE, {"pinned": True})[0], 400)

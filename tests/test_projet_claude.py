@@ -184,7 +184,7 @@ class DansLeMoteur(unittest.TestCase):
         self.assertTrue({"CLAUDE.md", ".claude/skills/deploy/SKILL.md", ".claude/commands/sauvegarde.md", ".claude/rules/style.md"} <= noms, noms)
 
     def test_le_modele_peut_lire_un_skill_du_projet(self):
-        self.assertIn("Étapes...", A.outil_lire(".claude/skills/deploy/SKILL.md"))
+        self.assertIn("Étapes...", A.read_tool(".claude/skills/deploy/SKILL.md"))
 
     def test_import_sur_place_puis_copie_par_l_api(self):
         autre = fabriquer(Path(self.t.name) / "autre")

@@ -422,7 +422,7 @@ class Reglage(Base):
     def test_choisir_une_machine_inconnue_est_refuse(self):
         from lutin import storage
         with self.assertRaises(ValueError):
-            storage._enregistrer_reglages({"machine": "a" * 32})
+            storage._save_settings({"machine": "a" * 32})
 
     def test_la_page_machines(self):
         self.jumeler()
@@ -523,10 +523,10 @@ class Relais(Base):
         m = self.jumeler()
         machines.noeud_autoriser_piloter(piloter)
         self.jeton = machines.trouver(m["id"])["jeton"]
-        conv = A.conv_nouvelle()
+        conv = A.conv_new()
         conv["messages"] = [{"role": "user", "content": "bonjour"}, {"role": "assistant", "content": "salut"}]
         conv["titre"] = "Sur l'hôte"
-        A.conv_ecrire(conv)
+        A.conv_write(conv)
         return m, conv
 
     def relais(self, methode, chemin, corps=None, jeton=None):
@@ -570,7 +570,7 @@ class Relais(Base):
         self.assertNotEqual(recus["modele"], "pirate:70b")
         self.assertFalse(recus["machine"])
         self.assertTrue(str(recus["identite"]).startswith("machine : "))
-        self.assertFalse(A.options_lire(conv["id"]).get("auto_commandes"), "une machine distante n'active pas les accords automatiques")
+        self.assertFalse(A.options_read(conv["id"]).get("auto_commandes"), "une machine distante n'active pas les accords automatiques")
 
     def test_depuis_cette_page_les_octets_passent_et_rien_n_est_garde_ici(self):
         m, conv = self.preparer()
@@ -614,15 +614,15 @@ class Relais(Base):
         self.assertIn(conv["id"], [c["id"] for c in machines.noeud_partager("conversations", {})["conversations"]])
 
     def test_les_anciennes_copies_jamais_continuees_sont_supprimees(self):
-        copie = A.conv_nouvelle()
+        copie = A.conv_new()
         copie.update(messages=[{"role": "user", "content": "a"}], origine={"machine": "X", "messages_importes": 1})
-        A.conv_ecrire(copie)
-        continuee = A.conv_nouvelle()
+        A.conv_write(copie)
+        continuee = A.conv_new()
         continuee.update(messages=[{"role": "user", "content": "a"}, {"role": "user", "content": "suite"}], origine={"machine": "X", "messages_importes": 1})
-        A.conv_ecrire(continuee)
+        A.conv_write(continuee)
         machines.COPIES_NETTOYEES[0] = False
         self.assertEqual(machines.nettoyer_copies_importees(), 1)
-        ids = [c["id"] for c in A.conv_liste()]
+        ids = [c["id"] for c in A.conv_list()]
         self.assertNotIn(copie["id"], ids)
         self.assertIn(continuee["id"], ids)
 

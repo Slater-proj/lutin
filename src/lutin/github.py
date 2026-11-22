@@ -44,7 +44,7 @@ def save(valeur):
     from . import core as _m          # importé ici : github.py est lu très tôt (miseajour), avant que moteur soit prêt
     chemin = _path()
     if valeur:
-        _m.ecrire_atomique(chemin, json.dumps({"jeton": valeur}))
+        _m.write_atomic(chemin, json.dumps({"jeton": valeur}))
         try:
             os.chmod(chemin, 0o600)          # lisible par son seul propriétaire, là où le système le permet
         except OSError:

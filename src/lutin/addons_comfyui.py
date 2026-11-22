@@ -558,7 +558,7 @@ def generate_tool(args, ctx):
     auto = bool(ctx.get("auto_commandes"))          # générer lance ComfyUI et prend la carte graphique : la case « Commandes automatiques » vaut aussi pour cela
     if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, "", auto=auto):
         from . import tools
-        return tools.refus(ctx, _t("Refusé par l'utilisateur."))
+        return tools.refusal(ctx, _t("Refusé par l'utilisateur."))
     lance = ensure_comfyui(ctx.get("stop"))
     try:
         res = _submit_and_wait(f, v, complet, type_, ctx)

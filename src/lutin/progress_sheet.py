@@ -124,7 +124,7 @@ def write(ident, sections):
         delete(ident)
         return sections
     f.parent.mkdir(parents=True, exist_ok=True)
-    _m.ecrire_atomique(f, serialize(ident, sections))
+    _m.write_atomic(f, serialize(ident, sections))
     _cache.pop(str(f), None)
     return sections
 

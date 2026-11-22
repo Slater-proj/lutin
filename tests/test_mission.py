@@ -104,7 +104,7 @@ class Mission(unittest.TestCase):
         self.assertGreaterEqual(fin["actions"], 2)
         self.assertFalse(mission.one_step(), "une mission terminée ne tourne plus")
         self.assertTrue(fin["conv"])
-        self.assertTrue(_m.conv_lire(fin["conv"])["titre"].startswith("🎯"))
+        self.assertTrue(_m.conv_read(fin["conv"])["titre"].startswith("🎯"))
 
     def test_l_avancement_du_tour_se_voit_pendant_qu_il_tourne(self):
         """Pendant un tour (des minutes sur une petite machine), la bannière dit ce que fait le modèle et garde les dernières actions : plus de « tour 1 en cours… » muet."""
@@ -200,8 +200,8 @@ class Mission(unittest.TestCase):
 
     def test_une_mission_menee_dans_une_conversation_suit_ses_options_et_le_dit_a_la_page(self):
         """Mission liée à une conversation : elle travaille dans CETTE conversation, son autonomie suit les cases de la conversation (relues à chaque tour), elle est résumée par conversation et s'efface avec elle."""
-        c = _m.conv_nouvelle()
-        _m.conv_ecrire(c)
+        c = _m.conv_new()
+        _m.conv_write(c)
         m = mission.create("Jeu", "Crée un petit jeu.", "principal", 2, False, c["id"])
         self.assertTrue(m["lie"] and m["conv"] == c["id"])
         self.assertEqual(mission.find_for_conversation(c["id"])["id"], m["id"])
@@ -209,18 +209,18 @@ class Mission(unittest.TestCase):
         self.assertTrue(mission.one_step())                                          # sans cases cochées : à blanc, rien n'est écrit
         self.assertFalse((self.dossier / "jeu.txt").exists())
         self.assertFalse(mission.find(m["id"])["autonome"])
-        _m.options_ecrire(c["id"], {"auto_ecriture": True, "auto_commandes": True})   # l'utilisateur coche les deux cases dans la conversation
+        _m.options_write(c["id"], {"auto_ecriture": True, "auto_commandes": True})   # l'utilisateur coche les deux cases dans la conversation
         self.assertTrue(mission.one_step())
         self.assertTrue(mission.find(m["id"])["autonome"], "l'autonomie suit les cases, relues à chaque tour")
-        apres = _m.conv_lire(c["id"])
+        apres = _m.conv_read(c["id"])
         self.assertEqual(mission.find(m["id"])["conv"], c["id"], "toujours la même conversation")
         self.assertTrue(any("Crée un petit jeu." in (x.get("content") or "") for x in apres["messages"] if x.get("role") == "user"), "le cahier des charges est dans la conversation")
         mission.forget_conversation(c["id"])
         self.assertIsNone(mission.find_for_conversation(c["id"]))
 
     def test_arreter_la_reponse_en_cours_met_la_mission_en_pause(self):
-        c = _m.conv_nouvelle()
-        _m.conv_ecrire(c)
+        c = _m.conv_new()
+        _m.conv_write(c)
         m = mission.create("Jeu", "Crée un petit jeu.", "principal", 2, True, c["id"])
         vrai_tour = _m.tour
 

@@ -134,7 +134,7 @@ class LongConversationOnSmallWindow(unittest.TestCase):
     def run_project(self, num_ctx, memory, faithful):
         model = FakeModel(faithful)
         M.REPONDEUR[:] = [model]
-        A.enregistrer_reglages({"num_ctx": num_ctx, "modele": "qwen3.8:27b", "mode": "polyvalent", "reflexion": False, "auto_ecriture": False,
+        A.save_settings({"num_ctx": num_ctx, "modele": "qwen3.8:27b", "mode": "polyvalent", "reflexion": False, "auto_ecriture": False,
                                 "memoire_longue": memory, "fiche_scribe": True})
         cid, errors, prunes = "", [], 0
         try:

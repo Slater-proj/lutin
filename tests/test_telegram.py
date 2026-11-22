@@ -233,7 +233,7 @@ class Telegram(unittest.TestCase):
         def faux_tour(conv, texte, emit, r, stop, depuis, identite="", lecture_seule=False, **kw):
             vus.append({"texte": texte, "mode": r["mode"], "lecture_seule": lecture_seule, "identite": identite, "actifs": list(_m.TOURS_ACTIFS)})
             conv["messages"] += [{"role": "user", "content": texte}, {"role": "assistant", "content": "Voilà."}]
-            _m.conv_ecrire(conv)
+            _m.conv_write(conv)
         _m.tour = faux_tour
         try:
             self.assertEqual(tg.reply_model("42", "Moi", "Que contient docs ?", True), "Voilà.")
@@ -248,7 +248,7 @@ class Telegram(unittest.TestCase):
         self.assertIn("Réponds en une phrase.", tiers["texte"])
         self.assertEqual(proprio["identite"], "telegram")
         self.assertEqual(_m.TOURS_ACTIFS, {}, "la place est rendue après la demande")
-        titres = [_m.conv_lire(i)["titre"] for i in tg.read()["convs"].values()]
+        titres = [_m.conv_read(i)["titre"] for i in tg.read()["convs"].values()]
         self.assertIn("✈ Telegram — Moi", titres)
 
 

@@ -26,9 +26,9 @@ class Fichiers(unittest.TestCase):
         _m.config_lue = self.vrai_config
 
     def conversation(self, *chemins):
-        c = _m.conv_nouvelle()
+        c = _m.conv_new()
         c["messages"] = [{"role": "tool", "tool_name": "creer_document", "content": "ok", "fichiers_joints": [produced_files.entry(p) for p in chemins]}]
-        _m.conv_ecrire(c)
+        _m.conv_write(c)
         return c["id"], [produced_files.entry(p)["id"] for p in chemins]
 
     def test_les_dossiers_d_une_conversation_s_ouvrent_sans_jamais_sortir_des_dossiers_permis(self):
@@ -91,7 +91,7 @@ class Fichiers(unittest.TestCase):
         ident, (fid,) = self.conversation(f)
         self.assertTrue(produced_files.remove(ident, fid)["fichier_supprime"])
         self.assertFalse(f.exists())
-        self.assertNotIn("fichiers_joints", _m.conv_lire(ident)["messages"][0])
+        self.assertNotIn("fichiers_joints", _m.conv_read(ident)["messages"][0])
         with self.assertRaises(ValueError):
             produced_files.remove(ident, fid)
 
@@ -173,7 +173,7 @@ class Fichiers(unittest.TestCase):
         self.assertGreaterEqual(res["libere"], 2000)
         self.assertFalse(a.exists())
         self.assertEqual([x for x in produced_files.entries()["liste"] if x["conversation"] == ident], [])
-        restantes = [c["id"] for c in _m.conv_lire(ident)["messages"][0].get("fichiers_joints", [])]
+        restantes = [c["id"] for c in _m.conv_read(ident)["messages"][0].get("fichiers_joints", [])]
         self.assertNotIn(a_id, restantes, "la carte du fichier supprimé a disparu de la conversation")
 
     def test_le_registre_supprime_aussi_quand_la_conversation_n_existe_plus_et_refuse_hors_des_dossiers(self):

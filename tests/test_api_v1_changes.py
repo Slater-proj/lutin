@@ -42,7 +42,7 @@ class Changes(unittest.TestCase):
         status, answer = api("POST", path, {"path": "appli/moteur/code.py"})
         self.assertEqual((status, answer["restored"], answer["skipped"], answer["undoable"]), (200, ["appli/moteur/code.py"], [], False))
         self.assertEqual(FILE.read_text(encoding="utf-8"), self.before, "as it was before the request")
-        last = A.conv_lire(self.conversation)["messages"][-1]
+        last = A.conv_read(self.conversation)["messages"][-1]
         self.assertIn("annulé", last["content"], "the model is told the change was undone")
         self.assertEqual(api("POST", path, {})[1]["error"]["code"], "nothing_to_undo")
 

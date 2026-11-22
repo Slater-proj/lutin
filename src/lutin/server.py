@@ -209,13 +209,13 @@ class Handler(BaseHTTPRequestHandler):
         modeles = mo.modeles()
         statut = mo.statut()
         return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.task(mo.id), telechargeable=mo.telechargeable(), maj=_moteurs_maj.state().get(mo.id),
-                    reglages=_llamacpp.vue_reglages(mo.id) if (mo.adresse_modifiable or hasattr(mo, "info_dossier")) else {})
+                    reglages=_llamacpp.settings_view(mo.id) if (mo.adresse_modifiable or hasattr(mo, "info_dossier")) else {})
 
     @staticmethod
     def _prereglages():
         """Les serveurs compatibles OpenAI du catalogue signé (adresse habituelle, forces, faiblesses), pour les proposer d'un clic. Un catalogue illisible n'empêche jamais la page."""
         try:
-            systeme, docker = _llamacpp._systeme(), bool(_moteurs.CONTEXT["en_docker"]())
+            systeme, docker = _llamacpp._system(), bool(_moteurs.CONTEXT["en_docker"]())
             try:
                 profil = _moteurs.CONTEXT["profil"]()
                 fabricants = sorted({g.fabricant for g in (getattr(profil, "gpus", None) or [])})
@@ -534,10 +534,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
-                                       "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
+                                       "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_list(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
-                                       "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv})})
+                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.PendingApproval.EN_COURS.values()],
+                                       "en_attente": sorted({a.conv for a in _m.PendingApproval.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
             r = _m.reglages()
             vitesse = ((_bench.read(_m.chemin_bench()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
@@ -562,7 +562,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": _t("Requête vide ou trop vague : donne quelques mots-clés.")})
             return self._envoyer(200, {"passages": _rappel.search_documents(requete)})
         if chemin == "/api/notes":
-            return self._envoyer(200, {"notes": _donnees.lister_notes()})
+            return self._envoyer(200, {"notes": _donnees.list_notes()})
         if chemin == "/api/acces":
             return self._envoyer(200, _acces.state(self._configurateur(), self._configurateur_strict(), self._admin_tous()))
         if chemin == "/api/qr":
@@ -601,7 +601,7 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
             _moteurs_maj.in_background(bool(_m.config_lue().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
-            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.entries()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.vue_dossier_moteurs()})
+            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.entries()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.engines_folder_view()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             mo = _moteurs.by_id((q.get("moteur") or [""])[0])
@@ -638,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             ident = (q.get("conversation") or [""])[0]
             try:
-                conv = _m.conv_lire(ident)
+                conv = _m.conv_read(ident)
                 r = _m.reglages()
                 sections = _suivi.read(ident)
                 return self._envoyer(200, {"sections": sections, "texte": _suivi.serialize(ident, sections), "mesure": _suivi.measure(ident, r["num_ctx"]), "mode": _m.memoire_longue(conv, r),
@@ -744,26 +744,26 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/contexte":
             try:
                 ident = (re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]
-                return self._envoyer(200, _m.jauge_contexte(_m.conv_lire(ident)))
+                return self._envoyer(200, _m.jauge_contexte(_m.conv_read(ident)))
             except ValueError as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
         if chemin in ("/manifest.webmanifest", "/icone.svg", "/logo.svg") or re.match(r"^/icone-(180|192|512)\.png$", chemin):
             return self._statique_pwa(chemin)
         if chemin == "/api/memoire":
-            return self._envoyer(200, {"CONTEXTE.md": _m.lire_memoire("CONTEXTE.md"), "MEMOIRE.md": _m.lire_memoire("MEMOIRE.md")})
+            return self._envoyer(200, {"CONTEXTE.md": _m.read_memory("CONTEXTE.md"), "MEMOIRE.md": _m.read_memory("MEMOIRE.md")})
         if chemin == "/api/skills":
-            liste = [{"nom": n, "titre": t} for n, t in _m.lister_skills()]
+            liste = [{"nom": n, "titre": t} for n, t in _m.list_skills()]
             return self._envoyer(200, {"skills": liste})
         if chemin.startswith("/api/skills/"):
             nom = urllib.parse.unquote(chemin[len("/api/skills/"):])
             try:
-                return self._envoyer(200, {"nom": nom, "texte": _m.lire_skill(nom)})
+                return self._envoyer(200, {"nom": nom, "texte": _m.read_skill(nom)})
             except (OSError, ValueError) as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
         if chemin == "/api/conversation":
             try:
                 ident = (re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]
-                return self._envoyer(200, dict(_m.conv_lire(ident), options=_m.options_lire(ident)))          # + les options de cette conversation (accords automatiques, mode…)
+                return self._envoyer(200, dict(_m.conv_read(ident), options=_m.options_read(ident)))          # + les options de cette conversation (accords automatiques, mode…)
             except ValueError as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
         # Fichiers statiques (lib/)
@@ -931,13 +931,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.path == "/api/notes-ajouter":
                 try:
-                    _donnees.noter(str(donnees.get("texte", "")))
+                    _donnees.add_note(str(donnees.get("texte", "")))
                 except _m.ErreurOutil as e:
                     raise ValueError(str(e)) from e
-                return self._envoyer(200, {"notes": _donnees.lister_notes()})
+                return self._envoyer(200, {"notes": _donnees.list_notes()})
             if self.path == "/api/notes-supprimer":
-                _donnees.supprimer_note(str(donnees.get("ligne", "")))
-                return self._envoyer(200, {"notes": _donnees.lister_notes()})
+                _donnees.delete_note(str(donnees.get("ligne", "")))
+                return self._envoyer(200, {"notes": _donnees.list_notes()})
             if self.path == "/api/acces":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le niveau d'accès ne se change que depuis cette machine.")})
@@ -983,7 +983,7 @@ class Handler(BaseHTTPRequestHandler):
                 with _m.VERROU_TOURS:
                     if ident in _m.TOURS_ACTIFS:
                         return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
-                conv = _m.conv_lire(ident)
+                conv = _m.conv_read(ident)
                 r = _m.reglages()
                 if self.path == "/api/suivi":
                     _suivi.write(ident, _suivi.parse(str(donnees.get("texte", ""))[:20000]))
@@ -1041,9 +1041,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.delete_media(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
             if self.path == "/api/conversation-options":
                 ident = str(donnees.get("conversation", ""))
-                if not _m.conv_existe(ident):
+                if not _m.conv_exists(ident):
                     return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
-                return self._envoyer(200, {"options": _m.options_ecrire(ident, donnees.get("options"))})
+                return self._envoyer(200, {"options": _m.options_write(ident, donnees.get("options"))})
             if self.path == "/api/epingler-message":
                 return self._envoyer(200, _m.pin_message(str(donnees.get("conversation", "")), donnees.get("index"), donnees.get("epingle")))
             if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/addon-action", "/api/fond-creer", "/api/fond-action"):
@@ -1153,12 +1153,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/conseil-machine":
                 action = str(donnees.get("action", ""))
                 if action == "ignorer":
-                    _m.enregistrer_reglages({"conseil_machine": False})
+                    _m.save_settings({"conseil_machine": False})
                     return self._envoyer(200, {"ok": True})
                 if action == "appliquer":
                     changements = _conseil_machine.apply(_adequation.ready_profile(), _m.reglages())
                     if changements:
-                        _m.enregistrer_reglages(changements)
+                        _m.save_settings(changements)
                     return self._envoyer(200, {"ok": True, "appliques": changements})
                 return self._envoyer(400, {"erreur": _t("Action inconnue.")})
             if self.path == "/api/bench-serie":
@@ -1206,37 +1206,37 @@ class Handler(BaseHTTPRequestHandler):
                 with _m.VERROU_TOURS:
                     travaille = ident in _m.TOURS_ACTIFS               # un tour en cours réécrit la conversation : on ne la touche pas
                 if not travaille:
-                    c = _m.conv_lire(ident)
+                    c = _m.conv_read(ident)
                     c["taches"] = []
-                    _m.conv_ecrire(c)
+                    _m.conv_write(c)
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/arreter":
                 return self._envoyer(200, _m.arreter_conversation(str(donnees.get("conversation", ""))))
             if self.path == "/api/approuver":
-                _m.repondre_attente(str(donnees.get("id", "")), donnees.get("ok"), bool(donnees.get("reactiver")))
+                _m.answer_pending(str(donnees.get("id", "")), donnees.get("ok"), bool(donnees.get("reactiver")))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/reglages":
-                rep = _m.enregistrer_reglages(donnees)
+                rep = _m.save_settings(donnees)
                 if donnees.get("cluster") is False:
                     _machines.vider_listes()          # mode multi-machines éteint : plus aucun modèle ni conversation distante gardé
                 return self._envoyer(200, rep)
             if self.path == "/api/memoire":
-                _m.ecrire_memoire(str(donnees.get("fichier", "")), str(donnees.get("texte", "")))
+                _m.write_memory(str(donnees.get("fichier", "")), str(donnees.get("texte", "")))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/skills":
-                return self._envoyer(200, _m.ecrire_skill(str(donnees.get("nom", "")), str(donnees.get("texte", ""))))
+                return self._envoyer(200, _m.write_skill(str(donnees.get("nom", "")), str(donnees.get("texte", ""))))
             if self.path == "/api/skills-supprimer":
-                return self._envoyer(200, _m.supprimer_skill(str(donnees.get("nom", ""))))
+                return self._envoyer(200, _m.delete_skill(str(donnees.get("nom", ""))))
             if self.path == "/api/nouvelle":
-                return self._envoyer(200, _m.conv_nouvelle())
+                return self._envoyer(200, _m.conv_new())
             if self.path in ("/api/supprimer", "/api/renommer", "/api/epingler") and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})          # sinon la fin de la réponse réécrirait la conversation par-dessus
             if self.path == "/api/supprimer":
                 _mission.forget_conversation(str(donnees.get("id", "")))                  # sa mission, s'il y en a une, s'arrête avec elle
-                _m.conv_supprimer(str(donnees.get("id", "")))
+                _m.conv_delete(str(donnees.get("id", "")))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/renommer":
-                c = _m.conv_renommer(str(donnees.get("id", "")), str(donnees.get("titre", "")))
+                c = _m.conv_rename(str(donnees.get("id", "")), str(donnees.get("titre", "")))
                 return self._envoyer(200, {"ok": True, "titre": c["titre"]})
             if self.path == "/api/titre-ia":
                 return self._titre_ia(donnees)
@@ -1306,10 +1306,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
                 try:
-                    _llamacpp.regler_dossier_moteurs(donnees.get("dossier"))
-                except _llamacpp.ErreurMoteur as e:
+                    _llamacpp.set_engines_folder(donnees.get("dossier"))
+                except _llamacpp.EngineError as e:
                     return self._envoyer(400, {"erreur": str(e)})
-                return self._envoyer(200, {"ok": True, "dossier_moteurs": _llamacpp.vue_dossier_moteurs()})
+                return self._envoyer(200, {"ok": True, "dossier_moteurs": _llamacpp.engines_folder_view()})
             if self.path.startswith("/api/moteur-"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -1691,9 +1691,9 @@ class Handler(BaseHTTPRequestHandler):
             ident = str(donnees.get("id", ""))
             _machines.retirer(ident)
             if r.get("machine") == ident:
-                _m.enregistrer_reglages({"machine": ""})
+                _m.save_settings({"machine": ""})
         elif action == "use":
-            _m.enregistrer_reglages({"machine": str(donnees.get("id") or "")})
+            _m.save_settings({"machine": str(donnees.get("id") or "")})
         elif action == "mac":
             _machines.definir_mac(str(donnees.get("id", "")), donnees.get("mac"))
         elif action == "noeud-activer":
@@ -1782,12 +1782,12 @@ class Handler(BaseHTTPRequestHandler):
             if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES and ident not in _m.TOURS_ACTIFS:
                 return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS)), "too_many_turns")
         _fond.interrupt_for_user(8)                    # le travail de fond cède la place : son document en cours sera refait plus tard
-        conv = _m.conv_lire(ident) if ident else _m.conv_nouvelle()
+        conv = _m.conv_read(ident) if ident else _m.conv_new()
 
         def abandon():                                            # une demande refusée ne laisse pas une conversation vide dans la liste
             if not ident:
                 try:
-                    _m.conv_supprimer(conv["id"])
+                    _m.conv_delete(conv["id"])
                 except (OSError, ValueError):
                     pass
         depuis = donnees.get("remplacer_depuis")
@@ -1801,8 +1801,8 @@ class Handler(BaseHTTPRequestHandler):
                 abandon()
                 return self._refus_tour(400, "Ce message n'existe plus dans la conversation : recharge-la.", "invalid_request")
         if isinstance(donnees.get("options"), dict):
-            _m.options_ecrire(conv["id"], donnees["options"])                                  # les options affichées par la page deviennent celles de cette conversation (créée au premier message)
-        mode_voulu = _m.options_lire(conv["id"]).get("mode") or (donnees.get("mode") if not isinstance(donnees.get("options"), dict) else None) or _m.reglages()["mode"]
+            _m.options_write(conv["id"], donnees["options"])                                  # les options affichées par la page deviennent celles de cette conversation (créée au premier message)
+        mode_voulu = _m.options_read(conv["id"]).get("mode") or (donnees.get("mode") if not isinstance(donnees.get("options"), dict) else None) or _m.reglages()["mode"]
         if mode_voulu == "mission":                                                            # mode « Mission longue » : ce message est le cahier des charges (ou une consigne), la conversation sert de compte rendu
             mission_en_cours = _mission.find_for_conversation(conv["id"])
             if not (mission_en_cours and mission_en_cours["etat"] != "terminee") and conv["id"] in _m.TOURS_ACTIFS:
@@ -1819,7 +1819,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_turns.active())), "too_many_turns")
         fin_flux = threading.Event()
         try:
-            r = _m.appliquer_options(_m.reglages(), conv["id"])
+            r = _m.apply_options(_m.reglages(), conv["id"])
             for k in ("modele", "reflexion", "mode"):
                 if k in donnees and (k == "modele" or not isinstance(donnees.get("options"), dict)):
                     r[k] = donnees[k]
@@ -1868,7 +1868,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _mission_dans_la_conversation(self, conv, texte, donnees, mission_en_cours, abandon, nouvelle):
         """Mode « Mission longue » : le message lance une mission menée DANS cette conversation, ou, si une mission y est déjà en cours, lui apporte une réponse ou une consigne."""
-        opts = _m.options_lire(conv["id"])
+        opts = _m.options_read(conv["id"])
         extrait = texte if len(texte) <= 160 else texte[:160] + "…"
         if mission_en_cours and mission_en_cours["etat"] != "terminee":
             try:
@@ -1883,14 +1883,14 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 if titre_avant in ("", "Nouvelle conversation"):
                     conv["titre"] = "🎯 " + nom
-                    _m.conv_ecrire(conv)
+                    _m.conv_write(conv)
                 nouvelle_mission = _mission.create(nom, texte, str(donnees.get("travail") or conv.get("travail") or ""), opts.get("mission_duree_h", 8), autonome, conv["id"])
             except ValueError as erreur:
                 if nouvelle:
                     abandon()
                 elif conv.get("titre") != titre_avant:
                     conv["titre"] = titre_avant
-                    _m.conv_ecrire(conv)
+                    _m.conv_write(conv)
                 return self._refus_tour(400, str(erreur), "invalid_request")
             info = (_t("🎯 Mission lancée : Lutin travaille seul, jusqu'à {} h, et tu suis tout ici. Pause ou arrêt avec les boutons au-dessus du champ de saisie.") if autonome else
                     _t("🎯 Mission lancée « à blanc » : Lutin montre ce qu'il ferait sans rien écrire ni lancer. Coche Fichiers auto et Commandes auto pour qu'il agisse vraiment (ça compte dès le tour suivant).")).format(nouvelle_mission["duree_h"])
@@ -1910,7 +1910,7 @@ class Handler(BaseHTTPRequestHandler):
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         r = _m.reglages()
-        conv = _m.conv_lire(ident)                    # hors du « try » : une conversation inconnue est une demande invalide (400), pas une panne (500)
+        conv = _m.conv_read(ident)                    # hors du « try » : une conversation inconnue est une demande invalide (400), pas une panne (500)
         try:
             return self._envoyer(200, {"texte": _m.document_de_reprise(conv, r), "modele": r["modele"]})
         except (OSError, ValueError) as erreur:
@@ -1922,7 +1922,7 @@ class Handler(BaseHTTPRequestHandler):
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         try:
-            conv = _m.conv_lire(ident)
+            conv = _m.conv_read(ident)
         except ValueError:
             return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
         try:

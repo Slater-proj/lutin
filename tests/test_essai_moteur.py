@@ -27,8 +27,8 @@ class Essai(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-essai-"))
         self.ancien = dict(engines.CONTEXT)
         engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
-        self.m = ml.MoteurLlamaCpp()
-        ml.regler("llamacpp", port=port_libre(), variante_installee="cpu")
+        self.m = ml.LlamaCppEngine()
+        ml.configure("llamacpp", port=port_libre(), variante_installee="cpu")
         self.sortie = []
         self.addCleanup(self.fin)
 

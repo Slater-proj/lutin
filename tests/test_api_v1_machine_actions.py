@@ -40,7 +40,7 @@ class MachineActions(unittest.TestCase):
                 kept.clear()
             machines._sauver_reveils()
             machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
-            A.enregistrer_reglages({"machine": self.answering})
+            A.save_settings({"machine": self.answering})
         self.addCleanup(restore)
 
     def pair(self, name="Bureau"):
@@ -52,7 +52,7 @@ class MachineActions(unittest.TestCase):
         paired = self.pair()
         self.assertEqual((sorted(paired), paired["name"], paired["address"]), (M.MACHINE_FIELDS, "Bureau", T.BASE))
         self.assertEqual([m["id"] for m in machines.lire()], [paired["id"]])
-        A.enregistrer_reglages({"machine": paired["id"]})
+        A.save_settings({"machine": paired["id"]})
         status, answer = api("DELETE", "/api/v1/machines/" + paired["id"])
         self.assertEqual((status, answer["machines"], answer["answering"]), (200, [], ""), "the machine that answered is gone: this one answers again")
         self.assertEqual(A.reglages().get("machine"), "")

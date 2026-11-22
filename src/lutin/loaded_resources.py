@@ -357,7 +357,7 @@ def variant_advice(mo, variante):
         from . import config
         from . import llamacpp_engine as ml
         profil = (engines.CONTEXT.get("profil_attendu") or engines.CONTEXT["profil"])()
-        voulue = ml.variante_auto(profil, config.system_info())
+        voulue = ml.auto_variant(profil, config.system_info())
     except Exception:  # noqa: BLE001
         return ""
     if variante in ("", "cpu") and voulue in ("cuda", "vulkan"):
@@ -387,13 +387,13 @@ def loaded_llamacpp():
     if mo is None or not hasattr(mo, "routeur_actif") or mo.externe():
         return []
     from . import llamacpp_engine as ml
-    with ml.SERVEUR["verrou"]:
-        p = ml.SERVEUR["proc"]
+    with ml.SERVER["verrou"]:
+        p = ml.SERVER["proc"]
         tourne = p is not None and p.poll() is None
-        nom, noms = ml.SERVEUR["modele"], ml.SERVEUR["noms"]
+        nom, noms = ml.SERVER["modele"], ml.SERVER["noms"]
     if not tourne:
         return []
-    routeur = nom == ml.ROUTEUR
+    routeur = nom == ml.ROUTER
     place, variante = placement_llamacpp(mo)
     instantane = snapshot_process()
     arbre = descendants(instantane, p.pid)          # le serveur et ses processus fils (routeur : un par modèle)

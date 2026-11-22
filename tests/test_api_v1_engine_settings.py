@@ -22,7 +22,7 @@ class EngineSettings(unittest.TestCase):
     def test_the_settings_are_read_without_the_key(self):
         seen = {"url": "http://127.0.0.1:8080", "cle_definie": True, "variante": "vulkan",
                 "avance": {"routeur": True, "routeur_possible": True, "modeles_max": 2, "n_cpu_moe": 0, "n_cpu_moe_possible": False, "version_epinglee": "b6500"}}
-        with mock.patch.object(llamacpp_engine, "vue_reglages", lambda engine: seen):
+        with mock.patch.object(llamacpp_engine, "settings_view", lambda engine: seen):
             status, answer = V.call("GET", "/api/v1/engines/llamacpp/settings", V.DEVICE)
         self.assertEqual(status, 200, answer)
         self.assertEqual((answer["key_set"], answer["variant"], answer["advanced"]["pinned_version"], answer["advanced"]["models_kept"]), (True, "vulkan", "b6500", 2))
@@ -32,7 +32,7 @@ class EngineSettings(unittest.TestCase):
     def test_a_change_reaches_the_engine_under_its_stored_names(self):
         applied = []
         with mock.patch.object(llamacpp_engine, "apply_settings", lambda engine, data: applied.append((engine.id, data))), \
-                mock.patch.object(llamacpp_engine, "vue_reglages", lambda engine: {}):
+                mock.patch.object(llamacpp_engine, "settings_view", lambda engine: {}):
             self.assertEqual(V.call("PATCH", "/api/v1/engines/llamacpp/settings", V.DEVICE, {"router": True})[0], 403)
             status, answer = V.call("PATCH", "/api/v1/engines/llamacpp/settings", V.OWNER, {"router": True, "models_kept": 3, "pinned_version": "", "key": "secret"})
             self.assertEqual(status, 200, answer)
@@ -47,10 +47,10 @@ class EngineSettings(unittest.TestCase):
     def test_the_engines_folder_changes_only_when_nothing_is_installed_there(self):
         seen = {"actuel": "C:/IA/moteurs", "defaut": "C:/IA/moteurs", "propose": "D:/IA/moteurs", "libre_go": 20.0, "libre_go_propose": 800.0, "source": "defaut", "probleme": "",
                 "docker": False, "montage": "", "modifiable": True, "personnalise": False, "installes": ["llama.cpp"], "sous_dossiers": ["ollama", "llamacpp"]}
-        with mock.patch.object(llamacpp_engine, "vue_dossier_moteurs", lambda: seen):
+        with mock.patch.object(llamacpp_engine, "engines_folder_view", lambda: seen):
             status, answer = V.call("GET", "/api/v1/engines/folder", V.DEVICE)
             self.assertEqual((status, answer["proposed"], answer["installed_here"], answer["source"]), (200, "D:/IA/moteurs", ["llama.cpp"], "default"))
-            with mock.patch.object(llamacpp_engine, "moteurs_installes_par_lutin", lambda: ["llama.cpp"]):
+            with mock.patch.object(llamacpp_engine, "engines_installed_by_lutin", lambda: ["llama.cpp"]):
                 status, answer = V.call("PATCH", "/api/v1/engines/folder", V.OWNER, {"path": "D:/IA/moteurs"})
         self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
         self.assertIn("llama.cpp", answer["error"]["message"])
@@ -116,7 +116,7 @@ class CalibrationAndAdvice(unittest.TestCase):
     def test_the_advice_of_a_small_machine_speaks_v1_names(self):
         advice = [{"cle": "num_ctx", "actuel": 32768, "conseille": 8192, "texte": "Moins de mémoire."}, {"cle": "reflexion", "actuel": True, "conseille": False, "texte": "Plus rapide."}]
         saved = []
-        with mock.patch.object(low_end_mode, "advice", lambda profile, settings: advice), mock.patch.object(A, "enregistrer_reglages", lambda changes: saved.append(changes)):
+        with mock.patch.object(low_end_mode, "advice", lambda profile, settings: advice), mock.patch.object(A, "save_settings", lambda changes: saved.append(changes)):
             status, answer = V.call("GET", "/api/v1/machine/advice", V.DEVICE)
             self.assertEqual([(a["setting"], a["advised"]) for a in answer["advice"]], [("num_ctx", 8192), ("thinking", False)])
             status, answer = V.call("POST", "/api/v1/machine/advice/apply", V.OWNER, {})

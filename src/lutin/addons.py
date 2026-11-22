@@ -173,20 +173,20 @@ def validate_stream(f, m):
 
 # --------------------------------------------------------------------------- état, réglages et secrets
 def read_state():
-    return _m.lire_json(folder_data() / "addons.json", {})
+    return _m.read_json(folder_data() / "addons.json", {})
 
 
 def write_state(etat):
-    _m.ecrire_atomique(folder_data() / "addons.json", json.dumps(etat, ensure_ascii=False, indent=1))
+    _m.write_atomic(folder_data() / "addons.json", json.dumps(etat, ensure_ascii=False, indent=1))
 
 
 def secrets_read():
-    return _m.lire_json(folder_data() / "secrets.json", {})
+    return _m.read_json(folder_data() / "secrets.json", {})
 
 
 def secrets_write(secrets):
     f = folder_data() / "secrets.json"
-    _m.ecrire_atomique(f, json.dumps(secrets, ensure_ascii=False, indent=1))
+    _m.write_atomic(f, json.dumps(secrets, ensure_ascii=False, indent=1))
     try:
         os.chmod(str(f), 0o600)                      # lisible par toi seul (sans effet sous Windows, où le dossier de l'utilisateur l'est déjà)
     except OSError:
@@ -543,7 +543,7 @@ def apply_stream(ident, nouveau):
         (histo / ("flux-%d.json" % int(time.time() * 1000))).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
         for ancien in sorted(histo.glob("flux-*.json"))[:-HISTORY_STREAM]:
             ancien.unlink(missing_ok=True)
-    _m.ecrire_atomique(f, json.dumps(nouveau, ensure_ascii=False, indent=1))
+    _m.write_atomic(f, json.dumps(nouveau, ensure_ascii=False, indent=1))
     return describe(ident)
 
 

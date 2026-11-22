@@ -36,10 +36,10 @@ class Backup(unittest.TestCase):
         self.assertEqual(answer["data"], str(A.DONNEES))
 
     def test_a_backup_is_downloaded_then_restored(self):
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         c["titre"] = "Avant la sauvegarde"
-        A.conv_ecrire(c)
-        self.addCleanup(lambda: A.conv_supprimer(c["id"]))
+        A.conv_write(c)
+        self.addCleanup(lambda: A.conv_delete(c["id"]))
         status, headers, archive = raw("GET", "/api/v1/backup")
         self.assertEqual(status, 200, archive[:200])
         self.assertIn("attachment", headers.get("Content-Disposition", ""))
@@ -47,12 +47,12 @@ class Backup(unittest.TestCase):
             self.assertIn("donnees/conversations/%s.json" % c["id"], z.namelist(), "the conversations of the store are in the archive")
             self.assertEqual(json.loads(z.read("donnees/conversations/%s.json" % c["id"]))["titre"], "Avant la sauvegarde")
         c["titre"] = "Changée après"
-        A.conv_ecrire(c)
+        A.conv_write(c)
         status, _, body = raw("POST", "/api/v1/backup/restore", archive)
         answer = json.loads(body)
         self.assertEqual((status, answer["restart_needed"]), (200, True), answer)
         self.assertGreater(answer["files"], 0)
-        self.assertEqual(A.conv_lire(c["id"])["titre"], "Avant la sauvegarde", "the conversation is back as it was in the archive")
+        self.assertEqual(A.conv_read(c["id"])["titre"], "Avant la sauvegarde", "the conversation is back as it was in the archive")
         self.assertTrue(answer["kept_before"], "the state before the restore is kept in a zip of its own")
 
     def test_downloading_and_restoring_need_the_right_to_configure(self):

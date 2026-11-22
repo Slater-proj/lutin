@@ -80,7 +80,7 @@ def _valid(rule, effects=EFFECTS):
 
 
 def user_rules():
-    stored = _storage.lire_json(_path(), [])
+    stored = _storage.read_json(_path(), [])
     return [rule for rule in stored if _valid(rule) and rule.get("id")] if isinstance(stored, list) else []
 
 
@@ -139,7 +139,7 @@ def add(effect, command):
         if len(rules) >= MAX_RULES:
             raise ValueError(_t("Déjà {} règles : supprime-en d'abord.").format(MAX_RULES))
         rule = {"id": secrets.token_hex(4), "effect": effect, "command": command, "created": int(time.time())}
-        _storage.ecrire_atomique(_path(), json.dumps(rules + [rule], ensure_ascii=False, indent=1))
+        _storage.write_atomic(_path(), json.dumps(rules + [rule], ensure_ascii=False, indent=1))
         return rule
 
 
@@ -149,7 +149,7 @@ def remove(identifier):
         kept = [rule for rule in rules if rule["id"] != identifier]
         if len(kept) == len(rules):
             return False
-        _storage.ecrire_atomique(_path(), json.dumps(kept, ensure_ascii=False, indent=1))
+        _storage.write_atomic(_path(), json.dumps(kept, ensure_ascii=False, indent=1))
         return True
 
 

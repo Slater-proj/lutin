@@ -20,10 +20,10 @@ def read_utf8(f):
 def restore_file(dossier, chemin, e):
     """Remet un fichier dans l'état d'avant la demande. Renvoie (réussi, raison de l'échec)."""
     try:
-        f = _m.chemin_sur(chemin, ecriture=True)
+        f = _m.safe_path(chemin, ecriture=True)
     except _m.ErreurOutil:
         return False, "chemin refusé"
-    if e.get("apres") and _m.sha_fichier(f) != e["apres"]:
+    if e.get("apres") and _m.file_sha(f) != e["apres"]:
         return False, "modifié depuis"
     if e.get("avant"):
         source = dossier / chemin
@@ -39,12 +39,12 @@ def restore_file(dossier, chemin, e):
 def undoable_manifest(ident):
     if ident in _m.TOURS_ACTIFS:
         raise ValueError("Une réponse est en cours dans cette conversation : arrête-la d'abord.")
-    conv = _m.conv_lire(ident)
+    conv = _m.conv_read(ident)
     info = conv.get("annulable")
     if not info:
         raise ValueError("Aucune modification de fichier à annuler dans cette conversation.")
     dossier = _m.DONNEES / "sauvegardes" / info["id"]
-    manifeste = _m.lire_json(dossier / "_tour.json", None)
+    manifeste = _m.read_json(dossier / "_tour.json", None)
     if not manifeste:
         raise ValueError("Les sauvegardes de cette demande ont disparu (purge après 60 jours ?).")
     return conv, dossier, manifeste
@@ -52,17 +52,17 @@ def undoable_manifest(ident):
 
 def turn_review(ident):
     """Pour chaque fichier touché par la dernière demande : état, lignes ajoutées et retirées, différences."""
-    conv = _m.conv_lire(ident)
+    conv = _m.conv_read(ident)
     if not conv.get("annulable"):
         return {"fichiers": []}
     dossier = _m.DONNEES / "sauvegardes" / conv["annulable"]["id"]
-    manifeste = _m.lire_json(dossier / "_tour.json", None) or {"fichiers": {}}
+    manifeste = _m.read_json(dossier / "_tour.json", None) or {"fichiers": {}}
     sortie = []
     for chemin, e in manifeste["fichiers"].items():
         if e.get("annule"):
             continue
         try:
-            f = _m.chemin_sur(chemin)
+            f = _m.safe_path(chemin)
         except _m.ErreurOutil:
             continue
         avant = read_utf8(dossier / chemin) if e.get("avant") else ""
@@ -71,7 +71,7 @@ def turn_review(ident):
         diff = "" if binaire else _m.difference(avant, apres, chemin)
         sortie.append({"chemin": chemin, "etat": "créé" if not e.get("avant") else ("supprimé" if not f.is_file() else "modifié"), "binaire": binaire, "diff": diff,
                        "plus": sum(1 for l in diff.splitlines() if l.startswith("+") and not l.startswith("+++")), "moins": sum(1 for l in diff.splitlines() if l.startswith("-") and not l.startswith("---")),
-                       "modifie_depuis": bool(e.get("apres")) and _m.sha_fichier(f) != e["apres"]})
+                       "modifie_depuis": bool(e.get("apres")) and _m.file_sha(f) != e["apres"]})
     return {"fichiers": sortie}
 
 
@@ -93,14 +93,14 @@ def undo_turn(ident, seulement=None):
         raise ValueError(_t("Pas rétabli : {}").format(ignores[0] if ignores else _t("{} ne fait pas partie de la dernière demande.").format(seulement)))
     restants = [c for c, e in manifeste["fichiers"].items() if not e.get("annule")]
     manifeste["annule"] = not restants
-    _m.ecrire_atomique(dossier / "_tour.json", json.dumps(manifeste, ensure_ascii=False, indent=1))
+    _m.write_atomic(dossier / "_tour.json", json.dumps(manifeste, ensure_ascii=False, indent=1))
     if restants and seulement is not None:
         conv["annulable"]["fichiers"] = sorted(restants)
     else:
         conv.pop("annulable", None)
     conv["messages"].append({"role": "user", "content": "[Note automatique : l'utilisateur a annulé des modifications de fichiers de la demande précédente. Rétablis : {}.{} Ne considère plus ces modifications comme faites.]".format(
         ", ".join(retablis) or "aucun", (" Non rétablis : " + ", ".join(ignores) + ".") if ignores else "")})
-    _m.conv_ecrire(conv)
+    _m.conv_write(conv)
     _m.journaliser("Demande annulée (conversation {}) : {} rétabli(s), {} ignoré(s).".format(ident, len(retablis), len(ignores)))
     return {"ok": True, "retablis": retablis, "ignores": ignores}
 
@@ -139,7 +139,7 @@ def git_paths(fichiers):
     propres = []
     for x in fichiers:
         try:
-            p = _m.chemin_sur(str(x))
+            p = _m.safe_path(str(x))
         except _m.ErreurOutil as e:
             raise ValueError(str(e))
         propres.append(_m.rel(p) if p.exists() else str(x).replace("\\", "/").strip("/"))
@@ -161,7 +161,7 @@ def git_message_of(fichiers, r=None):
             stat, corps = "", _m.git(["diff", "--cached", "-U1", "--"] + suivis)[1]
         diff = stat + "\n" + corps
     for n in nouveaux[:6]:
-        p = _m.chemin_sur(n)
+        p = _m.safe_path(n)
         extrait = "\n".join((read_utf8(p) or "(fichier non texte)").splitlines()[:40]) if p.is_file() else "(dossier)"
         diff += "\n\nNouveau fichier {} :\n{}".format(n, extrait)
     if not diff.strip():
@@ -210,9 +210,9 @@ def git_commit(message, fichiers):
 
 
 def pin_conversation(ident, epingle):
-    c = _m.conv_lire(ident)
+    c = _m.conv_read(ident)
     c["epingle"] = bool(epingle)
-    _m.conv_ecrire_telle_quelle(c)          # sans toucher à la date « maj » : épingler ne remonte pas la conversation
+    _m.conv_write_as_is(c)          # sans toucher à la date « maj » : épingler ne remonte pas la conversation
     return {"ok": True, "epingle": c["epingle"]}
 
 
@@ -223,7 +223,7 @@ def pin_message(ident, index, epingle):
     """Marque un message comme important : il n'est jamais retiré du contexte du modèle (ni par la réduction du contexte, ni par le résumé), dans la limite d'un quart de la fenêtre."""
     if ident in _m.TOURS_ACTIFS:
         raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
-    c = _m.conv_lire(ident)
+    c = _m.conv_read(ident)
     try:
         i = int(index)
     except (TypeError, ValueError):
@@ -237,7 +237,7 @@ def pin_message(ident, index, epingle):
         msgs[i]["epingle"] = True
     else:
         msgs[i].pop("epingle", None)
-    _m.conv_ecrire_telle_quelle(c)          # sans toucher à la date « maj »
+    _m.conv_write_as_is(c)          # sans toucher à la date « maj »
     return {"ok": True, "epingles": sum(1 for m in msgs if m.get("epingle"))}
 
 
@@ -247,7 +247,7 @@ def delete_media(ident, media_id):
     from . import addons, images
     if ident in _m.TOURS_ACTIFS:
         raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
-    c = _m.conv_lire(ident)
+    c = _m.conv_read(ident)
     trouve = next((m for m in c["messages"] if media_id in (m.get("medias") or [])), None)
     if trouve is None:
         raise ValueError(_t("Cette image n'est plus dans la conversation."))
@@ -257,7 +257,7 @@ def delete_media(ident, media_id):
     if not trouve["medias"]:
         trouve.pop("medias", None)
         trouve.pop("medias_fichiers", None)
-    _m.conv_ecrire_telle_quelle(c)
+    _m.conv_write_as_is(c)
     supprime = False
     dossier = addons.settings("comfyui").get("dossier") or ""
     if chemin and dossier:
@@ -310,11 +310,11 @@ def _call_tool(nom, args, ctx):
         from . import mcp
         return mcp.call(nom, args, ctx)
     if nom == "lister":
-        return _m.outil_lister(args.get("dossier", "."))
+        return _m.list_tool(args.get("dossier", "."))
     if nom == "lire":
-        return _m.outil_lire(args.get("chemin"), args.get("debut"), args.get("fin"), ctx.get("plafond_lecture"))
+        return _m.read_tool(args.get("chemin"), args.get("debut"), args.get("fin"), ctx.get("plafond_lecture"))
     if nom == "chercher":
-        return _m.outil_chercher(args.get("motif", ""), args.get("dossier", "."), args.get("contexte", 0), args.get("fichiers", ""))
+        return _m.search_tool(args.get("motif", ""), args.get("dossier", "."), args.get("contexte", 0), args.get("fichiers", ""))
     if nom == "trouver":
         from . import find_tools
         return find_tools.tool_find(args.get("motif", ""), args.get("dossier", "."))
@@ -322,21 +322,21 @@ def _call_tool(nom, args, ctx):
         from . import find_tools
         return find_tools.tool_calculate(args.get("expression", ""))
     if nom == "symboles":
-        return _m.outil_symboles(args.get("nom", ""), args.get("dossier", "."))
+        return _m.symbols_tool(args.get("nom", ""), args.get("dossier", "."))
     if nom == "lire_plusieurs":
-        return _m.outil_lire_plusieurs(args.get("fichiers"), ctx.get("plafond_lecture"))
+        return _m.read_many_tool(args.get("fichiers"), ctx.get("plafond_lecture"))
     if nom == "rappeler":
         return _m.recall_tool(args.get("requete", ""), args.get("nombre"), (ctx.get("conv") or {}).get("id", ""), bool(args.get("ici")))
     if nom == "modifier":
-        return _m.outil_modifier(args.get("chemin"), str(args.get("ancien", "")), str(args.get("nouveau", "")), ctx)
+        return _m.edit_tool(args.get("chemin"), str(args.get("ancien", "")), str(args.get("nouveau", "")), ctx)
     if nom == "modifier_plusieurs":
-        return _m.outil_modifier_plusieurs(args.get("chemin"), args.get("remplacements"), ctx)
+        return _m.edit_many_tool(args.get("chemin"), args.get("remplacements"), ctx)
     if nom == "ecrire":
-        return _m.outil_ecrire(args.get("chemin"), str(args.get("contenu", "")), ctx)
+        return _m.write_tool(args.get("chemin"), str(args.get("contenu", "")), ctx)
     if nom == "executer":
-        return _m.outil_executer(args.get("commande", ""), ctx, args.get("shell", "cmd"))
+        return _m.run_tool(args.get("commande", ""), ctx, args.get("shell", "cmd"))
     if nom == "memoriser":
-        return _m.noter(args.get("note", ""))
+        return _m.add_note(args.get("note", ""))
     if nom == "web_chercher":
         return _m.tool_web_search(args.get("requete", ""), args.get("nombre"), ctx, args.get("lire"), args.get("periode"), args.get("site"), bool(args.get("actualites")))
     if nom == "web_lire":
@@ -347,7 +347,7 @@ def _call_tool(nom, args, ctx):
         from . import page_preview
         return page_preview.tool_preview(args.get("chemin"), args.get("largeur"), args.get("hauteur"), ctx)
     if nom == "creer_document":
-        return _m.outil_document(args.get("chemin"), str(args.get("contenu", "")), args.get("titre", ""), ctx)
+        return _m.document_tool(args.get("chemin"), str(args.get("contenu", "")), args.get("titre", ""), ctx)
     if nom in ("mission_terminer", "mission_bloquee"):
         from . import mission
         if not ctx.get("mission"):
@@ -371,9 +371,9 @@ def _call_tool(nom, args, ctx):
         from . import addons_acestep
         return addons_acestep.acestep_tool(nom, args, ctx)
     if nom == "etat_outil":
-        return _m.outil_etat()
+        return _m.state_tool()
     if nom == "installer_module":
-        return _m.outil_installer_module(args.get("module", ""), ctx)
+        return _m.install_module_tool(args.get("module", ""), ctx)
     raise _m.ErreurOutil("Outil inconnu : " + str(nom))
 
 

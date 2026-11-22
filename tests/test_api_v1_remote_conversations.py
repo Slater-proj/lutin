@@ -52,7 +52,7 @@ class RemoteConversations(unittest.TestCase):
         machines.noeud_activer(True)
         self.host = machines.ajouter(T.BASE, machines.noeud_nouveau_code()["code"], "Bureau")
         machines.noeud_autoriser_piloter(True)
-        self.conversation = A.conv_nouvelle()["id"]
+        self.conversation = A.conv_new()["id"]
         self.base = "/api/v1/machines/{}/conversations/{}".format(self.host["id"], self.conversation)
 
         def restore():
@@ -65,20 +65,20 @@ class RemoteConversations(unittest.TestCase):
                 kept.clear()
             machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
             try:
-                A.conv_supprimer(self.conversation)
+                A.conv_delete(self.conversation)
             except (OSError, ValueError):
                 pass
         self.addCleanup(restore)
 
     def test_the_conversations_of_the_host_are_listed_under_its_name(self):
-        A.conv_renommer(self.conversation, "Rapport du bureau")
+        A.conv_rename(self.conversation, "Rapport du bureau")
         listed = until(lambda: [entry for entry in api("GET", "/api/v1/machines/conversations")[1]["conversations"] if entry["id"] == self.conversation], 20)
         self.assertEqual(len(listed), 1, "the host lists it once « lead » is granted")
         self.assertEqual((sorted(listed[0]), listed[0]["machine"], listed[0]["machine_name"], listed[0]["title"]),
                          (["id", "machine", "machine_name", "message_count", "title", "updated_at"], self.host["id"], "Bureau", "Rapport du bureau"))
         before = A.reglages().get("cluster")
-        A.enregistrer_reglages({"cluster": False})
-        self.addCleanup(lambda: A.enregistrer_reglages({"cluster": before}))
+        A.save_settings({"cluster": False})
+        self.addCleanup(lambda: A.save_settings({"cluster": before}))
         self.assertEqual(api("GET", "/api/v1/machines/conversations")[1]["conversations"], [], "the multi-machine mode is off")
 
     def test_a_conversation_is_read_in_the_shape_of_a_local_one(self):
@@ -97,7 +97,7 @@ class RemoteConversations(unittest.TestCase):
         machines.noeud_autoriser_piloter(True)
         for body in ({}, {"message": ""}, {"message": 1}, {"message": "Hi", "model": "x"}):
             self.assertEqual(stream(self.base + "/turns", body, [])[1]["error"]["code"], "invalid_request", body)
-        self.assertEqual(A.conv_lire(self.conversation)["messages"], [], "nothing reached the host")
+        self.assertEqual(A.conv_read(self.conversation)["messages"], [], "nothing reached the host")
         for body in ({"approved": "yes"}, {"approved": True, "remember": "always"}):
             self.assertEqual(api("POST", "/api/v1/machines/{}/approvals/abc".format(self.host["id"]), body)[1]["error"]["code"], "invalid_request", body)
         self.assertEqual(api("POST", self.base + "/memory-choice", {"choice": "summary"})[1]["error"]["code"], "conflict", "no question waits")
@@ -142,11 +142,11 @@ class RemoteConversations(unittest.TestCase):
     def test_renaming_pinning_and_deleting_happen_on_the_host(self):
         status, changed = api("PATCH", self.base, {"title": "Notes du bureau", "pinned": True})
         self.assertEqual((status, changed["title"], changed["pinned"], sorted(changed)), (200, "Notes du bureau", True, CONVERSATION_FIELDS))
-        self.assertEqual(A.conv_lire(self.conversation)["titre"], "Notes du bureau")
+        self.assertEqual(A.conv_read(self.conversation)["titre"], "Notes du bureau")
         for body in ({}, {"title": ""}, {"pinned": "yes"}, {"title": "x", "colour": "red"}):
             self.assertEqual(api("PATCH", self.base, body)[1]["error"]["code"], "invalid_request", body)
         self.assertEqual(api("DELETE", self.base), (200, {"deleted": True}))
-        self.assertRaises(ValueError, A.conv_lire, self.conversation)
+        self.assertRaises(ValueError, A.conv_read, self.conversation)
 
     def test_images_and_documents_are_kept_by_the_host(self):
         status, _, body = raw("POST", "/api/v1/machines/{}/images".format(self.host["id"]), PNG)
@@ -167,7 +167,7 @@ class RemoteConversations(unittest.TestCase):
         status, events = stream(self.base + "/turns", {"message": "Look", "images": [image["id"]], "attachments": [{"id": document["id"], "name": document["name"]}]},
                                 [[{"content": "Seen."}]])
         self.assertEqual((status, events[-1]["type"]), (200, "end"))
-        sent = [m for m in A.conv_lire(self.conversation)["messages"] if m["role"] == "user"][-1]
+        sent = [m for m in A.conv_read(self.conversation)["messages"] if m["role"] == "user"][-1]
         self.assertEqual((sent.get("images"), [piece["id"] for piece in sent.get("pieces", [])]), ([image["id"]], [document["id"]]), "the host keeps what was sent")
 
     def test_a_file_a_tool_produced_on_the_host_is_downloaded_from_it(self):
@@ -176,9 +176,9 @@ class RemoteConversations(unittest.TestCase):
         report.write_bytes(b"%PDF-1.4 host")
         self.addCleanup(report.unlink)
         entry = produced_files.entry(report)
-        stored = A.conv_lire(self.conversation)
+        stored = A.conv_read(self.conversation)
         stored["messages"].append({"role": "tool", "tool_name": "ecrire_fichier", "content": "Written.", "fichiers_joints": [entry]})
-        A.conv_ecrire_telle_quelle(stored)
+        A.conv_write_as_is(stored)
         status, headers, data = raw("GET", "{}/files/{}?name={}".format(self.base, entry["id"], "rapport%20du%20bureau.pdf"), None)
         self.assertEqual((status, data), (200, b"%PDF-1.4 host"))
         self.assertEqual(headers.get("Content-Disposition"), "attachment; filename*=UTF-8''rapport%20du%20bureau.pdf")

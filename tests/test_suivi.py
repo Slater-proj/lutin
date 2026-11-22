@@ -129,26 +129,26 @@ class PartDuContexte(unittest.TestCase):
     """La part de la fenêtre de contexte que la fiche peut prendre se règle (5 à 25 %, 10 par défaut)."""
 
     def tearDown(self):
-        _m.enregistrer_reglages({"fiche_part": 10})
+        _m.save_settings({"fiche_part": 10})
         progress_sheet.delete(ID)
 
     def test_le_plafond_suit_le_reglage_et_reste_borne(self):
         self.assertEqual(_m.reglages()["fiche_part"], 10)
         self.assertEqual(progress_sheet.budget_caracteres(16384), int(16384 * 0.10 * 3))
-        _m.enregistrer_reglages({"fiche_part": 25})
+        _m.save_settings({"fiche_part": 25})
         self.assertEqual(progress_sheet.budget_caracteres(16384), int(16384 * 0.25 * 3), "25 % : la fiche peut garder plus de détails")
-        _m.enregistrer_reglages({"fiche_part": 400})
+        _m.save_settings({"fiche_part": 400})
         self.assertEqual(_m.reglages()["fiche_part"], 25, "borné à 25 %")
-        _m.enregistrer_reglages({"fiche_part": 1})
+        _m.save_settings({"fiche_part": 1})
         self.assertEqual(_m.reglages()["fiche_part"], 5, "borné à 5 %")
-        _m.enregistrer_reglages({"fiche_part": "n'importe quoi"})
+        _m.save_settings({"fiche_part": "n'importe quoi"})
         self.assertEqual(_m.reglages()["fiche_part"], 10, "valeur absurde : retour à 10 %")
 
     def test_la_fiche_garde_plus_de_lignes_avec_un_plafond_plus_haut_et_l_avertissement_suit(self):
         for i in range(25):
             progress_sheet.modify(ID, "decisions", "Décision numéro %d : " % i + "détail " * 25)
         petit = progress_sheet.text_for_model(ID, 4096)
-        _m.enregistrer_reglages({"fiche_part": 25})
+        _m.save_settings({"fiche_part": 25})
         grand = progress_sheet.text_for_model(ID, 4096)
         self.assertGreater(len(grand), len(petit), "plus de place : plus de la fiche passe au modèle")
         self.assertLessEqual(len(grand), int(4096 * 0.25 * 3) + 400)
@@ -314,12 +314,12 @@ class RappelDuFil(unittest.TestCase):
 
     def setUp(self):
         self.ident = "f1e2d3c4"
-        self.addCleanup(lambda: _m.conv_chemin(self.ident).unlink(missing_ok=True))
+        self.addCleanup(lambda: _m.conv_path(self.ident).unlink(missing_ok=True))
         self.addCleanup(lambda: __import__("lutin.recall", fromlist=["FIL"]).THREAD.clear())
 
     def conv(self, messages):
         c = {"id": self.ident, "titre": "t", "messages": messages}
-        _m.conv_ecrire(dict(c, date="2026-01-01T00:00:00.000", maj="2026-01-01T00:00:00.000", resume="", travail="principal", taches=[]))
+        _m.conv_write(dict(c, date="2026-01-01T00:00:00.000", maj="2026-01-01T00:00:00.000", resume="", travail="principal", taches=[]))
         return c
 
     def test_retrouve_un_detail_ancien_et_ignore_ce_qui_est_deja_sous_les_yeux(self):

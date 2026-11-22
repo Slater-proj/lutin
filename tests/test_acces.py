@@ -189,12 +189,12 @@ class Documents(Base):
             self.assertEqual((r["passages"][0]["source"], r["passages"][0]["titre"]), ("docs/panne.pdf", "Page 1"), "la citation donne la page")
             self.assertEqual(requete("GET", "/api/documents-chercher?q=")[0], 400)
             self.assertEqual(requete("GET", "/api/documents-chercher?q=le+la")[0], 400)
-            lu = A.outil_lire("docs/panne.pdf")
+            lu = A.read_tool("docs/panne.pdf")
             self.assertIn("Deuxième ligne : procédure", lu)
             self.assertIn("## Page 1", lu)
             self.assertIn("Page 1", A.recall_tool("déploiement"))
             with self.assertRaisesRegex(A.ErreurOutil, "illisible"):
-                A.outil_lire("docs/casse.docx")
+                A.read_tool("docs/casse.docx")
             self.assertTrue(list((A.DONNEES / "cache-documents").glob("*.json")), "le texte extrait est gardé : pas de nouvelle lecture au prochain démarrage")
         finally:
             for n in ("panne.pdf", "guide.docx", "casse.docx"):
@@ -335,7 +335,7 @@ class Planification(Base):
             conv["messages"].append({"role": "user", "content": texte})
             if reponse:
                 conv["messages"].append({"role": "assistant", "content": reponse})
-            A.conv_ecrire(conv)
+            A.conv_write(conv)
             for e in evenements:
                 emit(e)
         return tour
@@ -354,30 +354,30 @@ class Planification(Base):
 
     def test_une_tache_garde_une_seule_conversation(self):
         t = self.p.add("Heure", "donne-moi l'heure", "19:00", [0, 1, 2, 3, 4, 5, 6])
-        avant = len(A.conv_liste())
+        avant = len(A.conv_list())
         with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
             premiere = self.p.execute(t["id"])
             seconde = self.p.execute(t["id"])
         self.assertEqual(premiere, seconde, "chaque exécution continue la même conversation")
-        self.assertEqual(len(A.conv_liste()), avant + 1)
-        messages = A.conv_lire(premiere)["messages"]
+        self.assertEqual(len(A.conv_list()), avant + 1)
+        messages = A.conv_read(premiere)["messages"]
         self.assertEqual([m["role"] for m in messages], ["user", "assistant", "user", "assistant"])
 
     def test_une_conversation_supprimee_est_recreee(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour()):
             premiere = self.p.execute(t["id"])
-            A.conv_supprimer(premiere)
+            A.conv_delete(premiere)
             seconde = self.p.execute(t["id"])
         self.assertNotEqual(premiere, seconde)
-        self.assertEqual(A.conv_lire(seconde)["titre"], "⏰ Heure")
+        self.assertEqual(A.conv_read(seconde)["titre"], "⏰ Heure")
 
     def test_un_moteur_muet_n_est_jamais_un_rien_fait_silencieux(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="")):
             ident = self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
-        dernier = A.conv_lire(ident)["messages"][-1]
+        dernier = A.conv_read(ident)["messages"][-1]
         self.assertEqual(dernier["role"], "assistant")
         self.assertTrue(dernier["content"].startswith("⚠"), "le problème est écrit dans la conversation")
 
@@ -386,7 +386,7 @@ class Planification(Base):
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="", evenements=[{"type": "erreur", "texte": "Ollama ne répond pas"}])):
             ident = self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
-        self.assertIn("Ollama ne répond pas", A.conv_lire(ident)["messages"][-1]["content"])
+        self.assertIn("Ollama ne répond pas", A.conv_read(ident)["messages"][-1]["content"])
 
     def test_le_resultat_part_sur_le_canal_associe(self):
         from lutin import notifications

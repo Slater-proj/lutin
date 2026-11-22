@@ -38,7 +38,7 @@ def path():
 
 
 def read():
-    e = _m.lire_json(path(), {})
+    e = _m.read_json(path(), {})
     for cle, defaut in (("autorises", []), ("offset", 0), ("code", ""), ("echecs", 0), ("brouillons", []), ("convs", {})):
         e.setdefault(cle, defaut)
     return e
@@ -46,7 +46,7 @@ def read():
 
 def write(e):
     path().parent.mkdir(parents=True, exist_ok=True)
-    _m.ecrire_atomique(path(), json.dumps(e, ensure_ascii=False, indent=1))
+    _m.write_atomic(path(), json.dumps(e, ensure_ascii=False, indent=1))
 
 
 def new_code():
@@ -98,9 +98,9 @@ def reply_model(cle, titre, demande, proprietaire, consigne=""):
     e = read()
     ident = e["convs"].get(cle)
     try:
-        conv = _m.conv_lire(ident) if ident else _m.conv_nouvelle()
+        conv = _m.conv_read(ident) if ident else _m.conv_new()
     except (ValueError, OSError):
-        conv = _m.conv_nouvelle()
+        conv = _m.conv_new()
     conv["titre"] = "✈ Telegram — " + titre
     r = _m.reglages()
     if not proprietaire:
@@ -120,7 +120,7 @@ def reply_model(cle, titre, demande, proprietaire, consigne=""):
         e = read()
         e["convs"][cle] = conv["id"]
         write(e)
-    conv = _m.conv_lire(conv["id"])
+    conv = _m.conv_read(conv["id"])
     reponse = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and (m.get("content") or "").strip()), "")
     return reponse.strip() or (erreurs[0] if erreurs else None)
 

@@ -21,7 +21,7 @@ PAR_DEFAUT = {"outils_desactives": [], "outil_delai_commande_s": 240, "outil_sor
 
 class Outils(unittest.TestCase):
     def tearDown(self):
-        A.enregistrer_reglages(PAR_DEFAUT)
+        A.save_settings(PAR_DEFAUT)
 
     def test_les_valeurs_par_defaut_sont_celles_d_avant(self):
         r = A.reglages()
@@ -39,30 +39,30 @@ class Outils(unittest.TestCase):
     def test_une_commande_dangereuse_est_refusee_avec_une_explication(self):
         for mauvaise in ("rm -rf x", "del *.txt", "curl http://exemple.org", "git status && del x", "cat /etc/passwd", "type C:\secret.txt", "python -c \"x\"", "pip install x", "bash -c x", "git status | more", "echo $(id)", "pytest ../x"):
             with self.assertRaises(ValueError, msg=mauvaise):
-                A.enregistrer_reglages({"commandes_sans_accord": [mauvaise]})
+                A.save_settings({"commandes_sans_accord": [mauvaise]})
         with self.assertRaises(ValueError):
-            A.enregistrer_reglages({"outils_desactives": ["suivi"]})
+            A.save_settings({"outils_desactives": ["suivi"]})
         with self.assertRaises(ValueError):
-            A.enregistrer_reglages({"dossiers_ignores_en_plus": ["a/b"]})
+            A.save_settings({"dossiers_ignores_en_plus": ["a/b"]})
 
     def test_une_commande_sure_passe_sans_accord_seulement_nue_ou_avec_des_arguments_simples(self):
-        A.enregistrer_reglages({"commandes_sans_accord": ["pytest -q", "git fetch"]})
+        A.save_settings({"commandes_sans_accord": ["pytest -q", "git fetch"]})
         A.reglages()
-        self.assertTrue(A.commande_lecture_sure("git fetch"))
-        self.assertTrue(A.commande_lecture_sure("git fetch origin"))
-        self.assertTrue(A.commande_lecture_sure("pytest -q tests"))
-        self.assertFalse(A.commande_lecture_sure("pytest -q && del x"))
-        self.assertFalse(A.commande_lecture_sure("git fetch ../autre"))
-        self.assertFalse(A.commande_lecture_sure("pytestx"))
-        self.assertTrue(A.commande_lecture_sure("git status"), "les lectures d'origine restent")
+        self.assertTrue(A.safe_read_command("git fetch"))
+        self.assertTrue(A.safe_read_command("git fetch origin"))
+        self.assertTrue(A.safe_read_command("pytest -q tests"))
+        self.assertFalse(A.safe_read_command("pytest -q && del x"))
+        self.assertFalse(A.safe_read_command("git fetch ../autre"))
+        self.assertFalse(A.safe_read_command("pytestx"))
+        self.assertTrue(A.safe_read_command("git status"), "les lectures d'origine restent")
 
     def test_les_limites_sont_appliquees_et_les_dossiers_ignores_ajoutes(self):
-        A.enregistrer_reglages({"outil_delai_commande_s": 600, "outil_sortie_max": 20000, "outil_lecture_max": 15000, "outil_chercher_delai_s": 60, "dossiers_ignores_en_plus": ["archives"]})
+        A.save_settings({"outil_delai_commande_s": 600, "outil_sortie_max": 20000, "outil_lecture_max": 15000, "outil_chercher_delai_s": 60, "dossiers_ignores_en_plus": ["archives"]})
         A.reglages()
         self.assertEqual((A.DELAI_COMMANDE_S, A.SORTIE_MAX, A.LECTURE_MAX, A.CHERCHER_DELAI), (600, 20000, 15000, 60))
         self.assertIn("archives", A.DOSSIERS_IGNORES)
         self.assertIn("node_modules", A.DOSSIERS_IGNORES)
-        A.enregistrer_reglages({"dossiers_ignores_en_plus": []})
+        A.save_settings({"dossiers_ignores_en_plus": []})
         A.reglages()
         self.assertNotIn("archives", A.DOSSIERS_IGNORES)
 
@@ -71,7 +71,7 @@ class Outils(unittest.TestCase):
         noms = lambda r: {t["function"]["name"] for t in agent.outils_du_mode(r)}  # noqa: E731
         base = dict(A.reglages(), mode="polyvalent")
         self.assertIn("executer", noms(base))
-        A.enregistrer_reglages({"outils_desactives": ["executer", "web_lire"]})
+        A.save_settings({"outils_desactives": ["executer", "web_lire"]})
         coupe = dict(A.reglages(), mode="polyvalent")
         self.assertNotIn("executer", noms(coupe))
         self.assertNotIn("web_lire", noms(coupe))

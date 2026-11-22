@@ -12,12 +12,12 @@ class Search(unittest.TestCase):
     def setUp(self):
         self.ids = []
         for title, text in (("Recette de cuisine", "La pâte brisée repose une heure au frais."), ("Réglages du modèle", "Baisse la température à 0,3.")):
-            c = A.conv_nouvelle()
+            c = A.conv_new()
             c["titre"] = title
             c["messages"] = [{"role": "user", "content": text}]
-            A.conv_ecrire(c)
+            A.conv_write(c)
             self.ids.append(c["id"])
-        self.addCleanup(lambda: [A.conv_supprimer(i) for i in self.ids])
+        self.addCleanup(lambda: [A.conv_delete(i) for i in self.ids])
 
     def search(self, words):
         return api("GET", "/api/v1/conversations?q=" + urllib.parse.quote(words))

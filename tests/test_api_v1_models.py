@@ -19,7 +19,7 @@ class Models(unittest.TestCase):
         def restore():
             T.INSTALLES[:] = installed
             A.PULLS.clear()
-            A.enregistrer_reglages({"modele": model})
+            A.save_settings({"modele": model})
         self.addCleanup(restore)
 
     def test_the_list_gives_what_the_model_selector_needs(self):
@@ -65,7 +65,7 @@ class Models(unittest.TestCase):
 
     def test_deleting_the_model_in_use_switches_to_another(self):
         T.INSTALLES[:] = ["qwen3.8:27b", "other:7b"]
-        A.enregistrer_reglages({"modele": "qwen3.8:27b"})
+        A.save_settings({"modele": "qwen3.8:27b"})
         self.assertEqual(api("DELETE", "/api/v1/models/qwen3.8:27b"), (200, {"deleted": True, "current": "other:7b"}))
         self.assertEqual([model["name"] for model in api("GET", "/api/v1/models")[1]["models"]], ["other:7b"])
         self.assertEqual(api("DELETE", "/api/v1/models/other%3A7b"), (200, {"deleted": True, "current": "other:7b"}), "the last one: nothing to switch to")

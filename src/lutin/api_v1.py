@@ -265,7 +265,7 @@ def status(request):
         "can_open_files": bool(request.handler._configurateur() and _produced.opening_possible()),          # « Open » asks this machine's system to open a file
         "active_turns": sorted(_m.TOURS_ACTIFS),
         "turns": _turn_state.snapshot(),          # where each running turn is: running, waiting_approval, stalled or cancelled, and in which part of the loop (turn_state.py)
-        "pending_approvals": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv}),
+        "pending_approvals": sorted({a.conv for a in _m.PendingApproval.EN_COURS.values() if a.conv}),
     }
 
 
@@ -351,7 +351,7 @@ def update_settings(request):
         if not ((value is None and kind.endswith("?")) or (value is not None and KINDS[kind.rstrip("?")](value))) or (words and value not in words):
             raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(name, expected))
         changed[key] = words[value] if words else value
-    stored = _m.enregistrer_reglages(changed)
+    stored = _m.save_settings(changed)
     if changed.get("cluster") is False:
         _machines.vider_listes()                           # multi-machine mode switched off: no model and no conversation of another machine is kept
     return _settings(stored)
@@ -534,7 +534,7 @@ def unpair_machine(request):
     identifier = request.params["id"]
     _on_machine(_machines.retirer, identifier)
     if str(_m.reglages().get("machine") or "") == identifier:
-        _m.enregistrer_reglages({"machine": ""})
+        _m.save_settings({"machine": ""})
     return paired_machines(request)
 
 
@@ -1146,7 +1146,7 @@ def _folder_view(info):
 
 def _engine_settings_view(engine):
     from . import llamacpp_engine as _llamacpp
-    seen = _llamacpp.vue_reglages(engine.id)
+    seen = _llamacpp.settings_view(engine.id)
     advanced = seen.get("avance")
     out = {"engine": engine.id, "address_changeable": bool(engine.adresse_modifiable), "url": seen.get("url", ""), "key_set": bool(seen.get("cle_definie")),
            "variant": seen.get("variante", "auto"), "folder": _folder_view(seen.get("dossier")), "server": seen.get("serveur"),
@@ -1184,7 +1184,7 @@ def change_engine_settings(request):
 
 def _engines_folder_view():
     from . import llamacpp_engine as _llamacpp
-    seen = _llamacpp.vue_dossier_moteurs()
+    seen = _llamacpp.engines_folder_view()
     return {"current": seen["actuel"], "default": seen["defaut"], "proposed": seen["propose"] or None, "free_gb": seen["libre_go"], "proposed_free_gb": seen["libre_go_propose"],
             "source": {"env": "environment", "reglage": "settings"}.get(seen["source"], "default"), "problem": seen["probleme"] or "", "docker": bool(seen["docker"]),
             "changeable": bool(seen["modifiable"]), "custom": bool(seen["personnalise"]), "installed_here": list(seen["installes"]), "subfolders": list(seen["sous_dossiers"])}
@@ -1203,7 +1203,7 @@ def change_engines_folder(request):
     from . import llamacpp_engine as _llamacpp
     if set(request.body) != {"path"} or not isinstance(request.body["path"], str):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path"))
-    _llamacpp.regler_dossier_moteurs(request.body["path"])
+    _llamacpp.set_engines_folder(request.body["path"])
     return _engines_folder_view()
 
 
@@ -1350,7 +1350,7 @@ def machine_advice_apply(request):
     from . import low_end_mode as _low_end
     changes = _low_end.apply(machine_profile(), _m.reglages()) if machine_profile() is not None else {}
     if changes:
-        _m.enregistrer_reglages(changes)
+        _m.save_settings(changes)
     names = {stored: name for name, (stored, _kind) in SETTINGS.items()}
     return {"applied": {names.get(key, key): value for key, value in changes.items()}}
 
@@ -1358,7 +1358,7 @@ def machine_advice_apply(request):
 @route("POST", "/machine/advice/dismiss", CONFIGURATOR)
 def machine_advice_dismiss(request):
     """« Do not advise me again »."""
-    _m.enregistrer_reglages({"conseil_machine": False})
+    _m.save_settings({"conseil_machine": False})
     return {"dismissed": True}
 
 
@@ -1861,11 +1861,11 @@ def _setup_path():
 
 def _has_history():
     """Conversations or a settings file: signs of an installation that has been used. Cheap, and decided before the engine is asked."""
-    return bool(_m.conv_liste()) or (_m.DONNEES / "reglages.json").is_file()
+    return bool(_m.conv_list()) or (_m.DONNEES / "reglages.json").is_file()
 
 
 def setup_state():
-    stored = _storage.lire_json(_setup_path(), {})
+    stored = _storage.read_json(_setup_path(), {})
     if stored.get("done"):
         return {"done": True, "needed": False, "skipped": bool(stored.get("skipped"))}
     if _has_history():
@@ -1885,7 +1885,7 @@ def complete_setup(request):
     """Records that the guide is over, finished or skipped (`{"skipped": true}`): it is not shown again."""
     if set(request.body) - {"skipped"} or not isinstance(request.body.get("skipped", False), bool):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("skipped"))
-    _storage.ecrire_atomique(_setup_path(), json.dumps({"done": True, "skipped": bool(request.body.get("skipped"))}))
+    _storage.write_atomic(_setup_path(), json.dumps({"done": True, "skipped": bool(request.body.get("skipped"))}))
     return setup_state()
 
 
@@ -2824,12 +2824,12 @@ def delete_mission(request):
 # A skill is a sheet of your own (`skills/NAME.md` in the Lutin folder): how you want something done. Only its title and its « read when… » line are given to the model; it opens the sheet when it needs it.
 # The memory is two notes the model always has: the context (who you are, what you work on) and the memory (what to remember). Writing them is for the machine itself.
 def _skill_entry(name, title):
-    return {"name": name, "title": title, "read_when": _m.description_skill(name)}
+    return {"name": name, "title": title, "read_when": _m.skill_description(name)}
 
 
 def _skill_text(name):
     try:
-        return _m.lire_skill(name)
+        return _m.read_skill(name)
     except FileNotFoundError:
         raise ApiError(404, "not_found", _t("Cette fiche n'existe pas.")) from None
 
@@ -2837,7 +2837,7 @@ def _skill_text(name):
 @route("GET", "/skills", SESSION)
 def skills(request):
     """The skills: `name` (the file), `title` (its first « # » line) and `read_when` (its « À lire quand… » line, empty when it has none)."""
-    return {"skills": [_skill_entry(name, title) for name, title in _m.lister_skills()]}
+    return {"skills": [_skill_entry(name, title) for name, title in _m.list_skills()]}
 
 
 @route("GET", "/skills/{name}", SESSION)
@@ -2852,9 +2852,9 @@ def add_skill(request):
     body = request.body
     if set(body) != {"name", "text"} or not isinstance(body["name"], str) or not isinstance(body["text"], str):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name, text"))
-    if any(name == body["name"] for name, _title in _m.lister_skills()):
+    if any(name == body["name"] for name, _title in _m.list_skills()):
         raise ApiError(409, "exists", _t("Cette fiche existe déjà."))
-    _m.ecrire_skill(body["name"], body["text"])
+    _m.write_skill(body["name"], body["text"])
     return 201, skill_view(body["name"])
 
 
@@ -2868,7 +2868,7 @@ def change_skill(request):
     if set(request.body) != {"text"} or not isinstance(request.body["text"], str):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("text"))
     _skill_text(request.params["name"])
-    _m.ecrire_skill(request.params["name"], request.body["text"])
+    _m.write_skill(request.params["name"], request.body["text"])
     return skill_view(request.params["name"])
 
 
@@ -2876,7 +2876,7 @@ def change_skill(request):
 def delete_skill(request):
     """Deletes the skill file for good."""
     _skill_text(request.params["name"])
-    _m.supprimer_skill(request.params["name"])
+    _m.delete_skill(request.params["name"])
     return skills(request)
 
 
@@ -2886,7 +2886,7 @@ MEMORY_NOTES = {"context": "CONTEXTE.md", "memory": "MEMOIRE.md"}
 @route("GET", "/memory", SESSION)
 def memory(request):
     """The two notes the model always has: `context` and `memory`, as text."""
-    return {key: _m.lire_memoire(name) for key, name in MEMORY_NOTES.items()}
+    return {key: _m.read_memory(name) for key, name in MEMORY_NOTES.items()}
 
 
 @route("PATCH", "/memory", CONFIGURATOR)
@@ -2896,7 +2896,7 @@ def change_memory(request):
     if not body or set(body) - set(MEMORY_NOTES) or not all(isinstance(value, str) for value in body.values()):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("context, memory"))
     for key, text in body.items():
-        _m.ecrire_memoire(MEMORY_NOTES[key], text)
+        _m.write_memory(MEMORY_NOTES[key], text)
     return memory(request)
 
 
@@ -3150,7 +3150,7 @@ def _conversation(stored):
 
 def _read(identifier):
     try:
-        return _m.conv_lire(identifier)
+        return _m.conv_read(identifier)
     except ValueError:                                     # a malformed identifier or a missing file: the same answer, in the caller's language
         raise ApiError(404, "not_found", _t("Conversation inconnue.")) from None
 
@@ -3166,17 +3166,17 @@ def conversations(request):
     needed, best first), each with an `extract` around what was found (ADR 0017: the full-text index of the store)."""
     query = request.query.get("q", "").strip()
     if not query:
-        return {"conversations": [_summary(entry) for entry in _m.conv_liste()]}
+        return {"conversations": [_summary(entry) for entry in _m.conv_list()]}
     from . import store as _store
     if len(query) > 200:
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("q", "200"))
-    listed = {entry["id"]: entry for entry in _m.conv_liste()}
+    listed = {entry["id"]: entry for entry in _m.conv_list()}
     return {"query": query, "conversations": [dict(_summary(listed[found["id"]]), extract=found.get("extrait", "")) for found in _store.search(query, 50) if found["id"] in listed]}
 
 
 @route("POST", "/conversations", SESSION)
 def create_conversation(request):
-    return 201, _conversation(_m.conv_nouvelle())
+    return 201, _conversation(_m.conv_new())
 
 
 @route("GET", "/conversations/{id}", SESSION)
@@ -3196,7 +3196,7 @@ def update_conversation(request):
     if "title" in body:
         if not isinstance(body["title"], str) or not body["title"].strip():
             raise ApiError(400, "invalid_request", _t("Le titre doit être un texte non vide."))
-        _m.conv_renommer(identifier, body["title"])
+        _m.conv_rename(identifier, body["title"])
     if "pinned" in body:
         if not isinstance(body["pinned"], bool):
             raise ApiError(400, "invalid_request", _t("« pinned » doit être vrai ou faux."))
@@ -3212,13 +3212,13 @@ OPTIONS = {
     "num_predict": ("num_predict", "integer"), "mission_hours": ("mission_duree_h", "integer"),
 }
 OPTION_MODES = dict(SETTING_WORDS["mode"], mission="mission")          # « mission » is chosen conversation by conversation, never as a setting
-OPTION_CHOICES = {"num_predict": _storage.LONGUEURS, "mission_hours": _storage.DUREES_MISSION}
+OPTION_CHOICES = {"num_predict": _storage.LENGTHS, "mission_hours": _storage.MISSION_DURATIONS}
 MISSION_HOURS_DEFAULT = 8
 
 
 def _options_view(identifier):
-    stored = _m.options_lire(identifier)
-    effective = _m.appliquer_options(_m.reglages(), identifier)
+    stored = _m.options_read(identifier)
+    effective = _m.apply_options(_m.reglages(), identifier)
     shown = {name: effective[key] for name, (key, _) in OPTIONS.items() if key in effective}
     shown["mode"] = OPTION_MODES.get(effective["mode"], effective["mode"])
     shown["mission_hours"] = stored.get("mission_duree_h", MISSION_HOURS_DEFAULT)
@@ -3254,7 +3254,7 @@ def update_conversation_options(request):
             raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(name, expected))
         changed[key] = words[value] if name == "mode" else value
     if changed:
-        _m.options_ecrire(identifier, changed)
+        _m.options_write(identifier, changed)
     return _options_view(identifier)
 
 
@@ -3265,7 +3265,7 @@ def delete_conversation(request):
     _not_running(identifier)
     with _operations.track("conversation", conversation.get("titre") or identifier, "remove"):          # seen by the activity bar of every screen
         _mission.forget_conversation(identifier)          # its mission, if any, ends with it
-        _m.conv_supprimer(identifier)
+        _m.conv_delete(identifier)
     return {"deleted": True}
 
 
@@ -3971,7 +3971,7 @@ def conversation_ai_title(request):
         raise ApiError(503, "engine_unreachable", str(failed)) from None
     if not title or identifier in _m.TOURS_ACTIFS:          # a mission keeps its name; an answer started meanwhile writes the conversation, it is not renamed under it
         return {"title": conversation.get("titre", ""), "applied": False}
-    _m.conv_renommer(identifier, title)
+    _m.conv_rename(identifier, title)
     return {"title": title, "applied": True}
 
 
@@ -4066,7 +4066,7 @@ INSTALL_STATES = {"": "idle", "en cours": "running", "fini": "done", "erreur": "
 
 def _notes_view():
     from . import storage as _storage_notes
-    return {"notes": [{"line": n["ligne"], "date": n["date"] or None, "text": n["texte"]} for n in _storage_notes.lister_notes()]}
+    return {"notes": [{"line": n["ligne"], "date": n["date"] or None, "text": n["texte"]} for n in _storage_notes.list_notes()]}
 
 
 @route("GET", "/documents", SESSION)
@@ -4103,7 +4103,7 @@ def add_note(request):
     if set(request.body) != {"text"} or not isinstance(request.body["text"], str):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("text"))
     try:
-        _storage_notes.noter(request.body["text"])
+        _storage_notes.add_note(request.body["text"])
     except _m.ErreurOutil as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
     return 201, _notes_view()
@@ -4114,7 +4114,7 @@ def delete_note(request):
     """`?line=` (as GET /notes gave it): deletes that note."""
     from . import storage as _storage_notes
     try:
-        _storage_notes.supprimer_note(request.query.get("line", ""))
+        _storage_notes.delete_note(request.query.get("line", ""))
     except ValueError as missing:
         raise ApiError(404, "not_found", str(missing)) from None
     return _notes_view()
@@ -4353,7 +4353,7 @@ def answer_approval(request):
     if remember == "always" and not request.handler._configurateur():
         raise ApiError(403, "configurator", _t("Une règle permanente s'enregistre depuis cette machine."))
     try:
-        _m.repondre_attente(request.params["id"], body["approved"], bool(body.get("restore_auto_approval")), remember)
+        _m.answer_pending(request.params["id"], body["approved"], bool(body.get("restore_auto_approval")), remember)
     except ValueError as gone:
         raise ApiError(404, "not_found", str(gone)) from None
     return {"approved": body["approved"]}

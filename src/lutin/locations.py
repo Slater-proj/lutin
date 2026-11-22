@@ -38,7 +38,7 @@ def remember_seen_folder(dossier):
     if not dossier or not (Path(dossier) / "manifests").is_dir():
         return
     try:
-        _m.ecrire_atomique(_seen_file(), json.dumps({"dossier": dossier}))
+        _m.write_atomic(_seen_file(), json.dumps({"dossier": dossier}))
     except OSError:
         pass
 

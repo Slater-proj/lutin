@@ -395,7 +395,7 @@ def run_selftest(profond=False):
     def ecriture_donnees():
         f = _m.DONNEES / ("autotest-" + secrets.token_hex(3) + ".tmp")
         try:
-            _m.ecrire_atomique(f, "essai éàü ✓")
+            _m.write_atomic(f, "essai éàü ✓")
             if f.read_text(encoding="utf-8") != "essai éàü ✓":
                 raise RuntimeError("Le fichier relu est différent de celui écrit.")
         finally:
@@ -403,22 +403,22 @@ def run_selftest(profond=False):
         return "écriture, relecture et suppression dans donnees/"
 
     def conversations_ok():
-        c = _m.conv_nouvelle()
+        c = _m.conv_new()
         try:
             c["messages"].append({"role": "user", "content": "test"})
-            _m.conv_ecrire(c)
-            if _m.conv_lire(c["id"])["messages"][0]["content"] != "test":
+            _m.conv_write(c)
+            if _m.conv_read(c["id"])["messages"][0]["content"] != "test":
                 raise RuntimeError("La conversation relue est différente.")
         finally:
-            _m.conv_supprimer(c["id"])
+            _m.conv_delete(c["id"])
         return "création, enregistrement, lecture"
 
     def outils_fichiers():
         f = _m.RACINE / ".autotest-assistant.tmp"
         try:
             f.write_text("a\nb\n", encoding="utf-8")
-            texte, eol = _m.lire_exact(f)
-            nouveau, _ = _m.remplacer_une_fois(texte, "b", "c")
+            texte, eol = _m.read_exact(f)
+            nouveau, _ = _m.replace_once(texte, "b", "c")
             if nouveau != "a\nc\n":
                 raise RuntimeError("Le remplacement de texte ne fonctionne pas.")
         finally:

@@ -75,14 +75,14 @@ class Sens(unittest.TestCase):
         PULL.clear()
         embeddings.FAILURE.update(jusqua=0.0, vu=False)
         self.sens["recherche_sens"] = True
-        c = _m.conv_nouvelle()
+        c = _m.conv_new()
         bourrage = " Voici un long développement quelconque, sans rapport avec le reste." * 12      # chaque sujet fait son propre morceau (environ 800 caractères)
         c["messages"] = [
             {"role": "user", "content": "Parle-moi de la grande prison et de ses cellules. La détention y dure des années, personne ne quitte les lieux avant la fin de sa peine." + bourrage},
             {"role": "user", "content": "Et pour la guitare de Paul ? Il joue un concert ce soir, c'est sa seule sortie." + bourrage},
             {"role": "user", "content": "Quelle recette pour le dîner ? Un plat au four avec des légumes." + bourrage},
         ]
-        _m.conv_ecrire(c)
+        _m.conv_write(c)
         self.ident = c["id"]
         recall.THREAD.clear()
 

@@ -18,11 +18,11 @@ def setUpModule():
 
 class ConversationTools(unittest.TestCase):
     def setUp(self):
-        conversation = A.conv_nouvelle()
+        conversation = A.conv_new()
         conversation["messages"] = [{"role": "user", "content": "Réécrire la facturation."}, {"role": "assistant", "content": "D'accord."}]
-        A.conv_ecrire(conversation)
+        A.conv_write(conversation)
         self.id = conversation["id"]
-        self.addCleanup(lambda: (progress_sheet.delete(self.id), A.conv_supprimer(self.id)))
+        self.addCleanup(lambda: (progress_sheet.delete(self.id), A.conv_delete(self.id)))
         self.base = "/api/v1/conversations/%s" % self.id
 
     def test_the_sheet_is_read_and_edited_and_the_old_modes_are_accepted(self):
@@ -32,7 +32,7 @@ class ConversationTools(unittest.TestCase):
         for mode in ("summary", "sheet", None):
             status, answer = V.call("PATCH", self.base + "/memory", V.DEVICE, {"mode": mode})
             self.assertEqual((status, answer["mode"], answer["own_mode"]), (200, "sheet", None), mode)
-        self.assertNotIn("memoire_longue", A.conv_lire(self.id), "nothing is stored in the conversation")
+        self.assertNotIn("memoire_longue", A.conv_read(self.id), "nothing is stored in the conversation")
         status, answer = V.call("PATCH", self.base + "/memory", V.DEVICE, {"sheet": "## Objectif\n- Réécrire la facturation\n## Décisions\n- Garder l'API"})
         self.assertEqual((answer["sections"]["objective"], answer["sections"]["decisions"]), (["Réécrire la facturation"], ["Garder l'API"]))
         self.assertIn("## Objectif", answer["text"])

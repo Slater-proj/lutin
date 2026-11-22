@@ -39,13 +39,13 @@ def path_of():
 
 
 def _read():
-    brut = _d.lire_json(path_of(), {})
+    brut = _d.read_json(path_of(), {})
     canaux = brut.get("canaux") if isinstance(brut, dict) else []
     return [c for c in (canaux or []) if isinstance(c, dict) and c.get("id") and c.get("type") in TYPES]
 
 
 def _write(canaux):
-    _d.ecrire_atomique(path_of(), json.dumps({"canaux": canaux}, ensure_ascii=False, indent=1))
+    _d.write_atomic(path_of(), json.dumps({"canaux": canaux}, ensure_ascii=False, indent=1))
 
 
 def channel_types():

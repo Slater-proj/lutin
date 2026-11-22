@@ -105,7 +105,7 @@ class Colibri(unittest.TestCase):
         engines.CONTEXT.update(self.ancien)
 
     def regler(self, **d):
-        ml.regler_serveur("colibri", d)
+        ml.configure_server("colibri", d)
 
     def test_sans_choix_rien_n_est_installable_et_on_dit_comment(self):
         a = self.adresse_seule.actions()
@@ -154,10 +154,10 @@ class Colibri(unittest.TestCase):
 
     def test_reglages_refuses(self):
         for d in ({"modele_colibri": "dossier/relatif"}, {"modele_colibri": str(_TEMP / "absent")}, {"port_colibri": 80}, {"port_colibri": "abc"}, {"serveur": "../x"}):
-            with self.assertRaises(ml.ErreurMoteur, msg=str(d)):
+            with self.assertRaises(ml.EngineError, msg=str(d)):
                 self.regler(**d)
-        with self.assertRaises(ml.ErreurMoteur):
-            ml.regler_serveur("openai", {"serveur": "../x"})          # the old select, still read from an old client
+        with self.assertRaises(ml.EngineError):
+            ml.configure_server("openai", {"serveur": "../x"})          # the old select, still read from an old client
 
     def test_hors_ligne_pas_de_telechargement(self):
         engines.CONTEXT["hors_ligne"] = lambda: True
@@ -166,11 +166,11 @@ class Colibri(unittest.TestCase):
         self.assertIn("hors ligne", a["installer"]["raison"])
 
     def test_la_page_recoit_le_serveur_choisi_et_les_reglages_de_colibri(self):
-        self.assertEqual(ml.vue_reglages("openai")["serveur"], "")
-        v = ml.vue_reglages("colibri")
+        self.assertEqual(ml.settings_view("openai")["serveur"], "")
+        v = ml.settings_view("colibri")
         self.assertEqual(v["serveur"], "colibri")
         self.assertEqual(v["colibri"]["port"], 8000)
-        self.assertNotIn("colibri", ml.vue_reglages("openai"))
+        self.assertNotIn("colibri", ml.settings_view("openai"))
 
 
 class ColibriRemplacement(unittest.TestCase):
@@ -274,13 +274,13 @@ class ProcessusMoteurs(unittest.TestCase):
         instantane = [{"pid": 10, "ppid": 1, "nom": "llama-server", "exe": "", "ram": 1 * go, "vram": 0}, {"pid": 11, "ppid": 10, "nom": "llama-server", "exe": "", "ram": 18 * go, "vram": 20 * go}]
         journal = ("load_tensors: offloading 64 repeating layers to GPU\nload_tensors: offloaded 65/65 layers to GPU\nload_tensors:        CUDA0 model buffer size = 19000.00 MiB\n"
                    "load_tensors:   CPU_Mapped model buffer size =   400.00 MiB\nllama_kv_cache:      CUDA0 KV buffer size =  1000.00 MiB\n")
-        ancien = dict(ml.SERVEUR)
-        ml.SERVEUR.update(proc=Proc(), modele=ml.ROUTEUR, noms=("a",))
+        ancien = dict(ml.SERVER)
+        ml.SERVER.update(proc=Proc(), modele=ml.ROUTER, noms=("a",))
         try:
             with mock.patch.object(rc, "snapshot_process", lambda **kw: instantane), mock.patch.object(rc, "placement_llamacpp", lambda mo: (rc.parse_log_llamacpp(journal), "cuda")):
                 c = rc.loaded_llamacpp()[0]
         finally:
-            ml.SERVEUR.update(ancien)
+            ml.SERVER.update(ancien)
         self.assertEqual(c["vram"], 20 * go, "le routeur lui-même n'a rien : la carte est tenue par son fils")
         self.assertLess(c["ram"], 1 * go, "le modèle est sur la carte : seulement ce qui est réellement sur le processeur")
         self.assertIn("cache libérable", c["detail"])
@@ -387,23 +387,23 @@ class DossierDesMoteurs(unittest.TestCase):
 
     def test_choix_dans_la_page_et_retour_au_defaut(self):
         choisi = self.tmp / "ailleurs"
-        ml.regler_dossier_moteurs(str(choisi))
+        ml.set_engines_folder(str(choisi))
         self.assertEqual(self.md.base_engines(), choisi)
         self.assertEqual(engines.ENGINES["llamacpp"].dossier(), choisi / "llamacpp")
-        v = ml.vue_dossier_moteurs()
+        v = ml.engines_folder_view()
         self.assertEqual((v["source"], v["personnalise"], v["actuel"]), ("reglage", True, str(choisi)))
-        ml.regler_dossier_moteurs("")
+        ml.set_engines_folder("")
         self.assertEqual(self.md.base_engines(), self.tmp / "engines")
 
     def test_refuse_un_chemin_relatif_et_tant_qu_un_moteur_y_est_installe(self):
-        with self.assertRaises(ml.ErreurMoteur):
-            ml.regler_dossier_moteurs("relatif/dossier")
+        with self.assertRaises(ml.EngineError):
+            ml.set_engines_folder("relatif/dossier")
         installe = engines.ENGINES["llamacpp"]
         exe = installe.dossier_defaut() / "bin" / ("llama-server.exe" if os.name == "nt" else "llama-server")
         exe.parent.mkdir(parents=True)
         exe.write_text("x")
-        with self.assertRaises(ml.ErreurMoteur) as e:
-            ml.regler_dossier_moteurs(str(self.tmp / "autre"))
+        with self.assertRaises(ml.EngineError) as e:
+            ml.set_engines_folder(str(self.tmp / "autre"))
         self.assertIn("llama.cpp", str(e.exception))
         self.assertIn("désinstalle", str(e.exception))
 
@@ -416,7 +416,7 @@ class DossierDesMoteurs(unittest.TestCase):
         self.assertEqual((d["source"], d["probleme"]), ("donnees", "non_monte"))
         d = self.md.detail_folder_engines(env, monte=lambda p: True, ecriture=lambda p: True)
         self.assertEqual((d["source"], d["dossier"]), ("montage", Path("/engines")))
-        ml.regler_dossier_moteurs(str(self.tmp / "choisi"))
+        ml.set_engines_folder(str(self.tmp / "choisi"))
         d = self.md.detail_folder_engines(env, monte=lambda p: True, ecriture=lambda p: True)
         self.assertEqual((d["source"], d["dossier"]), ("reglage", self.tmp / "choisi"), "le choix de la page passe avant /engines")
         d = self.md.detail_folder_engines(dict(env, LUTIN_ENGINES="/vol"), monte=lambda p: True)
@@ -427,9 +427,9 @@ class DossierDesMoteurs(unittest.TestCase):
     def test_docker_le_dossier_est_choisissable_dans_la_page_sauf_si_impose_par_la_variable(self):
         engines.CONTEXT["en_docker"] = lambda: True
         with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1", "LUTIN_ENGINES": "/vol"}):
-            self.assertFalse(ml.vue_dossier_moteurs()["modifiable"])
-            with self.assertRaises(ml.ErreurMoteur):
-                ml.regler_dossier_moteurs(str(self.tmp / "x"))
+            self.assertFalse(ml.engines_folder_view()["modifiable"])
+            with self.assertRaises(ml.EngineError):
+                ml.set_engines_folder(str(self.tmp / "x"))
 
 
 if __name__ == "__main__":

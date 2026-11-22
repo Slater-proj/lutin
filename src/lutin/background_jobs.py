@@ -46,12 +46,12 @@ def folder():
 
 
 def read_works():
-    liste = _m.lire_json(folder() / "travaux.json", [])
+    liste = _m.read_json(folder() / "travaux.json", [])
     return [t for t in liste if isinstance(t, dict) and RE_ID.match(str(t.get("id", "")))] if isinstance(liste, list) else []
 
 
 def _write_works(liste):
-    _m.ecrire_atomique(folder() / "travaux.json", json.dumps(liste, ensure_ascii=False, indent=1))
+    _m.write_atomic(folder() / "travaux.json", json.dumps(liste, ensure_ascii=False, indent=1))
 
 
 def folder_work(ident):
@@ -59,7 +59,7 @@ def folder_work(ident):
 
 
 def read_state(ident):
-    e = _m.lire_json(folder_work(ident) / "etat.json", {})
+    e = _m.read_json(folder_work(ident) / "etat.json", {})
     e.setdefault("faits", {})
     e.setdefault("erreurs", {})
     e.setdefault("etat", "attente")
@@ -67,7 +67,7 @@ def read_state(ident):
 
 
 def write_state(ident, e):
-    _m.ecrire_atomique(folder_work(ident) / "etat.json", json.dumps(e, ensure_ascii=False))
+    _m.write_atomic(folder_work(ident) / "etat.json", json.dumps(e, ensure_ascii=False))
 
 
 def allowed_folder(chemin):
@@ -293,7 +293,7 @@ def report(t):
     if e["erreurs"]:
         lignes += ["## " + _t("Documents en erreur"), ""] + ["- {} : {}".format(c, m) for c, m in sorted(e["erreurs"].items())] + [""]
     texte = "\n".join(lignes)
-    _m.ecrire_atomique(folder_work(t["id"]) / "rapport.md", texte)
+    _m.write_atomic(folder_work(t["id"]) / "rapport.md", texte)
     return texte
 
 

@@ -31,13 +31,13 @@ def path():
 
 
 def read():
-    liste = _d.lire_json(path(), [])
+    liste = _d.read_json(path(), [])
     return [t for t in liste if isinstance(t, dict) and t.get("id")] if isinstance(liste, list) else []
 
 
 def _write(liste):
     import json
-    _d.ecrire_atomique(path(), json.dumps(liste, ensure_ascii=False, indent=1))
+    _d.write_atomic(path(), json.dumps(liste, ensure_ascii=False, indent=1))
 
 
 def _validate(nom, prompt, heure, jours, travail, notifier, date, maintenant=None):
@@ -140,7 +140,7 @@ def remove(ident, conversation=False):
         if arret is not None:
             TO_REMOVE.add(conv)
         else:
-            _m.conv_supprimer(conv)
+            _m.conv_delete(conv)
     _m.journaliser("Tâche planifiée « {} » supprimée{}.".format(tache.get("nom", ""), " (et sa conversation)" if conversation and conv else ""))
     return {"ok": True}
 
@@ -205,10 +205,10 @@ def _conversation(tache):
     """(conversation, neuve) : toujours la MÊME conversation pour une tâche (créée à la première exécution), au lieu d'en ouvrir une nouvelle à chaque fois."""
     if tache.get("derniere_conv"):
         try:
-            return _m.conv_lire(tache["derniere_conv"]), False
+            return _m.conv_read(tache["derniere_conv"]), False
         except (OSError, ValueError):
             pass
-    conv = _m.conv_nouvelle()
+    conv = _m.conv_new()
     conv["titre"] = "⏰ " + tache["nom"]
     return conv, True
 
@@ -273,11 +273,11 @@ def execute(ident):
         siege = _turns.reserve(conv, work=tache.get("travail", "") if neuve else None, also=au_travail)          # une conversation où quelqu'un écrit n'a pas de second tour (ADR 0015)
     except _turns.TurnRefused as refus:
         if refus.code == _turns.WORKSPACE_CONFLICT:
-            _d.conv_supprimer(conv["id"])
+            _d.conv_delete(conv["id"])
             _failure_startup(tache, refus.message)
             return ""
         if neuve:
-            _d.conv_supprimer(conv["id"])
+            _d.conv_delete(conv["id"])
         raise ValueError(_t("Une réponse est déjà en cours : la tâche attend.")) from None
     stop = siege.stop
     debut = datetime.now()
@@ -302,14 +302,14 @@ def execute(ident):
     arretee = stop.is_set()
     resultat = ""
     try:
-        finale = _m.conv_lire(conv["id"])
+        finale = _m.conv_read(conv["id"])
         resultat = _latest_reply(finale)
         if (problemes or not resultat) and not arretee:  # une tâche qui n'a rien produit le dit dans sa conversation : jamais « rien fait » sans explication
             etat_final = "erreur"
             texte = problemes[-1] if problemes else _t("Aucune réponse n'a été écrite : le moteur n'a rien répondu. Vérifie qu'un moteur est démarré (Réglages > Moteur) puis lance la tâche de nouveau.")
             if not resultat or problemes:
                 finale["messages"].append({"role": "assistant", "content": "⚠ " + texte, "ts": datetime.now().isoformat(timespec="seconds")})
-                _m.conv_ecrire(finale)
+                _m.conv_write(finale)
             resultat = resultat if (resultat and not problemes) else "⚠ " + texte
             _m.journaliser("Tâche planifiée « {} » sans résultat : {}".format(tache["nom"], texte[:200]))
     except (OSError, ValueError):
@@ -317,7 +317,7 @@ def execute(ident):
     if conv["id"] in TO_REMOVE:                        # sa tâche a été supprimée avec sa conversation pendant qu'elle travaillait : l'écriture de fin de tour est défaite
         TO_REMOVE.discard(conv["id"])
         try:
-            _m.conv_supprimer(conv["id"])
+            _m.conv_delete(conv["id"])
         except (OSError, ValueError):
             pass
     if arretee:

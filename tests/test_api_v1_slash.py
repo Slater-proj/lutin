@@ -18,9 +18,9 @@ def setUpModule():
 
 class Slash(unittest.TestCase):
     def test_compact_now(self):
-        conversation = A.conv_nouvelle()
-        A.conv_ecrire(conversation)
-        self.addCleanup(lambda: A.conv_supprimer(conversation["id"]))
+        conversation = A.conv_new()
+        A.conv_write(conversation)
+        self.addCleanup(lambda: A.conv_delete(conversation["id"]))
         base = "/api/v1/conversations/%s/compact" % conversation["id"]
         with mock.patch.object(A, "compacter_conversation", lambda identifier: {"ok": True, "avant": 30, "apres": 8, "jauge": {}, "fiche": False}):
             status, answer = V.call("POST", base, V.DEVICE, {})

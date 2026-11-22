@@ -19,11 +19,11 @@ MAX_FOUND = 200
 
 def tool_find(motif, dossier="."):
     """Les fichiers dont le NOM correspond au motif (« *.py », « test_*.py », « docs/*.md »), dans le dossier et dessous, triés du plus récent au plus ancien."""
-    from .tools import chemin_sur, rel
+    from .tools import safe_path, rel
     motif = str(motif or "").strip().replace("\\", "/")
     if not motif:
         raise _m.ErreurOutil(_t("Motif vide : donne un nom ou un motif comme « *.py » ou « test_*.json »."))
-    racine = chemin_sur(dossier)
+    racine = safe_path(dossier)
     if not racine.is_dir():
         raise _m.ErreurOutil(_t("Ce n'est pas un dossier : ") + str(dossier))
     motifs = [m.strip() for m in motif.replace(",", " ").split() if m.strip()]

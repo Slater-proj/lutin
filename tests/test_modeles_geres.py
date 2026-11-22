@@ -110,10 +110,10 @@ class Moteur(unittest.TestCase):
         self.addCleanup(self.remettre)
 
     def remettre(self):
-        cfg = ml.lire_config()
+        cfg = ml.read_config()
         for identifier in ("openai", "lmstudio", "colibri"):
             cfg.pop(identifier, None)
-        ml.ecrire_config(cfg)
+        ml.write_config(cfg)
         engines.CONTEXT.clear()
         engines.CONTEXT.update(self.ancien)
 
@@ -124,7 +124,7 @@ class Moteur(unittest.TestCase):
             self.mo.supprimer_modele("a")
         self.assertEqual(appels, ["a"])
         with mock.patch.object(L, "remove_model", mock.Mock(side_effect=PermissionError())):
-            with self.assertRaises(ml.ErreurMoteur) as e:
+            with self.assertRaises(ml.EngineError) as e:
                 self.mo.supprimer_modele("a")
         self.assertIn("arrête LM Studio", str(e.exception))
 
@@ -137,7 +137,7 @@ class Moteur(unittest.TestCase):
         self.assertEqual(suivi, ["arret", ("supprime", "m")])
 
     def test_un_serveur_non_gere_ne_supprime_rien(self):
-        with self.assertRaises(ml.ErreurMoteur):          # « openai »: a server reached by its address
+        with self.assertRaises(ml.EngineError):          # « openai »: a server reached by its address
             self.mo.supprimer_modele("x")
 
 

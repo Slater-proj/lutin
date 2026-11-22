@@ -308,7 +308,7 @@ class CommandesPortables(unittest.TestCase):
             self.assertFalse(lecture.match(non), non)
 
     def test_chemins_hors_du_dossier_de_travail(self):
-        windows, posix = A.construire_hors_projet(False), A.construire_hors_projet(True)
+        windows, posix = A.build_outside_project(False), A.build_outside_project(True)
         for hors in ("type C:\\Windows\\win.ini", "dir \\\\serveur\\partage", "type ..\\secret", "git log --output=x"):
             self.assertTrue(windows.search(hors), hors)
         for hors in ("cat /etc/passwd", "ls /", "cat ~/.ssh/id_rsa", "ls ../x", "cat x=/etc/hosts", "cat 'a' '/etc/shadow'"):
@@ -318,7 +318,7 @@ class CommandesPortables(unittest.TestCase):
         self.assertFalse(windows.search("dir /b"), "les options de dir sous Windows ne sont pas des chemins")
 
     def test_lecture_sure_combine_les_deux(self):
-        self.assertTrue(A.commande_lecture_sure("git status") and not A.commande_lecture_sure("git status ../autre"))
+        self.assertTrue(A.safe_read_command("git status") and not A.safe_read_command("git status ../autre"))
 
 
 if __name__ == "__main__":

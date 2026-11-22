@@ -38,8 +38,8 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
         self.avant = dict(engines.CONTEXT)
         engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False, dossier_ollama=lambda: self.tmp / "ollama-autre")
         self.addCleanup(lambda: (engines.CONTEXT.clear(), engines.CONTEXT.update(self.avant)))
-        ml.CACHE_PARTAGE.clear()
-        self.mo = ml.MoteurLlamaCpp()
+        ml.SHARED_CACHE.clear()
+        self.mo = ml.LlamaCppEngine()
         self.lib = self.tmp / "bibliotheque"
 
     def test_les_modeles_de_lutin_sont_listes_sous_docker_pas_ceux_d_ollama(self):
@@ -64,7 +64,7 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
         engines.CONTEXT["en_docker"] = lambda: False
         lus = []
         with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lambda d: lus.append(d) or {}):
-            ml.CACHE_PARTAGE.clear()
+            ml.SHARED_CACHE.clear()
             self.mo.partages()
         self.assertEqual(len(lus), 2, "hors Docker : le dossier d'Ollama ET la bibliothèque")
         with mock.patch.object(self.mo, "externe", lambda: True):
@@ -104,7 +104,7 @@ class DroitsDuNoeud(Base):
 
     def test_le_droit_ouvre_seulement_ce_qui_est_coche(self):
         machines.noeud_droit("memoire", True)
-        with mock.patch.object(A, "lire_memoire", lambda nom: "texte " + nom):
+        with mock.patch.object(A, "read_memory", lambda nom: "texte " + nom):
             r = machines.noeud_partager("memoire", {})
         self.assertEqual(r["memoire"]["MEMOIRE.md"], "texte MEMOIRE.md")
         with self.assertRaises(PermissionError):
@@ -142,20 +142,20 @@ class ImporterSkillsEtMemoire(Base):
             locaux[nom] = texte
             ecrits[nom] = texte
         reponses = {"skills": {"skills": [{"nom": "distant.md", "titre": "D"}, {"nom": "commun.md", "titre": "C"}]}, "skill": lambda c: {"nom": c["nom"], "texte": "version de là-bas " + c["nom"]}}
-        with self.faux_partage(reponses), mock.patch.object(A, "lire_skill", lire), mock.patch.object(A, "ecrire_skill", ecrire):
+        with self.faux_partage(reponses), mock.patch.object(A, "read_skill", lire), mock.patch.object(A, "write_skill", ecrire):
             r = machines.importer_skills(self.m["id"])
         self.assertEqual(r, {"ajoutes": 1, "mis_a_jour": 0, "deja_la": 1})
         self.assertEqual(ecrits, {"distant.md": "version de là-bas distant.md"})
         self.assertEqual(locaux["commun.md"], "version d'ici", "un skill qui existe ici n'est jamais écrasé")
         # l'original a changé et la copie n'a pas bougé : mise à jour
         reponses["skill"] = lambda c: {"nom": c["nom"], "texte": "nouvelle version " + c["nom"]}
-        with self.faux_partage(reponses), mock.patch.object(A, "lire_skill", lire), mock.patch.object(A, "ecrire_skill", ecrire):
+        with self.faux_partage(reponses), mock.patch.object(A, "read_skill", lire), mock.patch.object(A, "write_skill", ecrire):
             r = machines.importer_skills(self.m["id"])
         self.assertEqual((r["ajoutes"], r["mis_a_jour"], locaux["distant.md"]), (0, 1, "nouvelle version distant.md"))
         # la copie a été retouchée ici : plus de mise à jour
         locaux["distant.md"] = "retouché ici"
         reponses["skill"] = lambda c: {"nom": c["nom"], "texte": "encore une version " + c["nom"]}
-        with self.faux_partage(reponses), mock.patch.object(A, "lire_skill", lire), mock.patch.object(A, "ecrire_skill", ecrire):
+        with self.faux_partage(reponses), mock.patch.object(A, "read_skill", lire), mock.patch.object(A, "write_skill", ecrire):
             machines.importer_skills(self.m["id"])
         self.assertEqual(locaux["distant.md"], "retouché ici")
 
@@ -163,7 +163,7 @@ class ImporterSkillsEtMemoire(Base):
         stock = {"MEMOIRE.md": "- J'aime le café\n- Projet Lutin", "CONTEXTE.md": ""}
         reponses = {"memoire": {"memoire": {"MEMOIRE.md": "# Titre\n- J'aime le café\n- Je travaille sur Lutin\n- Mini PC sous Debian", "CONTEXTE.md": "Profil de là-bas"}}}
         ecrits = {}
-        with self.faux_partage(reponses), mock.patch.object(A, "lire_memoire", lambda n: stock[n]), mock.patch.object(A, "ecrire_memoire", lambda n, t: ecrits.update({n: t})):
+        with self.faux_partage(reponses), mock.patch.object(A, "read_memory", lambda n: stock[n]), mock.patch.object(A, "write_memory", lambda n, t: ecrits.update({n: t})):
             r = machines.importer_memoire(self.m["id"])
         self.assertEqual((r["notes_ajoutees"], r["profil_copie"]), (2, True))
         self.assertIn("Depuis Gaming PC", ecrits["MEMOIRE.md"])
@@ -176,7 +176,7 @@ class ImporterSkillsEtMemoire(Base):
         local = "# Décisions\n- DECISION-FIXE\n" + "".join("- ancienne note %04d %s\n" % (i, "x" * 50) for i in range(700))
         distantes = "\n".join("- note venue de là-bas numéro %04d %s" % (i, "y" * 60) for i in range(300))
         stock, ecrits = {"MEMOIRE.md": local, "CONTEXTE.md": ""}, {}
-        with self.faux_partage({"memoire": {"memoire": {"MEMOIRE.md": distantes, "CONTEXTE.md": "c" * 70000}}}), mock.patch.object(A, "lire_memoire", lambda n: stock[n]), mock.patch.object(A, "ecrire_memoire", lambda n, t: ecrits.update({n: t})):
+        with self.faux_partage({"memoire": {"memoire": {"MEMOIRE.md": distantes, "CONTEXTE.md": "c" * 70000}}}), mock.patch.object(A, "read_memory", lambda n: stock[n]), mock.patch.object(A, "write_memory", lambda n, t: ecrits.update({n: t})):
             r = machines.importer_memoire(self.m["id"])
         self.assertLessEqual(len(ecrits["MEMOIRE.md"]), machines.LIMITE_MEMOIRE)
         self.assertTrue(ecrits["MEMOIRE.md"].startswith("# Décisions\n- DECISION-FIXE"), "le début du fichier local est intact")
@@ -188,7 +188,7 @@ class ImporterSkillsEtMemoire(Base):
     def test_le_profil_existant_n_est_pas_ecrase(self):
         stock = {"MEMOIRE.md": "", "CONTEXTE.md": "Mon profil"}
         ecrits = {}
-        with self.faux_partage({"memoire": {"memoire": {"MEMOIRE.md": "", "CONTEXTE.md": "Autre profil"}}}), mock.patch.object(A, "lire_memoire", lambda n: stock[n]), mock.patch.object(A, "ecrire_memoire", lambda n, t: ecrits.update({n: t})):
+        with self.faux_partage({"memoire": {"memoire": {"MEMOIRE.md": "", "CONTEXTE.md": "Autre profil"}}}), mock.patch.object(A, "read_memory", lambda n: stock[n]), mock.patch.object(A, "write_memory", lambda n, t: ecrits.update({n: t})):
             r = machines.importer_memoire(self.m["id"])
         self.assertEqual((r["notes_ajoutees"], r["profil_copie"], ecrits), (0, False, {}))
 
@@ -240,7 +240,7 @@ class Api(Base):
         self.assertEqual(self.appel("POST", "/api/noeud/partage", {"genre": "skills"}, {"X-Token": "faux", "X-Noeud": "faux"})[0], 401)
         self.assertEqual(self.appel("POST", "/api/noeud/partage", {"genre": "skills"}, entetes)[0], 403, "pas coché : refusé")
         machines.noeud_droit("skills", True)
-        with mock.patch.object(A, "lister_skills", lambda: [("a.md", "Titre A")]):
+        with mock.patch.object(A, "list_skills", lambda: [("a.md", "Titre A")]):
             statut, r = self.appel("POST", "/api/noeud/partage", {"genre": "skills"}, entetes)
         self.assertEqual((statut, r["skills"]), (200, [{"nom": "a.md", "titre": "Titre A"}]))
         self.assertEqual(self.appel("POST", "/api/noeud/partage", {"genre": "conversations"}, entetes)[0], 403, "seul ce qui est coché est ouvert (piloter n'est pas coché)")

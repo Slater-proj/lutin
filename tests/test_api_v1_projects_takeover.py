@@ -94,7 +94,7 @@ class Takeover(unittest.TestCase):
         self.assertEqual(status, 200, done)
         self.assertTrue(done["summary"] and all(isinstance(line, str) for line in done["summary"]), done)
         self.addCleanup(lambda: call("DELETE", "/conversations/0000abcd"))
-        self.assertEqual(A.conv_lire("0000abcd")["titre"], "Old budget")
+        self.assertEqual(A.conv_read("0000abcd")["titre"], "Old budget")
 
     def test_refusals(self):
         self.assertEqual(call("POST", "/takeover/detect", {"path": str(self.source / "nowhere")})[0], 400)

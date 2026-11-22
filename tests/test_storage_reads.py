@@ -25,13 +25,13 @@ class ReadsDuringReplaces(unittest.TestCase):
 
     def test_a_reader_never_sees_the_default_while_the_file_is_replaced(self):
         payload = json.dumps([{"id": "0123abcd", "nom": "x" * 200}] * 20)
-        storage.ecrire_atomique(self.target, payload)
+        storage.write_atomic(self.target, payload)
         stop = threading.Event()
         writes = [0]
 
         def writer():
             while not stop.is_set():
-                storage.ecrire_atomique(self.target, payload)
+                storage.write_atomic(self.target, payload)
                 writes[0] += 1
         thread = threading.Thread(target=writer, daemon=True)
         thread.start()
@@ -40,7 +40,7 @@ class ReadsDuringReplaces(unittest.TestCase):
         end = time.monotonic() + 1.5
         while time.monotonic() < end:
             reads += 1
-            if storage.lire_json(self.target, []) == []:
+            if storage.read_json(self.target, []) == []:
                 empty += 1
         stop.set()
         thread.join(5)
@@ -48,17 +48,17 @@ class ReadsDuringReplaces(unittest.TestCase):
         self.assertEqual(empty, 0, "{} reads of {} gave the default".format(empty, reads))
 
     def test_missing_damaged_or_of_another_type_gives_the_default(self):
-        self.assertEqual(storage.lire_json(self.folder / "none.json", []), [])
+        self.assertEqual(storage.read_json(self.folder / "none.json", []), [])
         (self.folder / "damaged.json").write_text("[{", encoding="utf-8")
-        self.assertEqual(storage.lire_json(self.folder / "damaged.json", []), [])
+        self.assertEqual(storage.read_json(self.folder / "damaged.json", []), [])
         (self.folder / "object.json").write_text("{}", encoding="utf-8")
-        self.assertEqual(storage.lire_json(self.folder / "object.json", []), [])
+        self.assertEqual(storage.read_json(self.folder / "object.json", []), [])
 
     def test_a_file_that_stays_locked_gives_the_default_without_a_long_wait(self):
         self.target.write_text("[1]", encoding="utf-8")
         start = time.monotonic()
         with mock.patch.object(Path, "read_text", side_effect=PermissionError("locked")):
-            self.assertEqual(storage.lire_json(self.target, []), [])
+            self.assertEqual(storage.read_json(self.target, []), [])
         self.assertLess(time.monotonic() - start, 1.5, "a reader waits a moment, not forever")
 
 

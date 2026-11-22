@@ -38,22 +38,22 @@ def setUpModule():
 
 class Produced(unittest.TestCase):
     def setUp(self):
-        self.conversation = A.conv_nouvelle()["id"]
-        self.addCleanup(lambda: A.conv_supprimer(self.conversation))
+        self.conversation = A.conv_new()["id"]
+        self.addCleanup(lambda: A.conv_delete(self.conversation))
         self.report = A.RACINE / "rapport été.pdf"
         self.report.write_bytes(b"%PDF-1.4 the report")
         self.addCleanup(lambda: self.report.unlink(missing_ok=True))
         self.image = images.save(PNG)
         self.entry = produced_files.entry(self.report)
-        stored = A.conv_lire(self.conversation)
+        stored = A.conv_read(self.conversation)
         stored["messages"] += [{"role": "user", "content": "Make a report and a picture"},
                                {"role": "tool", "tool_name": "generer_image", "content": "Done.", "medias": [self.image], "medias_fichiers": {self.image: ""},
                                 "fichiers_joints": [self.entry]}]
-        A.conv_ecrire_telle_quelle(stored)
+        A.conv_write_as_is(stored)
         self.base = "/api/v1/conversations/" + self.conversation
 
     def tool_message(self):
-        return [m for m in A.conv_lire(self.conversation)["messages"] if m["role"] == "tool"][0]
+        return [m for m in A.conv_read(self.conversation)["messages"] if m["role"] == "tool"][0]
 
     def test_a_produced_file_is_downloaded_with_the_session_cookie_alone_and_never_displayed(self):
         path = "{}/files/{}".format(self.base, self.entry["id"])
@@ -72,10 +72,10 @@ class Produced(unittest.TestCase):
         self.assertEqual((status, answer["error"]["code"]), (404, "not_found"), "the file is gone from the disk")
 
     def test_a_file_outside_the_allowed_folders_is_not_read(self):
-        stored = A.conv_lire(self.conversation)
+        stored = A.conv_read(self.conversation)
         outside = dict(self.entry, id="0000aaaa1111", chemin=str(V._TEMP / "config.json"))
         stored["messages"][-1]["fichiers_joints"].append(outside)
-        A.conv_ecrire_telle_quelle(stored)
+        A.conv_write_as_is(stored)
         status, answer, _ = send("GET", "{}/files/{}".format(self.base, outside["id"]), V.OWNER)
         self.assertEqual((status, answer["error"]["code"]), (404, "not_found"))
 
@@ -89,9 +89,9 @@ class Produced(unittest.TestCase):
             script = A.RACINE / "outil.py"
             script.write_text("print(1)", encoding="utf-8")
             self.addCleanup(script.unlink)
-            stored = A.conv_lire(self.conversation)
+            stored = A.conv_read(self.conversation)
             stored["messages"][-1]["fichiers_joints"].append(produced_files.entry(script))
-            A.conv_ecrire_telle_quelle(stored)
+            A.conv_write_as_is(stored)
             status, answer, _ = send("POST", "{}/files/{}/open".format(self.base, produced_files.identifier(script)), V.OWNER, {})
             self.assertEqual((status, answer["error"]["code"]), (409, "cannot_open"), "only documents and media are opened")
             self.assertEqual(len(launched), 1)

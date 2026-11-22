@@ -109,17 +109,17 @@ class Charges(Base):
 
             def poll(self):
                 return None
-        ancien = dict(ml.SERVEUR)
-        ml.SERVEUR.update(proc=Proc(), modele="un", noms=())
+        ancien = dict(ml.SERVER)
+        ml.SERVER.update(proc=Proc(), modele="un", noms=())
         try:
             c = rc.loaded_llamacpp()
             self.assertEqual(c[0]["id"], "llamacpp")
             self.assertEqual(c[0]["nom"], "un")
             self.assertGreater(c[0]["ram"] or 0, 1_000_000, "la mémoire de ce processus Python se lit")
-            ml.SERVEUR.update(modele=ml.ROUTEUR, noms=("a", "b"))
+            ml.SERVER.update(modele=ml.ROUTER, noms=("a", "b"))
             self.assertIn("2 modèles", rc.loaded_llamacpp()[0]["nom"])
         finally:
-            ml.SERVEUR.update(ancien)
+            ml.SERVER.update(ancien)
         self.assertEqual(rc.loaded_llamacpp(), [], "arrêté : rien à décharger")
 
     def test_etat_complet(self):

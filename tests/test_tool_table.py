@@ -17,16 +17,16 @@ from lutin import addons_acestep, addons_comfyui, addons_voicestudio, modes, pag
 
 HISTORICAL_RESEARCH = {"lister", "lire", "chercher", "trouver", "calculer", "voix_liste", "voix_transcrire", "symboles", "lire_plusieurs", "rappeler", "web_chercher", "web_lire", "taches",
                        "memoriser", "suivi", "comfy_modeles"}          # the list written by hand in modes.py before the table
-FUNCTIONS = {"ecrire": tools.outil_ecrire, "modifier_plusieurs": tools.outil_modifier_plusieurs, "creer_document": tools.outil_document, "executer": tools.outil_executer,
-             "installer_module": tools.outil_installer_module, "apercu_page": page_preview.tool_preview, "voix_parler": addons_voicestudio.speak_tool,
+FUNCTIONS = {"ecrire": tools.write_tool, "modifier_plusieurs": tools.edit_many_tool, "creer_document": tools.document_tool, "executer": tools.run_tool,
+             "installer_module": tools.install_module_tool, "apercu_page": page_preview.tool_preview, "voix_parler": addons_voicestudio.speak_tool,
              "voix_cloner": addons_voicestudio.clone_tool, "comfy_generer": addons_comfyui.generate_tool, "musique_generer": addons_acestep.music_tool,
-             "lister": tools.outil_lister, "lire": tools.outil_lire, "chercher": tools.outil_chercher, "symboles": tools.outil_symboles, "lire_plusieurs": tools.outil_lire_plusieurs,
+             "lister": tools.list_tool, "lire": tools.read_tool, "chercher": tools.search_tool, "symboles": tools.symbols_tool, "lire_plusieurs": tools.read_many_tool,
              "voix_transcrire": addons_voicestudio.transcribe_tool}
 
 
 class ToolTable(unittest.TestCase):
     def test_every_tool_offered_to_the_models_has_an_entry_and_no_entry_is_orphan(self):
-        offered = {tool["function"]["name"] for tool in tools.OUTILS}
+        offered = {tool["function"]["name"] for tool in tools.TOOLS}
         self.assertEqual(offered - set(tool_table.TABLE), set(), "a tool without an entry: the loop, the research mode and the approvals would not know what it does")
         self.assertEqual(set(tool_table.TABLE) - offered, set(), "an entry for a tool that does not exist")
 

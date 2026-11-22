@@ -107,9 +107,9 @@ def run(options, moteur, ecrire=print, entree=input, chemin_rapport=None, mainte
     debut = maintenant()
     profil = (engines.CONTEXT.get("profil_attendu") or engines.CONTEXT["profil"])()          # la détection du matériel démarre en arrière-plan : on l'attend, le choix du programme en dépend
     from . import llamacpp_engine as _ml
-    systeme = _ml._systeme()
+    systeme = _ml._system()
     variante = (moteur.config().get("variante") if hasattr(moteur, "config") else None) or "auto"
-    choisie = variante if variante in ("cuda", "vulkan", "cpu", "metal") else _ml.variante_auto(profil, systeme)
+    choisie = variante if variante in ("cuda", "vulkan", "cpu", "metal") else _ml.auto_variant(profil, systeme)
     rapport.etape(_t("Matériel détecté"), True, "{} {} · {} · {}".format(platform.system(), platform.machine(), profil.resume() if profil is not None else _t("matériel non détecté"), _t("version choisie : {}").format(choisie)), maintenant() - debut)
 
     # 2. le programme
@@ -118,7 +118,7 @@ def run(options, moteur, ecrire=print, entree=input, chemin_rapport=None, mainte
             info = moteur.info_dossier()
             if info["propose"] and not info["personnalise"] and demande(_t("Installer dans {} (à côté des modèles d'Ollama, {} Go libres) plutôt que dans le dossier de Lutin ({}) ?").format(info["propose"], info["libre_go"]["propose"], info["defaut"])):
                 from . import llamacpp_engine as _m2
-                _m2.regler_dossier(moteur.id, info["propose"])
+                _m2.set_folder(moteur.id, info["propose"])
                 info = moteur.info_dossier()
             ecrire(_t("   Dossier d'installation : {} ({} Go libres)").format(info["actuel"], info["libre_go"]["actuel"]))
         if not demande(_t("Télécharger llama.cpp ({}), environ 25 à 700 Mo selon la carte graphique ?").format(choisie)):

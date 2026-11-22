@@ -134,7 +134,7 @@ class CommandTool(Base):
         with mock.patch.object(tools.subprocess, "Popen", side_effect=lambda *a, **k: ran.append(a) or (_ for _ in ()).throw(OSError("not run in a test"))), \
                 mock.patch.object(tools.subprocess, "run", side_effect=lambda *a, **k: ran.append(a) or (_ for _ in ()).throw(OSError("not run in a test"))):
             try:
-                result = tools.outil_executer(command, ctx)
+                result = tools.run_tool(command, ctx)
             except (OSError, A.ErreurOutil) as stopped:
                 result = str(stopped)
         return asked, ran, result
@@ -173,7 +173,7 @@ class CommandTool(Base):
             return False
 
         ctx = {"accord": accord, "auto_commandes": False, "conv": {"id": "c", "messages": []}, "stop": None}
-        tools.outil_executer("npm run build", ctx)
+        tools.run_tool("npm run build", ctx)
         self.assertNotIn("sujet_accord", ctx, ctx_seen)
 
 

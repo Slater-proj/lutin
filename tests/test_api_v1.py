@@ -236,7 +236,7 @@ class Conversations(unittest.TestCase):
         status, updated = call("PATCH", "/api/v1/conversations/" + identifier, OWNER, body={"title": "  Budget 2027  ", "pinned": True})
         self.assertEqual((status, updated["title"], updated["pinned"]), (200, "Budget 2027", True))
         self.assertEqual(call("GET", "/api/v1/conversations/" + identifier, OWNER)[1]["title"], "Budget 2027")
-        self.assertEqual(A.conv_lire(identifier)["titre"], "Budget 2027", "the same state as the French routes")
+        self.assertEqual(A.conv_read(identifier)["titre"], "Budget 2027", "the same state as the French routes")
 
         for wrong in ({}, {"title": ""}, {"title": 3}, {"pinned": "yes"}, {"titre": "x"}, {"title": "x", "other": 1}):
             status, answer = call("PATCH", "/api/v1/conversations/" + identifier, OWNER, body=wrong)
@@ -251,9 +251,9 @@ class Conversations(unittest.TestCase):
         """Maintainer, 2026-11-22, « indications à la LM Studio »: the room taken in the context and the speed stay under the field once the answer is written."""
         identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
         self.addCleanup(lambda: call("DELETE", "/api/v1/conversations/" + identifier, OWNER))
-        stored = A.conv_lire(identifier)
+        stored = A.conv_read(identifier)
         stored.update(jetons={"utilise": 3200, "total": 8192}, vitesse={"ecriture": 54.2, "lecture": 900, "chargement": 2.1, "total": 9.8, "jetons": 412})
-        A.conv_ecrire(stored)
+        A.conv_write(stored)
         answer = call("GET", "/api/v1/conversations/" + identifier, OWNER)[1]
         self.assertEqual(answer["context"], {"used": 3200, "total": 8192})
         self.assertEqual(answer["speed"], {"write_tokens_per_s": 54.2, "read_tokens_per_s": 900, "load_s": 2.1, "total_s": 9.8, "tokens": 412})
@@ -263,22 +263,22 @@ class Conversations(unittest.TestCase):
         from lutin import agent
         identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
         self.addCleanup(lambda: call("DELETE", "/api/v1/conversations/" + identifier, OWNER))
-        stored = A.conv_lire(identifier)
+        stored = A.conv_read(identifier)
         stored["messages"] = [{"role": "user", "content": "How much should we spend in 2027?"}, {"role": "assistant", "content": "Here is a plan."}]
-        A.conv_ecrire(stored)
+        A.conv_write(stored)
         asked = []
         engine = mock.Mock(chat=lambda body, timeout: asked.append(body) or {"message": {"content": "<think>hmm</think> « Budget   2027 » "}})
         with mock.patch.object(agent, "moteur_actuel", return_value=engine):
             status, answer = call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})
         self.assertEqual((status, answer), (200, {"title": "Budget 2027", "applied": True}), "thinking aloud and quotes are taken out")
-        self.assertEqual(A.conv_lire(identifier)["titre"], "Budget 2027")
+        self.assertEqual(A.conv_read(identifier)["titre"], "Budget 2027")
         self.assertIn("[U] How much should we spend in 2027?", asked[0]["messages"][0]["content"])
         self.assertIs(asked[0]["think"], False)
         with mock.patch.object(agent, "moteur_actuel", return_value=mock.Mock(chat=lambda body, timeout: {"message": {"content": "  "}})):
             self.assertEqual(call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})[0], 502, "a model that answers nothing")
-        stored = A.conv_lire(identifier)
+        stored = A.conv_read(identifier)
         stored["titre"] = "🎯 Mission: budget"
-        A.conv_ecrire(stored)
+        A.conv_write(stored)
         self.assertEqual(call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})[1], {"title": "🎯 Mission: budget", "applied": False},
                          "a mission keeps its name")
         self.assertEqual(call("POST", "/api/v1/conversations/nope0000/ai-title", OWNER, body={})[0], 404)
@@ -313,8 +313,8 @@ class Conversations(unittest.TestCase):
 
 class Approvals(unittest.TestCase):
     def test_an_approval_is_answered_once(self):
-        pending = A.Attente("Run a command", "git push", conv="c0ffee00")
-        self.addCleanup(lambda: A.Attente.EN_COURS.pop(pending.id, None))
+        pending = A.PendingApproval("Run a command", "git push", conv="c0ffee00")
+        self.addCleanup(lambda: A.PendingApproval.EN_COURS.pop(pending.id, None))
         self.assertIn("c0ffee00", call("GET", "/api/v1/status", OWNER)[1]["pending_approvals"])
         for wrong in ({}, {"approved": "yes"}, {"ok": True}):
             self.assertEqual(call("POST", "/api/v1/approvals/" + pending.id, OWNER, body=wrong)[0], 400, wrong)

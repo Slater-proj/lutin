@@ -53,7 +53,7 @@ class Skills(unittest.TestCase):
 
 class Memory(unittest.TestCase):
     def setUp(self):
-        before = {key: _m.lire_memoire(name) for key, name in (("context", "CONTEXTE.md"), ("memory", "MEMOIRE.md"))}
+        before = {key: _m.read_memory(name) for key, name in (("context", "CONTEXTE.md"), ("memory", "MEMOIRE.md"))}
         self.addCleanup(lambda: call("PATCH", "/api/v1/memory", before))
 
     def test_the_two_notes_are_read_and_replaced_one_at_a_time(self):

@@ -43,7 +43,7 @@ def path():
 def state():
     """Ce que la page affiche : l'avancement, ou le dernier résultat garde sur le disque."""
     if not CALIBRATION["resultats"] and not CALIBRATION["en_cours"] and not CALIBRATION["erreur"]:
-        garde = _m.lire_json(path(), {})
+        garde = _m.read_json(path(), {})
         if isinstance(garde, dict) and garde.get("resultats"):
             return dict(garde, en_cours=False, etape="", erreur="")
     return {k: CALIBRATION[k] for k in ("en_cours", "etape", "erreur", "resultats", "recommande", "modele", "date")}
@@ -116,5 +116,5 @@ def apply():
     e = state()
     if not e.get("recommande"):
         raise ValueError(_t("Aucun résultat à appliquer : lance d'abord la mesure."))
-    _m.enregistrer_reglages({"num_thread": int(e["recommande"])})
+    _m.save_settings({"num_thread": int(e["recommande"])})
     return {"ok": True, "num_thread": int(e["recommande"])}

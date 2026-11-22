@@ -48,12 +48,12 @@ class Store(unittest.TestCase):
     def test_the_files_of_0x_are_imported_after_a_backup_and_kept(self):
         self.write_files(conversation("0000000a", "Rapport", "2026-01-02T10:00:00", [{"role": "user", "content": "Bonjour"}, {"role": "assistant", "content": "Salut"}]),
                          conversation("0000000b", "Épinglée", "2026-01-01T10:00:00", epingle=True), options={"0000000a": {"web": True}})
-        listed = A.conv_liste()
+        listed = A.conv_list()
         self.assertEqual([entry["id"] for entry in listed], ["0000000b", "0000000a"], "pinned first, then the most recent, as in 0.x")
         self.assertEqual(sorted(listed[1]), ["epingle", "id", "maj", "memoire", "messages", "origine", "titre"])
         self.assertEqual(listed[1]["messages"], 2)
-        self.assertEqual([m["content"] for m in A.conv_lire("0000000a")["messages"]], ["Bonjour", "Salut"])
-        self.assertEqual(A.options_lire("0000000a"), {"web": True})
+        self.assertEqual([m["content"] for m in A.conv_read("0000000a")["messages"]], ["Bonjour", "Salut"])
+        self.assertEqual(A.options_read("0000000a"), {"web": True})
         self.assertEqual(list((self.data / "conversations").glob("*.json")), [], "imported: the folder is empty")
         kept = sorted(p.name for p in (self.data / "archives" / "avant-1.0" / "conversations").glob("*.json"))
         self.assertEqual(kept, ["0000000a.json", "0000000b.json"], "moved, never deleted")
@@ -65,14 +65,14 @@ class Store(unittest.TestCase):
     def test_a_file_put_back_is_taken_as_it_is_and_the_same_one_twice_writes_nothing(self):
         same = conversation("0000000a", "Ancien", "2026-01-02T10:00:00", [{"role": "user", "content": "x"}])
         self.write_files(same)
-        A.conv_liste()
+        A.conv_list()
         self.write_files(same)                                                                 # the same file dropped again
         self.assertEqual(store.import_files()["skipped"], 1, "nothing to write for the same conversation")
-        c = A.conv_lire("0000000a")
+        c = A.conv_read("0000000a")
         c["titre"] = "Changée ici"
-        A.conv_ecrire(c)
+        A.conv_write(c)
         self.write_files(conversation("0000000a", "Remise par une restauration", "2026-01-01T00:00:00"))
-        self.assertEqual(A.conv_lire("0000000a")["titre"], "Remise par une restauration", "a file put back (a restore, a person) is taken as it is")
+        self.assertEqual(A.conv_read("0000000a")["titre"], "Remise par une restauration", "a file put back (a restore, a person) is taken as it is")
 
     def test_a_damaged_file_is_taken_from_its_copy_or_reported_and_left(self):
         folder = self.data / "conversations"
@@ -80,30 +80,30 @@ class Store(unittest.TestCase):
         (folder / "0000000c.json").write_text("{abîmé", encoding="utf-8")
         (folder / "0000000c.json.bak").write_text(json.dumps(conversation("0000000c", "Sauvée", "2026-01-01T00:00:00")), encoding="utf-8")
         (folder / "0000000d.json").write_text("{abîmé aussi", encoding="utf-8")
-        A.conv_liste()
-        self.assertEqual(A.conv_lire("0000000c")["titre"], "Sauvée")
+        A.conv_list()
+        self.assertEqual(A.conv_read("0000000c")["titre"], "Sauvée")
         self.assertTrue((folder / "0000000d.json").is_file(), "unreadable and without a copy: left where it is")
-        self.assertRaises(ValueError, A.conv_lire, "0000000d")
+        self.assertRaises(ValueError, A.conv_read, "0000000d")
 
     def test_written_read_listed_searched_and_deleted(self):
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         c["titre"] = "Réglages du modèle"
         c["messages"] = [{"role": "user", "content": "Comment régler la température ?"}, {"role": "assistant", "content": "Avec le curseur.", "thinking": "facile"}]
-        A.conv_ecrire(c)
-        self.assertEqual(A.conv_lire(c["id"])["messages"][1]["thinking"], "facile", "a message keeps every field")
+        A.conv_write(c)
+        self.assertEqual(A.conv_read(c["id"])["messages"][1]["thinking"], "facile", "a message keeps every field")
         found = store.search("reglages temperature")
         self.assertEqual([entry["id"] for entry in found], [c["id"]], "accents ignored, every word needed")
         self.assertEqual(store.search("absent"), [])
-        A.options_ecrire(c["id"], {"web": True, "mode": "pas un mode"})
-        self.assertEqual(A.options_lire(c["id"]), {"web": True}, "options are cleaned as before")
-        A.conv_supprimer(c["id"])
-        self.assertRaises(ValueError, A.conv_lire, c["id"])
-        self.assertEqual(A.options_lire(c["id"]), {}, "its options go with it")
-        self.assertRaises(ValueError, A.conv_lire, "../etc")
+        A.options_write(c["id"], {"web": True, "mode": "pas un mode"})
+        self.assertEqual(A.options_read(c["id"]), {"web": True}, "options are cleaned as before")
+        A.conv_delete(c["id"])
+        self.assertRaises(ValueError, A.conv_read, c["id"])
+        self.assertEqual(A.options_read(c["id"]), {}, "its options go with it")
+        self.assertRaises(ValueError, A.conv_read, "../etc")
 
     def test_the_export_gives_back_the_files_of_0x(self):
         self.write_files(conversation("0000000a", "Rapport", "2026-01-02T10:00:00", [{"role": "user", "content": "Bonjour"}]), options={"0000000a": {"web": True}})
-        A.conv_liste()
+        A.conv_list()
         target = Path(tempfile.mkdtemp(prefix="lutin-export-"))
         self.assertEqual(store.export_files(target), 1)
         back = json.loads((target / "conversations" / "0000000a.json").read_text(encoding="utf-8"))
@@ -115,7 +115,7 @@ class Store(unittest.TestCase):
         in donnees/conversations/ is neither imported nor moved, and an empty target is required."""
         from lutin import cli
         self.write_files(conversation("0000000a", "Rapport", "2026-01-02T10:00:00", [{"role": "user", "content": "Bonjour"}]), options={"0000000a": {"web": True}})
-        A.conv_liste()
+        A.conv_list()
         store.close()
         waiting = conversation("0000000c", "En attente", "2026-01-03T10:00:00")
         self.write_files(waiting)
@@ -141,29 +141,29 @@ class Store(unittest.TestCase):
         meaning index and the options of every conversation of the database, at the start and every 30 minutes. It lists the database now, and
         removes nothing when the database cannot be read."""
         from lutin import tools
-        A.conv_ecrire(conversation("0000000a", "Gardée", "2026-01-02T10:00:00", [{"role": "user", "content": "Bonjour"}]))
-        A.options_ecrire("0000000a", {"web": True})
-        A.options_ecrire("0000000c", {"web": True})
+        A.conv_write(conversation("0000000a", "Gardée", "2026-01-02T10:00:00", [{"role": "user", "content": "Bonjour"}]))
+        A.options_write("0000000a", {"web": True})
+        A.options_write("0000000c", {"web": True})
         self.write_files(conversation("0000000d", "Pas encore importée", "2026-01-03T10:00:00"))
         for folder, suffix in (("archives", ".jsonl"), ("suivis", ".md"), ("embeddings", ".json")):
             (self.data / folder).mkdir(parents=True, exist_ok=True)
             for ident in ("0000000a", "0000000c", "0000000d"):
                 (self.data / folder / (ident + suffix)).write_text("{}", encoding="utf-8")
         with mock.patch.object(store, "ids", side_effect=sqlite3.DatabaseError("file is not a database")):
-            self.assertFalse(tools.nettoyer_orphelins(), "the database cannot be read: nothing is removed")
+            self.assertFalse(tools.clean_orphans(), "the database cannot be read: nothing is removed")
         self.assertEqual(len(list((self.data / "archives").glob("*.jsonl"))), 3)
-        self.assertTrue(tools.nettoyer_orphelins())
+        self.assertTrue(tools.clean_orphans())
         for folder, suffix in (("archives", ".jsonl"), ("suivis", ".md"), ("embeddings", ".json")):
             left = sorted(p.stem for p in (self.data / folder).glob("*" + suffix))
             self.assertEqual(left, ["0000000a", "0000000d"], "{}: the conversation of the database and the 0.x file keep theirs, the one gone loses its".format(folder))
-        self.assertEqual(A.options_lire("0000000a"), {"web": True})
+        self.assertEqual(A.options_read("0000000a"), {"web": True})
         self.assertEqual(store.options_ids(), ["0000000a"], "the options of a conversation gone are removed")
 
     def test_a_damaged_database_is_set_aside_never_replaced_in_silence(self):
         """ADR 0017, item 8: a database that cannot be read is moved aside, said, and Lutin goes on with an empty one."""
         self.data.mkdir(parents=True, exist_ok=True)
         (self.data / "lutin.db").write_bytes(b"this is not a database at all, but it is somebody's data" * 100)
-        self.assertEqual(A.conv_liste(), [], "an empty database to go on")
+        self.assertEqual(A.conv_list(), [], "an empty database to go on")
         copies = store.set_aside_copies()
         self.assertEqual(len(copies), 1)
         self.assertTrue((copies[0] / "lutin.db").read_bytes().startswith(b"this is not a database"), "the damaged file is kept as it was")
@@ -171,9 +171,9 @@ class Store(unittest.TestCase):
         self.assertEqual([level for level, _ in notices], ["erreur"])
         self.assertIn(str(copies[0]), notices[0][1])
         self.assertIn("sauvegardes", notices[0][1])
-        c = A.conv_nouvelle()
-        A.conv_ecrire(c)
-        self.assertEqual([entry["id"] for entry in A.conv_liste()], [c["id"]], "the new database works")
+        c = A.conv_new()
+        A.conv_write(c)
+        self.assertEqual([entry["id"] for entry in A.conv_list()], [c["id"]], "the new database works")
 
     def test_a_locked_database_is_not_set_aside(self):
         self.data.mkdir(parents=True, exist_ok=True)
@@ -212,13 +212,13 @@ class Store(unittest.TestCase):
     def test_the_doctor_checks_the_database_read_only(self):
         from lutin import cli
         self.assertEqual([level for level, _ in cli.diagnostic_base(self.data)], ["info"], "no database yet")
-        A.conv_ecrire(A.conv_nouvelle())
+        A.conv_write(A.conv_new())
         lines = cli.diagnostic_base(self.data)
         self.assertEqual([level for level, _ in lines], ["ok"])
         self.assertIn("1 conversation(s)", lines[0][1])
 
     def test_a_reader_never_sees_half_a_conversation(self):
-        c = A.conv_nouvelle()
+        c = A.conv_new()
         stop, torn, errors = threading.Event(), [], []
 
         def writer():
@@ -228,14 +228,14 @@ class Store(unittest.TestCase):
                 c["messages"] = [{"role": "user", "content": str(n)}] * (n % 50 + 1)
                 c["titre"] = str(len(c["messages"]))
                 try:
-                    A.conv_ecrire(c)
+                    A.conv_write(c)
                 except Exception as error:  # noqa: BLE001
                     errors.append(error)
         thread = threading.Thread(target=writer, daemon=True)
         thread.start()
         try:
             for _ in range(400):
-                read = A.conv_lire(c["id"])
+                read = A.conv_read(c["id"])
                 if read["titre"] != "Nouvelle conversation" and int(read["titre"]) != len(read["messages"]):
                     torn.append((read["titre"], len(read["messages"])))
         finally:

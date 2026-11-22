@@ -161,7 +161,7 @@ class Actions(Dossier):
 
     def test_llamacpp_s_installe_aussi_dans_docker(self):
         from lutin import llamacpp_engine as ml
-        mo = ml.MoteurLlamaCpp()
+        mo = ml.LlamaCppEngine()
         self.assertEqual(mo.dossier_defaut(), self.tmp / "engines" / "llamacpp")
         a = mo.actions()
         self.assertIn("installer", a)

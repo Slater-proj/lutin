@@ -39,7 +39,7 @@ class Catalogue(unittest.TestCase):
             if ident in engines.MANAGED_SERVERS:
                 # ADR 0020 (accepted 2026-11-21, « finish the integration of Colibri »): Colibri is an engine of its own that Lutin installs and starts, as it
                 # already was behind the « openai » card. It speaks the OpenAI interface through the same class as any other server: no adapter of its own.
-                self.assertIsInstance(engines.ENGINES[ident], ml.MoteurServeurGere)
+                self.assertIsInstance(engines.ENGINES[ident], ml.ManagedServerEngine)
                 for classe in type(engines.ENGINES[ident]).__mro__[:2]:
                     self.assertFalse({"chat", "chat_flux", "modeles"} & set(vars(classe)), classe)
             else:
@@ -104,15 +104,15 @@ class AvecUnFauxServeur(unittest.TestCase):
 
     def test_un_serveur_experimental_repond_comme_un_serveur_externe(self):
         mo = engines.ENGINES["openai"]
-        ml.regler("openai", self.adresse, None)
+        ml.configure("openai", self.adresse, None)
         self.assertEqual(mo.modeles()["installes"], ["modele-test"])
         rep = mo.chat({"model": "modele-test", "messages": [{"role": "user", "content": "Salut"}], "stream": False}, 20)
         self.assertEqual(rep["message"]["content"], "réponse complète")
 
     def test_regler_un_moteur_experimental_ne_touche_pas_a_llama_cpp(self):
-        avant = json.dumps(ml.lire_config().get("llamacpp", {}), sort_keys=True)
-        ml.regler("openai", self.adresse, None)
-        self.assertEqual(json.dumps(ml.lire_config().get("llamacpp", {}), sort_keys=True), avant)
+        avant = json.dumps(ml.read_config().get("llamacpp", {}), sort_keys=True)
+        ml.configure("openai", self.adresse, None)
+        self.assertEqual(json.dumps(ml.read_config().get("llamacpp", {}), sort_keys=True), avant)
 
 
 if __name__ == "__main__":

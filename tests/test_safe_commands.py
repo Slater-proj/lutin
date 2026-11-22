@@ -116,34 +116,34 @@ class ThroughTheTool(unittest.TestCase):
         self.ctx = {"accord": lambda title, detail, diff, auto=False: self.asked.append(detail) or False, "conv": {"messages": []}}
 
     def test_the_real_confinement_is_used(self):
-        self.assertTrue(A.commande_lecture_sure("git status --short"))
-        self.assertFalse(A.commande_lecture_sure("git branch -D main"))
-        self.assertFalse(A.commande_lecture_sure("echo $(id)" if os.name != "nt" else "echo %PATH%"))
-        self.assertFalse(A.commande_lecture_sure("git status\nid"))
-        self.assertIsNone(tools.plan_lecture(("cat " if os.name != "nt" else "type ") + ".git/config"), "the .git folder is protected, as for the reading tool")
+        self.assertTrue(A.safe_read_command("git status --short"))
+        self.assertFalse(A.safe_read_command("git branch -D main"))
+        self.assertFalse(A.safe_read_command("echo $(id)" if os.name != "nt" else "echo %PATH%"))
+        self.assertFalse(A.safe_read_command("git status\nid"))
+        self.assertIsNone(tools.read_plan(("cat " if os.name != "nt" else "type ") + ".git/config"), "the .git folder is protected, as for the reading tool")
 
     def test_echo_and_file_reads_ask_nothing_and_start_nothing(self):
         started = []
-        real = tools.lancer_processus
-        tools.lancer_processus = lambda *a, **k: started.append(a) or (0, b"", None)
+        real = tools.start_process
+        tools.start_process = lambda *a, **k: started.append(a) or (0, b"", None)
         try:
-            self.assertIn("bonjour", tools.outil_executer("echo bonjour", self.ctx))
+            self.assertIn("bonjour", tools.run_tool("echo bonjour", self.ctx))
             if os.name == "nt":
-                self.assertIn("line two", tools.outil_executer("type README.md", self.ctx))
-                self.assertIn("README.md", tools.outil_executer("dir", self.ctx))
+                self.assertIn("line two", tools.run_tool("type README.md", self.ctx))
+                self.assertIn("README.md", tools.run_tool("dir", self.ctx))
                 self.assertEqual(started, [], "echo, dir and type are answered by Lutin: no process, no cmd.exe")
         finally:
-            tools.lancer_processus = real
+            tools.start_process = real
         self.assertEqual(self.asked, [])
 
     def test_a_safe_program_is_started_from_an_argument_list(self):
         seen = []
-        real = tools.lancer_processus
-        tools.lancer_processus = lambda cmd, shell, cwd, *a, **k: seen.append((cmd, shell, cwd)) or (0, b"ok", None)
+        real = tools.start_process
+        tools.start_process = lambda cmd, shell, cwd, *a, **k: seen.append((cmd, shell, cwd)) or (0, b"ok", None)
         try:
-            tools.outil_executer("git status --short", self.ctx)
+            tools.run_tool("git status --short", self.ctx)
         finally:
-            tools.lancer_processus = real
+            tools.start_process = real
         self.assertEqual(seen, [(["git", "status", "--short"], False, str(A.RACINE))], "a list of arguments and shell=False")
         self.assertEqual(self.asked, [])
 
@@ -151,27 +151,27 @@ class ThroughTheTool(unittest.TestCase):
         marker = PROJECT / "PWNED"
         for command in ("git branch -D main", "echo x> PWNED", "echo $(touch PWNED)" if os.name != "nt" else "type %USERPROFILE%\\x"):
             self.asked.clear()
-            answer = tools.outil_executer(command, self.ctx)
+            answer = tools.run_tool(command, self.ctx)
             self.assertEqual(self.asked, [command], "the user is asked")
             self.assertIn("Refusé", answer)
         self.assertFalse(marker.exists())
 
     @unittest.skipUnless(os.name == "posix", "ls and cat are started for real on POSIX only")
     def test_posix_readers_really_run_without_a_shell(self):
-        self.assertIn("README.md", tools.outil_executer("ls", self.ctx))
-        self.assertIn("line two", tools.outil_executer("cat README.md", self.ctx))
-        self.assertIn("notes", tools.outil_executer("cat docs/*.md", self.ctx))
+        self.assertIn("README.md", tools.run_tool("ls", self.ctx))
+        self.assertIn("line two", tools.run_tool("cat README.md", self.ctx))
+        self.assertIn("notes", tools.run_tool("cat docs/*.md", self.ctx))
         self.assertEqual(self.asked, [])
 
     def test_a_missing_program_is_an_error_the_model_can_read(self):
-        A.enregistrer_reglages({"commandes_sans_accord": ["lutin-no-such-program -q"]})
+        A.save_settings({"commandes_sans_accord": ["lutin-no-such-program -q"]})
         A.reglages()
         try:
             with self.assertRaises(A.ErreurOutil) as caught:
-                tools.outil_executer("lutin-no-such-program -q", self.ctx)
+                tools.run_tool("lutin-no-such-program -q", self.ctx)
             self.assertIn("lutin-no-such-program", str(caught.exception))
         finally:
-            A.enregistrer_reglages({"commandes_sans_accord": []})
+            A.save_settings({"commandes_sans_accord": []})
             A.reglages()
 
 

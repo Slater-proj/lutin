@@ -79,7 +79,7 @@ def record(service, requete, retire=(), ok=True):
                 f.write(ligne + "\n")
             if chemin.stat().st_size > MAX_ENTRIES * 700:          # rogner de temps en temps, sans relire le fichier à chaque envoi
                 lignes = chemin.read_text(encoding="utf-8", errors="replace").splitlines()[-MAX_ENTRIES:]
-                _donnees.ecrire_atomique(chemin, "\n".join(lignes) + "\n")
+                _donnees.write_atomic(chemin, "\n".join(lignes) + "\n")
     except (OSError, ValueError):
         pass
 

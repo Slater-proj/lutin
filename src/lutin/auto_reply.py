@@ -14,16 +14,16 @@ MAX_WAIT = 180            # secondes d'attente d'une place libre (Lutin répond 
 
 
 def _read(ident):
-    return _m.lire_json(addons.folder_data() / ident / "conversations.json", {})
+    return _m.read_json(addons.folder_data() / ident / "conversations.json", {})
 
 
 def reply(ident, canal, cle, titre, message, consigne="", arret=None, pause=2):
     """La réponse du modèle (texte) ou None (PC occupé trop longtemps, garde-fou, erreur). ident : l'addon ; canal : « Courriel », « X »… (pour le titre et la consigne) ; cle : l'interlocuteur."""
     convs = _read(ident)
     try:
-        conv = _m.conv_lire(convs[cle]) if cle in convs else _m.conv_nouvelle()
+        conv = _m.conv_read(convs[cle]) if cle in convs else _m.conv_new()
     except (ValueError, OSError, KeyError):
-        conv = _m.conv_nouvelle()
+        conv = _m.conv_new()
     conv["titre"] = "✉ {} — {}".format(canal, titre)[:120]
     r = _m.reglages()
     r["mode"] = "discussion"                                                   # aucun outil : une tierce personne ne peut rien faire faire à Lutin
@@ -40,8 +40,8 @@ def reply(ident, canal, cle, titre, message, consigne="", arret=None, pause=2):
         return None
     convs = _read(ident)
     convs[cle] = conv["id"]
-    _m.ecrire_atomique(addons.folder_data() / ident / "conversations.json", json.dumps(convs, ensure_ascii=False))
-    conv = _m.conv_lire(conv["id"])
+    _m.write_atomic(addons.folder_data() / ident / "conversations.json", json.dumps(convs, ensure_ascii=False))
+    conv = _m.conv_read(conv["id"])
     texte = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and (m.get("content") or "").strip()), "")
     return texte.strip() or None
 

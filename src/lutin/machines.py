@@ -96,12 +96,12 @@ def dossier():
 
 def _lire(nom, defaut):
     from . import storage
-    return storage.lire_json(dossier() / nom, defaut)          # relu un instant plus tard quand Windows le tient (en cours de remplacement)
+    return storage.read_json(dossier() / nom, defaut)          # relu un instant plus tard quand Windows le tient (en cours de remplacement)
 
 
 def _ecrire(nom, valeur):
     from . import storage
-    storage.ecrire_atomique(dossier() / nom, json.dumps(valeur, ensure_ascii=False, indent=1))          # un fichier temporaire à soi, remplacement réessayé
+    storage.write_atomic(dossier() / nom, json.dumps(valeur, ensure_ascii=False, indent=1))          # un fichier temporaire à soi, remplacement réessayé
 
 
 def journaliser(texte):
@@ -394,13 +394,13 @@ def noeud_partager(genre, corps):
     if not (noeud().get("piloter") if droit == "piloter" else noeud_droits()[droit]):
         raise PermissionError(droit)
     if genre == "conversations":
-        return {"conversations": [{"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", ""), "messages": c.get("messages", 0)} for c in _m.conv_liste() if not c.get("origine")][:300]}
+        return {"conversations": [{"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", ""), "messages": c.get("messages", 0)} for c in _m.conv_list() if not c.get("origine")][:300]}
     if genre == "skills":
-        return {"skills": [{"nom": nom, "titre": titre} for nom, titre in _m.lister_skills()][:300]}
+        return {"skills": [{"nom": nom, "titre": titre} for nom, titre in _m.list_skills()][:300]}
     if genre == "skill":
         nom = str(corps.get("nom", ""))
-        return {"nom": nom, "texte": _m.lire_skill(nom)}
-    return {"memoire": {nom: _m.lire_memoire(nom) for nom in ("CONTEXTE.md", "MEMOIRE.md")}}
+        return {"nom": nom, "texte": _m.read_skill(nom)}
+    return {"memoire": {nom: _m.read_memory(nom) for nom in ("CONTEXTE.md", "MEMOIRE.md")}}
 
 
 def noeud_vue():
@@ -1080,14 +1080,14 @@ def nettoyer_copies_importees():
     COPIES_NETTOYEES[0] = True
     from . import core as _m
     supprimees = 0
-    for c in _m.conv_liste():
+    for c in _m.conv_list():
         if not c.get("origine"):
             continue
         try:
-            complete = _m.conv_lire(c["id"])
+            complete = _m.conv_read(c["id"])
             origine = complete.get("origine") or {}
             if len(complete.get("messages", [])) == int(origine.get("messages_importes") or -1):
-                _m.conv_supprimer(c["id"])
+                _m.conv_delete(c["id"])
                 supprimees += 1
         except (ValueError, OSError, TypeError):
             continue
@@ -1136,15 +1136,15 @@ def importer_skills(ident):
             empreinte = hashlib.sha256(texte.encode("utf-8")).hexdigest()
             existe = True
             try:
-                local = _m.lire_skill(nom)
+                local = _m.read_skill(nom)
             except OSError:
                 existe, local = False, ""
             if not existe:
-                _m.ecrire_skill(nom, texte)
+                _m.write_skill(nom, texte)
                 origines[nom] = {"machine": m["nom"], "empreinte": empreinte}
                 ajoutes += 1
             elif (origines.get(nom) or {}).get("machine") == m["nom"] and hashlib.sha256(local.encode("utf-8")).hexdigest() == origines[nom].get("empreinte") and empreinte != origines[nom].get("empreinte"):
-                _m.ecrire_skill(nom, texte)
+                _m.write_skill(nom, texte)
                 origines[nom]["empreinte"] = empreinte
                 mis += 1
             else:
@@ -1163,7 +1163,7 @@ def importer_memoire(ident):
     if m is None:
         raise MachineInconnue(_t("Machine inconnue."))
     distante = demander_partage(m, "memoire").get("memoire") or {}
-    local = _m.lire_memoire("MEMOIRE.md")
+    local = _m.read_memory("MEMOIRE.md")
     connues = {re.sub(r"\W+", " ", ligne).strip().lower() for ligne in local.splitlines()}
     neuves = []
     for ligne in str(distante.get("MEMOIRE.md", "")).splitlines():
@@ -1184,13 +1184,13 @@ def importer_memoire(ident):
             taille += len(ligne) + 1
         ignorees = len(neuves) - len(gardees)          # ce qui ne tient pas n'est PAS écrit (et le début du fichier local, ses décisions, n'est jamais rogné) : on le dit
         if gardees:
-            _m.ecrire_memoire("MEMOIRE.md", local.rstrip() + entete + "\n".join(gardees) + "\n")
+            _m.write_memory("MEMOIRE.md", local.rstrip() + entete + "\n".join(gardees) + "\n")
         neuves = gardees
     profil, profil_coupe = False, False
-    if str(distante.get("CONTEXTE.md", "")).strip() and not _m.lire_memoire("CONTEXTE.md").strip():
+    if str(distante.get("CONTEXTE.md", "")).strip() and not _m.read_memory("CONTEXTE.md").strip():
         contexte = str(distante["CONTEXTE.md"])
         profil_coupe = len(contexte) > LIMITE_MEMOIRE
-        _m.ecrire_memoire("CONTEXTE.md", contexte[:LIMITE_MEMOIRE])
+        _m.write_memory("CONTEXTE.md", contexte[:LIMITE_MEMOIRE])
         profil = True
     journaliser("mémoire importée de {} : {} note(s), {} ignorée(s) faute de place{}".format(m["nom"], len(neuves), ignorees, ", profil coupé" if profil_coupe else ""))
     return {"notes_ajoutees": len(neuves), "notes_ignorees": ignorees, "profil_copie": profil, "profil_coupe": profil_coupe}

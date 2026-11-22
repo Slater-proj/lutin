@@ -132,7 +132,7 @@ def document_parts(f):
         parties = text_extraction.parts(f)
         try:
             fichier.parent.mkdir(parents=True, exist_ok=True)
-            _m.ecrire_atomique(fichier, json.dumps(parties, ensure_ascii=False))
+            _m.write_atomic(fichier, json.dumps(parties, ensure_ascii=False))
         except OSError:
             pass
     PARTS_CACHE.clear() if len(PARTS_CACHE) > 400 else None
@@ -271,7 +271,7 @@ THREAD = {}                       # conversation -> (signature, morceaux, df, mo
 
 def thread_chunks(ident):
     """Les morceaux de la conversation (messages gardés + début archivé par le résumé), sans parcourir les dossiers de documents : rapide à chaque réponse."""
-    _m.conv_chemin(ident)                                         # checks the identifier
+    _m.conv_path(ident)                                         # checks the identifier
     f = ConversationRef(ident)
     try:
         sig = file_signature(f)
@@ -344,7 +344,7 @@ def result_chunks(ident):
     """The tool results of this conversation, those still in it and those kept in full in its archive because they were cut to fit the window
     (ADR 0019, decision 5), as chunks with their word counts. Searched by words only, by « rappeler » with ici=true: the meaning of an output is
     its exact words (a name, an error, a number), and the vectors of the thread stay those of its messages."""
-    _m.conv_chemin(ident)                                         # checks the identifier
+    _m.conv_path(ident)                                         # checks the identifier
     f = ConversationRef(ident)
     try:
         sig = file_signature(f)

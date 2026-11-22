@@ -247,7 +247,7 @@ class OpenAIBase(Conformite):
         cls.ancien = dict(engines.CONTEXT)
         cls.dossier = Path(tempfile.mkdtemp(dir=_TEMP))
         engines.CONTEXT.update(donnees=lambda: cls.dossier, en_docker=lambda: False, hors_ligne=lambda: False)
-        ml.regler(cls.id, adresse="http://127.0.0.1:%d" % cls.s.server_address[1])
+        ml.configure(cls.id, adresse="http://127.0.0.1:%d" % cls.s.server_address[1])
         cls.moteur = engines.ENGINES[cls.id]
 
     @classmethod

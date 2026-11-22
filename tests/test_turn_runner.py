@@ -29,7 +29,7 @@ def answering(text="Done."):
     """A fake turn that answers and writes its conversation, as the real one does."""
     def fake(conv, request, emit, r=None, stop=None, replace=None, **k):
         conv["messages"] += [{"role": "user", "content": request}, {"role": "assistant", "content": text}]
-        _m.conv_ecrire(conv)
+        _m.conv_write(conv)
     return fake
 
 
@@ -86,10 +86,10 @@ class ScheduledTasks(Clean):
                 _m.TOURS_ACTIFS.pop(conv["id"], None)
                 _m.TOURS_ACTIFS[conv["id"]] = newer
             conv["messages"] += [{"role": "assistant", "content": "late answer"}]
-            _m.conv_ecrire(conv)                                          # the frozen turn finally ends
+            _m.conv_write(conv)                                          # the frozen turn finally ends
         with mock.patch.object(_m, "tour", abandoned):
             tasks.execute(self.task["id"])
-        self.assertNotIn("late answer", [m.get("content") for m in _m.conv_lire(self.conversation)["messages"]])
+        self.assertNotIn("late answer", [m.get("content") for m in _m.conv_read(self.conversation)["messages"]])
         self.assertIs(_m.TOURS_ACTIFS.get(self.conversation), newer, "the newer turn keeps its seat")
 
 
@@ -103,7 +103,7 @@ class Missions(Clean):
             mission.action("supprimer", {"id": m["id"]})
 
     def test_a_mission_waits_while_a_person_writes_in_its_conversation(self):
-        conv = _m.conv_nouvelle()
+        conv = _m.conv_new()
         m = mission.create("Game", "Make a small game.", "principal", 8, True, conv_id=conv["id"])
         person = self.person_writes_in(conv["id"], (_TEMP / "work").resolve())          # the same folder: only the conversation is busy
         with mock.patch.object(_m, "tour", refusing):
@@ -221,19 +221,19 @@ class Seats(Clean):
         self.assertIs(_m.TOURS_ACTIFS.get(a["id"]), newer)
 
     def test_the_thread_is_marked_only_while_the_turn_runs(self):
-        a = _m.conv_nouvelle()
+        a = _m.conv_new()
         marks = []
 
         def fake(conv, request, emit, r=None, stop=None, *x, **k):
             marks.append(getattr(_m.LOCAL_TOUR, "stop", None) is stop)
             stop.abandonne = True
             conv["messages"].append({"role": "assistant", "content": "late"})
-            _m.conv_ecrire(conv)                                      # abandoned: not written
+            _m.conv_write(conv)                                      # abandoned: not written
         with mock.patch.object(_m, "tour", fake):
             seat = turn_runner.run_turn(a, "question", lambda e: None)
         self.assertEqual(marks, [True])
         self.assertTrue(seat.abandoned)
-        self.assertEqual(_m.conv_lire(a["id"])["messages"], [])
+        self.assertEqual(_m.conv_read(a["id"])["messages"], [])
         self.assertIsNone(getattr(_m.LOCAL_TOUR, "stop", None), "the thread can write the next conversation it handles")
         self.assertEqual(_m.TOURS_ACTIFS, {})
 

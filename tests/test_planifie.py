@@ -27,7 +27,7 @@ def tour_qui_repond(texte="Voici le résumé."):
     def faux(conv, demande, emit, r=None, stop=None, remplacer=None, identite="", lecture_seule=False, **k):
         assert lecture_seule and identite == "planifié", "une tâche planifiée tourne toujours en lecture seule"
         conv["messages"] += [{"role": "user", "content": demande}, {"role": "assistant", "content": texte}]
-        _m.conv_ecrire(conv)
+        _m.conv_write(conv)
     return faux
 
 
@@ -148,7 +148,7 @@ class Execution(Base):
         self.assertEqual((n["derniere_etat"], n["derniere_erreur"], n["derniere_conv"]), ("ok", "", c1))
         self.assertEqual([h["etat"] for h in n["historique"]], ["ok", "ok"])
         self.assertTrue(all(h["date"] and h["duree_s"] >= 0 for h in n["historique"]))
-        self.assertEqual(_m.conv_lire(c1)["titre"], "⏰ Résumé")
+        self.assertEqual(_m.conv_read(c1)["titre"], "⏰ Résumé")
         self.assertEqual([e[2] for e in self.envoyes], ["Premier résumé.", "Deuxième résumé."])
         self.assertEqual(P.RUNNING, {}, "rien ne reste « en cours »")
 
@@ -162,12 +162,12 @@ class Execution(Base):
         t = self.tache(notifier="c1")
 
         def muet(conv, demande, emit, *a, **k):
-            _m.conv_ecrire(dict(conv, messages=conv["messages"] + [{"role": "user", "content": demande}]))
+            _m.conv_write(dict(conv, messages=conv["messages"] + [{"role": "user", "content": demande}]))
         c = self.lancer(t["id"], muet)
         n = P.read()[0]
         self.assertEqual(n["derniere_etat"], "erreur")
         self.assertIn("Aucune réponse", n["derniere_erreur"])
-        dernier = _m.conv_lire(c)["messages"][-1]
+        dernier = _m.conv_read(c)["messages"][-1]
         self.assertTrue(dernier["content"].startswith("⚠") and dernier["ts"], "l'explication est écrite dans la conversation, datée")
         self.assertIn("problème", self.envoyes[-1][1])
 
@@ -222,7 +222,7 @@ class Execution(Base):
             demarree.set()
             libre.wait(10)
             conv["messages"] += [{"role": "assistant", "content": "ok"}]
-            _m.conv_ecrire(conv)
+            _m.conv_write(conv)
         fil = threading.Thread(target=lambda: self.lancer(t["id"], lent))
         fil.start()
         self.assertTrue(demarree.wait(10))
@@ -243,7 +243,7 @@ class ArretEtSuppression(Base):
             demarree.set()
             stop.wait(10)
             conv["messages"] += [{"role": "assistant", "content": "réponse partielle"}]
-            _m.conv_ecrire(conv)
+            _m.conv_write(conv)
         fil = threading.Thread(target=lambda: self.lancer(t["id"], attend_l_arret))
         fil.start()
         self.assertTrue(demarree.wait(10))
@@ -273,11 +273,11 @@ class ArretEtSuppression(Base):
         t = self.tache()
         conv = self.lancer(t["id"], tour_qui_repond())
         P.remove(t["id"])
-        self.assertTrue(_d.conv_existe(conv), "la conversation reste : elle contient les résultats")
+        self.assertTrue(_d.conv_exists(conv), "la conversation reste : elle contient les résultats")
         t2 = self.tache(nom="Autre")
         conv2 = self.lancer(t2["id"], tour_qui_repond())
         P.remove(t2["id"], conversation=True)
-        self.assertFalse(_d.conv_existe(conv2))
+        self.assertFalse(_d.conv_exists(conv2))
 
     def test_supprimer_avec_sa_conversation_en_plein_travail_n_en_laisse_aucune_trace(self):
         t = self.tache()
@@ -285,7 +285,7 @@ class ArretEtSuppression(Base):
         conv = P.read()[0]["derniere_conv"]
         P.remove(t["id"], conversation=True)
         fil.join(10)
-        self.assertFalse(_d.conv_existe(conv), "la fin du tour n'a pas réécrit la conversation")
+        self.assertFalse(_d.conv_exists(conv), "la fin du tour n'a pas réécrit la conversation")
         self.assertEqual(P.TO_REMOVE, set())
 
     def test_supprimer_une_tache_inconnue_est_dit(self):

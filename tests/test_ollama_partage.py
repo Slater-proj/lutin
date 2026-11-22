@@ -72,13 +72,13 @@ class DansLlamaCpp(unittest.TestCase):
         ranger(self.ollama, "registry.ollama.ai", "library/qwen3/8b", [("model", "a", True)])
         self.ancien = dict(engines.CONTEXT)
         engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, profil_attendu=None, dossier_ollama=lambda: self.ollama)
-        ml.CACHE_PARTAGE.clear()
-        self.m = ml.MoteurLlamaCpp()
+        ml.SHARED_CACHE.clear()
+        self.m = ml.LlamaCppEngine()
         self.addCleanup(self.fin)
 
     def fin(self):
         engines.CONTEXT.update(self.ancien)
-        ml.CACHE_PARTAGE.clear()
+        ml.SHARED_CACHE.clear()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_la_liste_contient_ceux_d_ollama_sans_copie(self):
@@ -92,23 +92,23 @@ class DansLlamaCpp(unittest.TestCase):
         self.assertFalse(list(self.m.dossier_modeles().glob("*qwen3*")), "aucune copie")
 
     def test_llama_cpp_ne_supprime_jamais_un_modele_d_ollama(self):
-        with self.assertRaises(ml.ErreurMoteur) as e:
+        with self.assertRaises(ml.EngineError) as e:
             self.m.supprimer_modele("qwen3:8b")
         self.assertIn("appartient à Ollama", str(e.exception))
         self.assertTrue((self.ollama / "blobs" / ("sha256-" + empreinte("a"))).is_file())
 
     def test_sous_docker_ou_partage_coupe_ou_serveur_externe_rien_n_est_partage(self):
         engines.CONTEXT["en_docker"] = lambda: True
-        ml.CACHE_PARTAGE.clear()
+        ml.SHARED_CACHE.clear()
         self.assertEqual(self.m.partages(), {})
         engines.CONTEXT["en_docker"] = lambda: False
-        ml.CACHE_PARTAGE.clear()
-        ml.regler("llamacpp", partager_ollama=False)
+        ml.SHARED_CACHE.clear()
+        ml.configure("llamacpp", partager_ollama=False)
         self.assertEqual(self.m.partages(), {}, "coupé par l'utilisateur")
 
     def test_le_projecteur_est_donne_au_serveur(self):
         ranger(self.ollama, "registry.ollama.ai", "library/gemma3/4b", [("model", "1", True), ("projector", "2", True)])
-        ml.CACHE_PARTAGE.clear()
+        ml.SHARED_CACHE.clear()
         lances = []
         exe = self.m.dossier() / "bin" / ("llama-server.exe" if __import__("os").name == "nt" else "llama-server")
         exe.parent.mkdir(parents=True)
@@ -131,8 +131,8 @@ class DansLlamaCpp(unittest.TestCase):
         subprocess.Popen = lambda cmd, **kw: lances.append(cmd) or Faux()
         self.addCleanup(setattr, subprocess, "Popen", vrai)
         self.m._pret = lambda: True
-        vrai_aide = ml.aide_serveur
-        ml.aide_serveur = lambda exe: ""          # pas de vrai llama-server ici : aucune option adaptée à la machine
+        vrai_aide = ml.server_help
+        ml.server_help = lambda exe: ""          # pas de vrai llama-server ici : aucune option adaptée à la machine
         self.addCleanup(setattr, ml, "aide_serveur", vrai_aide)
         self.m.demarrer("gemma3:4b")
         self.assertIn("--mmproj", lances[0])
@@ -150,19 +150,19 @@ class DossiersCommuns(unittest.TestCase):
         self.addCleanup(lambda: (engines.CONTEXT.update(self.ancien), shutil.rmtree(self.tmp, ignore_errors=True)))
 
     def test_llama_cpp_dossier_des_modeles_reglable(self):
-        mo = ml.MoteurLlamaCpp()
+        mo = ml.LlamaCppEngine()
         engines.ENGINES[mo.id] = mo
         self.addCleanup(engines.ENGINES.pop, mo.id, None)
         info = mo.info_dossier()
         self.assertEqual(info["modeles"]["actuel"], str(self.tmp / "engines" / "llamacpp" / "modeles"))
         ailleurs = self.tmp / "gros-disque" / "modeles"
-        ml.regler_dossier_modeles(mo.id, str(ailleurs))
+        ml.set_models_folder(mo.id, str(ailleurs))
         self.assertEqual(mo.dossier_modeles(), ailleurs)
         self.assertTrue(mo.info_dossier()["modeles"]["personnalise"])
-        ml.regler_dossier_modeles(mo.id, "")
+        ml.set_models_folder(mo.id, "")
         self.assertEqual(mo.dossier_modeles(), self.tmp / "engines" / "llamacpp" / "modeles", "vide : retour au dossier par défaut")
-        with self.assertRaises(ml.ErreurMoteur):
-            ml.regler_dossier_modeles(mo.id, "relatif/dossier")
+        with self.assertRaises(ml.EngineError):
+            ml.set_models_folder(mo.id, "relatif/dossier")
 
     def test_ollama_montre_les_memes_lignes(self):
         mo = agent.MoteurOllama()
@@ -258,25 +258,25 @@ class ReglagesMachine(unittest.TestCase):
 
     def test_fils_de_calcul_et_repartition_selon_la_machine(self):
         aide = "--threads n  --fit [on|off]"
-        args, ajuste = ml.reglages_machine(aide, "cuda", 2.5, self.profil(24))
+        args, ajuste = ml.machine_settings(aide, "cuda", 2.5, self.profil(24))
         self.assertEqual((args, ajuste), (["--threads", "8"], False), "petit modèle, grosse carte : tout sur la carte")
-        args, ajuste = ml.reglages_machine(aide, "cuda", 40.0, self.profil(8))
+        args, ajuste = ml.machine_settings(aide, "cuda", 40.0, self.profil(8))
         self.assertTrue(ajuste and args[-2:] == ["--fit", "on"], "modèle trop gros pour la carte : llama.cpp répartit les couches")
-        args, ajuste = ml.reglages_machine(aide, "cpu", 40.0, self.profil(8))
+        args, ajuste = ml.machine_settings(aide, "cpu", 40.0, self.profil(8))
         self.assertEqual((args, ajuste), (["--threads", "8"], False), "sans carte utilisée, pas de répartition")
 
     def test_une_option_inconnue_n_est_jamais_passee(self):
-        self.assertEqual(ml.reglages_machine("rien de connu", "cuda", 40.0, self.profil(8)), ([], False))
-        self.assertEqual(ml.reglages_machine("--threads --fit", "cuda", 40.0, None), ([], False), "machine inconnue : rien d'inventé")
+        self.assertEqual(ml.machine_settings("rien de connu", "cuda", 40.0, self.profil(8)), ([], False))
+        self.assertEqual(ml.machine_settings("--threads --fit", "cuda", 40.0, None), ([], False), "machine inconnue : rien d'inventé")
 
     def test_le_cache_de_conversations_en_memoire_vive_est_borne(self):
         """Constat du mainteneur : llama.cpp « chargé deux fois », en mémoire vive ET dans la carte. Les versions récentes de llama-server gardent par défaut jusqu'à 8 Go de cache en mémoire vive."""
-        self.assertEqual([ml.cache_ram_mo(self.profil(24, ram=ram)) for ram in (8, 16, 32, 64, 128)], [0, 819, 1638, 2048, 2048])
-        args, _ = ml.reglages_machine("--threads n --cache-ram n --fit [on|off]", "cuda", 2.5, self.profil(24, ram=32))
+        self.assertEqual([ml.ram_cache_mb(self.profil(24, ram=ram)) for ram in (8, 16, 32, 64, 128)], [0, 819, 1638, 2048, 2048])
+        args, _ = ml.machine_settings("--threads n --cache-ram n --fit [on|off]", "cuda", 2.5, self.profil(24, ram=32))
         self.assertEqual(args[args.index("--cache-ram") + 1], "1638")
-        self.assertNotIn("--cache-ram", ml.reglages_machine("--threads n", "cuda", 2.5, self.profil(24, ram=32))[0], "une version qui ne connaît pas l'option ne la reçoit pas")
-        self.assertIn("cache-ram = 0", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"cache_ram": 0}), "0 coupe le cache : il doit être écrit, pas oublié")
-        self.assertNotIn("cache-ram", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8}))
+        self.assertNotIn("--cache-ram", ml.machine_settings("--threads n", "cuda", 2.5, self.profil(24, ram=32))[0], "une version qui ne connaît pas l'option ne la reçoit pas")
+        self.assertIn("cache-ram = 0", ml.preset_text([("un", "/m/un.gguf", None)], 8192, {"cache_ram": 0}), "0 coupe le cache : il doit être écrit, pas oublié")
+        self.assertNotIn("cache-ram", ml.preset_text([("un", "/m/un.gguf", None)], 8192, {"fils": 8}))
 
 
 if __name__ == "__main__":

@@ -162,17 +162,17 @@ class Carte(unittest.TestCase):
         self.addCleanup(self.remettre)
 
     def remettre(self):
-        ml.regler_serveur("lmstudio", {"port_lmstudio": 0})
+        ml.configure_server("lmstudio", {"port_lmstudio": 0})
         engines.CONTEXT.clear()
         engines.CONTEXT.update(self.ancien)
 
     def test_adresse_imposee_locale_et_port_regle(self):
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:1234/v1")
-        ml.regler_serveur("lmstudio", {"port_lmstudio": 4321})
+        ml.configure_server("lmstudio", {"port_lmstudio": 4321})
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:4321/v1")
         for mauvais in (80, "abc", 70000):
             with self.assertRaises(Exception):
-                ml.regler_serveur("lmstudio", {"port_lmstudio": mauvais})
+                ml.configure_server("lmstudio", {"port_lmstudio": mauvais})
 
     def test_les_actions_suivent_l_etat_et_lutin_ne_desinstalle_jamais(self):
         with mock.patch.object(L, "lms_path", lambda: None):

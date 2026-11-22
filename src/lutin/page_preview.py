@@ -55,7 +55,7 @@ def address(cible):
             raise _m.ErreurOutil(_t("Seules les pages de cette machine (127.0.0.1, localhost) ou un fichier du dossier de travail peuvent être ouverts."))
         return cible
     from . import tools
-    f = tools.chemin_sur(cible)
+    f = tools.safe_path(cible)
     if not f.is_file():
         raise _m.ErreurOutil(_t("Fichier introuvable : {}").format(cible))
     return f.as_uri()
@@ -123,7 +123,7 @@ def tool_preview(cible, largeur, hauteur, ctx, navigateur_=None):
         raise _m.ErreurOutil(_t("Largeur et hauteur : des nombres entiers de pixels."))
     if not ctx["accord"](_t("Aperçu de la page"), _t("Ouvre {} dans un navigateur sans fenêtre (profil temporaire) et en prend une capture, {}×{}.").format(cible, largeur, hauteur), "", auto=ctx["auto_commandes"]):
         from . import tools
-        return tools.refus(ctx, _t("Refusé par l'utilisateur : rien n'a été ouvert."))
+        return tools.refusal(ctx, _t("Refusé par l'utilisateur : rien n'a été ouvert."))
     from . import images
     png, texte, titre, console = screenshot(url, largeur, hauteur, navigateur_)
     ident = images.save(png)

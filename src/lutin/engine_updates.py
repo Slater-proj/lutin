@@ -64,7 +64,7 @@ def _latest_llamacpp(mo, http_json):
     import platform
     actuelle = mo.version()
     variante = str(mo.config().get("variante_installee") or "cpu")
-    choix = ml.choisir_fichiers((http_json or ml._http_json)(ml.API_RELEASES), ml._systeme(), platform.machine().lower(), variante)
+    choix = ml.choose_files((http_json or ml._http_json)(ml.API_RELEASES), ml._system(), platform.machine().lower(), variante)
     return (actuelle, choix[0]) if choix else None
 
 

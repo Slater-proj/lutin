@@ -69,7 +69,7 @@ class Engines(unittest.TestCase):
         with mock.patch.object(llamacpp, "serveur_pret", lambda: None):
             self.assertTrue(llamacpp.aptitudes().experts_in_ram, "not installed yet: Lutin installs a recent version")
         for help_text, expected in (("--fit [on|off]", True), ("-ncmoe, --n-cpu-moe n", True), ("--threads n -ngl n", False)):
-            with mock.patch.object(llamacpp, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(llamacpp_engine, "aide_serveur", lambda exe, h=help_text: h):
+            with mock.patch.object(llamacpp, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(llamacpp_engine, "server_help", lambda exe, h=help_text: h):
                 self.assertIs(llamacpp.aptitudes().experts_in_ram, expected, help_text)
 
     def test_the_only_engine_the_loop_may_start_knows_how(self):

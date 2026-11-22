@@ -261,18 +261,18 @@ class ComfyUI(unittest.TestCase):
         ident_image = ctx["medias"][0]
         self.assertEqual(ctx["medias_fichiers"][ident_image], str((sortie / "a_supprimer.png").resolve()))
         autre = images.save(b"\x89PNG\r\n\x1a\n" + b"deux")
-        c = _m.conv_nouvelle()
+        c = _m.conv_new()
         c["messages"] = [{"role": "tool", "tool_name": "comfy_generer", "content": "ok", "medias": [ident_image, autre],
                           "medias_fichiers": {ident_image: str(sortie / "a_supprimer.png"), autre: str(COMFY / "main_intact.png")}}]
-        _m.conv_ecrire(c)
+        _m.conv_write(c)
         self.assertTrue(change_review.delete_media(c["id"], ident_image)["fichier_supprime"])
         self.assertFalse((sortie / "a_supprimer.png").exists())
-        self.assertEqual(_m.conv_lire(c["id"])["messages"][0]["medias"], [autre])
+        self.assertEqual(_m.conv_read(c["id"])["messages"][0]["medias"], [autre])
         with self.assertRaises(ValueError):
             images.path_of(ident_image)
         self.assertFalse(change_review.delete_media(c["id"], autre)["fichier_supprime"], "un fichier hors du dossier de sortie n'est jamais effacé")
         self.assertTrue((COMFY / "main_intact.png").exists())
-        self.assertNotIn("medias", _m.conv_lire(c["id"])["messages"][0])
+        self.assertNotIn("medias", _m.conv_read(c["id"])["messages"][0])
         with self.assertRaises(ValueError):
             change_review.delete_media(c["id"], autre)
 
@@ -619,7 +619,7 @@ class ComfyUI(unittest.TestCase):
         self.assertIn("introuvable", dict(champ["choix"])["ancien_modele.safetensors"])
         # l'outil montré au modèle de langage : types disponibles et modèles utilisables
         from lutin import tools
-        outil = next(o for o in tools.OUTILS if o["function"]["name"] == "comfy_generer")
+        outil = next(o for o in tools.TOOLS if o["function"]["name"] == "comfy_generer")
         adapte = cu.adapt_tool(outil)
         props = adapte["function"]["parameters"]["properties"]
         self.assertEqual(props["type"]["enum"], ["image"], "pas de moteur vidéo ni son : ils ne sont pas proposés")

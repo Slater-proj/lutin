@@ -17,37 +17,37 @@ from lutin import agent  # noqa: E402
 
 class Coupures(unittest.TestCase):
     def setUp(self):
-        A.COUPURES.clear()
+        A.CUTS.clear()
 
     def test_contexte_trop_long_est_coupe_avec_un_marqueur_et_signale(self):
         court = "# Projet\n" + "x" * 100
-        self.assertEqual(A.borner_contexte(court), court)
-        self.assertEqual(A.COUPURES, {})
-        long = "# Projet\n" + "y" * (A.LIMITE_CONTEXTE + 500)
-        lu = A.borner_contexte(long)
+        self.assertEqual(A.bound_context(court), court)
+        self.assertEqual(A.CUTS, {})
+        long = "# Projet\n" + "y" * (A.CONTEXT_LIMIT + 500)
+        lu = A.bound_context(long)
         self.assertTrue(lu.startswith("# Projet\n" + "y" * 100))
         self.assertIn("CONTEXTE.md coupé", lu)
         self.assertIn("non relus", lu)
-        self.assertIn(str(len(long) - A.LIMITE_CONTEXTE), lu, "le marqueur dit combien manque")
-        self.assertEqual(A.COUPURES["CONTEXTE.md"], (len(long), A.LIMITE_CONTEXTE))
-        A.borner_contexte(court)
-        self.assertEqual(A.COUPURES, {}, "la mention disparaît quand le fichier tient de nouveau")
+        self.assertIn(str(len(long) - A.CONTEXT_LIMIT), lu, "le marqueur dit combien manque")
+        self.assertEqual(A.CUTS["CONTEXTE.md"], (len(long), A.CONTEXT_LIMIT))
+        A.bound_context(court)
+        self.assertEqual(A.CUTS, {}, "la mention disparaît quand le fichier tient de nouveau")
 
     def test_memoire_longue_dit_ce_qui_n_est_pas_relu_sans_depasser_le_budget(self):
-        long = "# Mémoire\n\n## Décisions\n- FIXE\n" + A.MARQUE_NOTES + "\n" + "".join("- note %03d %s\n" % (i, "x" * 60) for i in range(200))
-        lu = A.texte_memoire(long)
+        long = "# Mémoire\n\n## Décisions\n- FIXE\n" + A.NOTES_MARKER + "\n" + "".join("- note %03d %s\n" % (i, "x" * 60) for i in range(200))
+        lu = A.memory_text(long)
         self.assertLessEqual(len(lu), 6000)
         self.assertIn("FIXE", lu)
         self.assertIn("note 199", lu)
         self.assertIn("plus anciens non relus", lu)
-        self.assertIn("MEMOIRE.md", A.COUPURES)
+        self.assertIn("MEMOIRE.md", A.CUTS)
         sans_section = "début\n" + "z" * 7000
-        lu = A.texte_memoire(sans_section)
+        lu = A.memory_text(sans_section)
         self.assertLessEqual(len(lu), 6000)
         self.assertIn("plus anciens non relus", lu)
-        A.COUPURES.clear()
-        self.assertEqual(A.texte_memoire("court sans section"), "court sans section")
-        self.assertEqual(A.COUPURES, {})
+        A.CUTS.clear()
+        self.assertEqual(A.memory_text("court sans section"), "court sans section")
+        self.assertEqual(A.CUTS, {})
 
     def test_les_anciens_resultats_d_outils_raccourcis_sont_comptes(self):
         msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "lis tout"}]

@@ -252,11 +252,11 @@ class Chat(unittest.TestCase):
     def test_3n_the_conversations_are_searched_and_marked(self):
         """docs/modernization/PARITY.md, item 4: the words of a conversation find it (accents ignored), and the list marks the one that is answering."""
         p = self.page
-        c = T.A.conv_nouvelle()
+        c = T.A.conv_new()
         c["titre"] = "Recette de cuisine"
         c["messages"] = [{"role": "user", "content": "La pâte brisée repose une heure."}]
-        T.A.conv_ecrire(c)
-        self.addCleanup(lambda: T.A.conv_supprimer(c["id"]))
+        T.A.conv_write(c)
+        self.addCleanup(lambda: T.A.conv_delete(c["id"]))
         # a real reload: the page of the test before is already at #/chat, where going to the same address changes nothing and the list, read before
         # this conversation existed, would never show it (the mark below waited for an entry that was not there: the CI failed now and then)
         p.evaluer("location.hash = '#/chat'; window.__old = true; location.reload()")
@@ -309,15 +309,15 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: report.unlink(missing_ok=True))
         picture = images.save(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
         entry = produced_files.entry(report)
-        held = T.A.conv_nouvelle()["id"]
-        T.A.conv_renommer(held, "Produits 3p")
-        stored = T.A.conv_lire(held)
+        held = T.A.conv_new()["id"]
+        T.A.conv_rename(held, "Produits 3p")
+        stored = T.A.conv_read(held)
         stored["messages"] += [{"role": "user", "content": "Make a picture and a report"},
                                {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "generer_image", "arguments": {}}}]},
                                {"role": "tool", "tool_name": "generer_image", "content": "Done.", "medias": [picture], "medias_fichiers": {picture: "C:/ComfyUI/output/3p.png"},
                                 "fichiers_joints": [entry]},
                                {"role": "assistant", "content": "Here they are."}]
-        T.A.conv_ecrire_telle_quelle(stored)
+        T.A.conv_write_as_is(stored)
         launched = []
         for patch in (mock.patch.object(produced_files, "opening_possible", lambda: True), mock.patch.object(produced_files, "_launch", launched.append)):
             patch.start()
@@ -325,7 +325,7 @@ class Chat(unittest.TestCase):
 
         def restore():
             try:
-                T.A.conv_supprimer(held)
+                T.A.conv_delete(held)
             except (OSError, ValueError):
                 pass
         self.addCleanup(restore)
@@ -356,7 +356,7 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.produced .confirm-delete')")
         p.evaluer("document.querySelector('.produced .confirm-delete').click()")
         p.attendre("!document.querySelector('.produced')")
-        self.assertFalse(any("medias" in m or "fichiers_joints" in m for m in T.A.conv_lire(held)["messages"]), "the conversation no longer cites them")
+        self.assertFalse(any("medias" in m or "fichiers_joints" in m for m in T.A.conv_read(held)["messages"]), "the conversation no longer cites them")
         self.assertIn("Here they are.", p.evaluer(TEXT), "the rest of the answer stays")
         self.assertEqual(p.erreurs, [])
         p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")          # leave it: the cleanup deletes it, the next tests write in a new one
@@ -528,12 +528,12 @@ class Chat(unittest.TestCase):
         conversation = p.evaluer("document.querySelector('.list .entry[aria-current=true]') && 'open'")
         self.assertEqual(conversation, "open")
         stored = [c for c in T.lire("/api/etat")["conversations"] if c["titre"] == "Renamed on the page"][0]["id"]
-        self.eventually(lambda: T.A.options_lire(stored).get("auto_commandes") is True, "auto_commandes stored on the server, for this conversation")
+        self.eventually(lambda: T.A.options_read(stored).get("auto_commandes") is True, "auto_commandes stored on the server, for this conversation")
         p.evaluer("(() => { const s = document.querySelector('#options-panel select'); s.value = 'mission'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
         p.attendre("document.querySelectorAll('#options-panel select').length === 3")          # the mode, the longest answer, and the hours of a mission
-        self.eventually(lambda: T.A.options_lire(stored).get("mode") == "mission", "mode stored on the server")
+        self.eventually(lambda: T.A.options_read(stored).get("mode") == "mission", "mode stored on the server")
         p.evaluer("(() => { const s = document.querySelectorAll('#options-panel select')[1]; s.value = '2048'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
-        self.eventually(lambda: T.A.options_lire(stored).get("num_predict") == 2048, "the longest answer of this conversation (PARITY.md item 16)")
+        self.eventually(lambda: T.A.options_read(stored).get("num_predict") == 2048, "the longest answer of this conversation (PARITY.md item 16)")
         self.picture("3d-options")
         p.evaluer("(() => { const s = document.querySelector('#options-panel select'); s.value = 'general'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
         p.evaluer("document.querySelectorAll('.approvals input')[1].click()")
@@ -555,7 +555,7 @@ class Chat(unittest.TestCase):
         p.attendre(TEXT + ".includes('Done with the option.')")
         p.attendre("!!document.querySelector('.composer button[type=submit]')")
         created = [c for c in T.lire("/api/etat")["conversations"] if c["titre"].startswith("Message with an option")][0]["id"]
-        self.eventually(lambda: T.A.options_lire(created).get("auto_ecriture") is True, "the option chosen before the conversation existed was applied to it")
+        self.eventually(lambda: T.A.options_read(created).get("auto_ecriture") is True, "the option chosen before the conversation existed was applied to it")
         self.assertEqual(p.evaluer("document.querySelector('.bar .auto').innerText.includes('fichiers')"), True)
         p.evaluer("document.querySelectorAll('.approvals input')[0].click()")
         p.attendre("!document.querySelector('.bar .auto')")
@@ -611,12 +611,12 @@ class Chat(unittest.TestCase):
         """Maintainer, 2026-11-21 (a bug of the old Lutin not to bring back): an answer being written stays in its conversation when another one is opened;
         its end does not bring the first one back over the one being read; the tab of the browser says that Lutin works."""
         p = self.page
-        other = T.A.conv_nouvelle()
-        T.A.conv_renommer(other["id"], "Autre 3gb")
-        other = T.A.conv_lire(other["id"])
+        other = T.A.conv_new()
+        T.A.conv_rename(other["id"], "Autre 3gb")
+        other = T.A.conv_read(other["id"])
         other["messages"] = [{"role": "user", "content": "Old question 3gb"}, {"role": "assistant", "content": "Old answer 3gb."}]
-        T.A.conv_ecrire(other)
-        self.addCleanup(lambda: T.A.conv_supprimer(other["id"]))
+        T.A.conv_write(other)
+        self.addCleanup(lambda: T.A.conv_delete(other["id"]))
         p.aller(T.BASE + "/app/")          # the list is read again with the conversation just made
         p.attendre("[...document.querySelectorAll('.list .entry')].some(e => e.innerText.includes('Autre 3gb'))")
         p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")
@@ -911,9 +911,9 @@ class Chat(unittest.TestCase):
                                                                           {"precision": "fp16", "id": "qwen3:8b-fp16", "go": 16.4, "defaut": False}]}
         library = {"suite": False, "modeles": [{"nom": "gemma3", "description": "A model that sees.", "capacites": ["vision"], "tailles": ["4b", "27b"], "maj": "", "telechargements": 1200}]}
         installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
-        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model})))
+        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.save_settings({"modele": model})))
         T.INSTALLES[:] = ["qwen3:8b", "old:7b"]
-        T.A.enregistrer_reglages({"modele": "qwen3:8b"})
+        T.A.save_settings({"modele": "qwen3:8b"})
         for patch in (mock.patch.dict(os.environ, {"LUTIN_PROPOSITIONS": str(proposals), "LUTIN_CONFIG": str(config), "LUTIN_HORS_LIGNE": ""}),
                       mock.patch.object(T.A, "VERIFICATEUR", asked.append), mock.patch.object(model_variants, "list_variants", lambda name: variants),
                       mock.patch.object(model_discovery, "search", lambda *args, **kwargs: library)):
@@ -1241,14 +1241,14 @@ class Chat(unittest.TestCase):
                     "source": "C:/models", "source_existe": True, "source_octets": 5 * 10 ** 9}
         measures = {"etat": {"en_cours": False, "moteur": "", "modele": "", "erreur": ""}, "nombre": 1, "candidats": [],
                     "classement": [{"moteur": "ollama", "nom": "Ollama", "modele": "qwen3:8b", "date": "2026-11-18 10:00", "ok": True, "tok_s": 41.0, "rang": 1}]}
-        for patch in (mock.patch.object(llamacpp_engine, "vue_reglages", lambda engine: settings), mock.patch.object(llamacpp_engine, "apply_settings", lambda engine, data: applied.append(data)),
-                      mock.patch.object(llamacpp_engine, "vue_dossier_moteurs", lambda: engines_folder), mock.patch.object(locations, "analyze_folder", lambda path: analysed),
+        for patch in (mock.patch.object(llamacpp_engine, "settings_view", lambda engine: settings), mock.patch.object(llamacpp_engine, "apply_settings", lambda engine, data: applied.append(data)),
+                      mock.patch.object(llamacpp_engine, "engines_folder_view", lambda: engines_folder), mock.patch.object(locations, "analyze_folder", lambda path: analysed),
                       mock.patch.object(locations, "set_models_folder", lambda path: chosen.append(path) or path), mock.patch.object(locations, "models_gauge", lambda: {"libre": 10 ** 11, "total": 10 ** 12}),
                       mock.patch.object(engine_metrics, "view", lambda *args: measures),
                       mock.patch.object(calibration, "state", lambda: {"en_cours": False, "etape": "", "erreur": "", "resultats": [{"fils": 4, "tok_s": 10.0}, {"fils": 8, "tok_s": 12.5}], "recommande": 8, "modele": "qwen3:8b", "date": ""}),
                       mock.patch.object(calibration, "apply", lambda: calls.append("apply")),
                       mock.patch.object(low_end_mode, "advice", lambda profile, current: [{"cle": "num_ctx", "actuel": 32768, "conseille": 8192, "texte": "Une fenêtre plus courte."}]),
-                      mock.patch.object(low_end_mode, "apply", lambda profile, current: {"num_ctx": 8192}), mock.patch.object(T.A, "enregistrer_reglages", lambda changes: calls.append(changes))):
+                      mock.patch.object(low_end_mode, "apply", lambda profile, current: {"num_ctx": 8192}), mock.patch.object(T.A, "save_settings", lambda changes: calls.append(changes))):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
@@ -1287,11 +1287,11 @@ class Chat(unittest.TestCase):
         Git with the actions log. Hermetic: the model's handover and the seeding of the sheet, the missions, Git and the log are replaced."""
         p = self.page
         from lutin import change_review, mission as missions, progress_sheet
-        c = T.A.conv_nouvelle()
+        c = T.A.conv_new()
         c["titre"] = "Facturation"
         c["messages"] = [{"role": "user", "content": "Réécrire la facturation."}, {"role": "assistant", "content": "D'accord, je commence."}]
-        T.A.conv_ecrire(c)
-        self.addCleanup(lambda: (progress_sheet.delete(c["id"]), T.A.conv_supprimer(c["id"])))
+        T.A.conv_write(c)
+        self.addCleanup(lambda: (progress_sheet.delete(c["id"]), T.A.conv_delete(c["id"])))
         committed = []
         for patch in (mock.patch.object(T.A, "document_de_reprise", lambda conversation, settings: "## Objectif\nRéécrire la facturation."),
                       mock.patch.object(missions, "state", lambda: {"liste": [{"id": "m1", "nom": "Facturation", "etat": "en_cours", "conv": c["id"]}]}),
@@ -1531,11 +1531,11 @@ class Chat(unittest.TestCase):
         connector and its keys, the helper programs. Hermetic: the web search and the helper programs are replaced; the connector is never started."""
         p = self.page
         from lutin import external_programs, mcp, web
-        c = T.A.conv_nouvelle()
+        c = T.A.conv_new()
         c["titre"] = "Production"
         c["messages"] = [{"role": "user", "content": "Ne jamais toucher à la production.", "ts": "2026-11-18T10:00:00"}, {"role": "assistant", "content": "Compris.", "ts": "2026-11-18T10:00:05"}]
-        T.A.conv_ecrire(c)
-        self.addCleanup(lambda: T.A.conv_supprimer(c["id"]))
+        T.A.conv_write(c)
+        self.addCleanup(lambda: T.A.conv_delete(c["id"]))
         before = {entry["id"] for entry in mcp.view()}
         self.addCleanup(lambda: [mcp.remove(entry["id"]) for entry in mcp.view() if entry["id"] not in before])
         found = [{"titre": "Bonnes pratiques de production", "url": "https://example.org/prod", "extrait": "Ne pas modifier en direct.", "source": "duckduckgo"}]
@@ -1547,7 +1547,7 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.thread .pin')")
         self.assertTrue(p.evaluer("!!document.querySelector('.thread time')"), "the time of a message is shown")
         self.press("document.querySelector('.thread .pin')")
-        self.eventually(lambda: T.A.conv_lire(c["id"])["messages"][0].get("epingle") is True, "the request is pinned on the server")
+        self.eventually(lambda: T.A.conv_read(c["id"])["messages"][0].get("epingle") is True, "the request is pinned on the server")
         p.attendre("document.querySelector('.thread .pin')?.getAttribute('aria-pressed') === 'true'")
         self.press("[...document.querySelectorAll('.thread .quiet-action')].find(b => b.innerText === 'Vérifier')")
         p.attendre("document.querySelector('section.verify')?.innerText.includes('Bonnes pratiques de production')")
@@ -1606,9 +1606,9 @@ class Chat(unittest.TestCase):
     def test_5b_the_models_screen_lists_uses_downloads_and_deletes(self):
         p = self.page
         installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
-        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model})))
+        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.save_settings({"modele": model})))
         T.INSTALLES[:] = ["qwen3.8:27b", "other:7b"]
-        T.A.enregistrer_reglages({"modele": "qwen3.8:27b"})
+        T.A.save_settings({"modele": "qwen3.8:27b"})
         p.evaluer("location.hash = '#/models'")
         p.attendre("document.querySelectorAll('.models .card').length === 2")
         self.assertEqual(p.evaluer("document.querySelector('.models .card.current strong').innerText"), "qwen3.8:27b")
@@ -1758,7 +1758,7 @@ class Chat(unittest.TestCase):
         installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
         flag = api_v1._setup_path()
         flag.unlink(missing_ok=True)
-        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model}), flag.unlink(missing_ok=True)))
+        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.save_settings({"modele": model}), flag.unlink(missing_ok=True)))
         T.INSTALLES[:] = []
         history = mock.patch.object(api_v1, "_has_history", return_value=False)
         history.start()
@@ -1768,7 +1768,7 @@ class Chat(unittest.TestCase):
     def test_5g_the_memory_given_to_models_can_be_corrected_in_the_guide(self):
         """The block that says the machine is the same in the guide of the first launch and at the top of « Recommended » for every engine (MachineSummary)."""
         p = self.page
-        self.addCleanup(lambda: T.A.enregistrer_reglages({"budget_go": 0.0}))
+        self.addCleanup(lambda: T.A.save_settings({"budget_go": 0.0}))
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.tabs')")
         p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
@@ -1790,7 +1790,7 @@ class Chat(unittest.TestCase):
         p = self.page
         before = T.A.reglages()
         keys = ("temperature", "web", "mode", "memoire_longue", "fiche_part", "fiche_scribe")
-        self.addCleanup(lambda: T.A.enregistrer_reglages({key: before[key] for key in keys}))
+        self.addCleanup(lambda: T.A.save_settings({key: before[key] for key in keys}))
         p.evaluer("location.hash = '#/settings/general'")
         p.attendre("!!document.querySelector('#setting-temperature')")
         change = "(() => { const box = document.querySelector('#%s'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()"
@@ -1901,7 +1901,7 @@ class Chat(unittest.TestCase):
             for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.ARRET):
                 kept.clear()
             machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
-            T.A.enregistrer_reglages(before)
+            T.A.save_settings(before)
         self.addCleanup(restore)
         asked = []
         # What the node says of itself is read from this computer (network cards and autostart through PowerShell, memory, graphics card): replaced.
@@ -1916,7 +1916,7 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         machines.INFOS_NOEUD.clear()
         machines.CARTES.update(t=-999.0, v=None)
-        T.A.enregistrer_reglages({"cluster": False})
+        T.A.save_settings({"cluster": False})
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.models .tabs')")
         p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
@@ -1965,7 +1965,7 @@ class Chat(unittest.TestCase):
             self.axe("on the Machines tab with a paired machine")
         self.picture("5h3-machines")
 
-        T.A.enregistrer_reglages({"machine": ""})
+        T.A.save_settings({"machine": ""})
         self.assertTrue(self.wait_for(lambda: machines.modeles_distants(attente=True)), "the models of the other machine are known")
         p.evaluer("location.hash = '#/chat'")
         p.attendre("[...document.querySelectorAll('header select optgroup')].some(g => g.label === 'Bureau')")
@@ -2146,12 +2146,12 @@ class Chat(unittest.TestCase):
                       mock.patch.object(T.A, "system_memory", lambda: None), mock.patch.object(T.A, "video_memory", lambda: None)):
             patch.start()
             self.addCleanup(patch.stop)
-        T.A.enregistrer_reglages({"cluster": True})
+        T.A.save_settings({"cluster": True})
         machines.noeud_activer(True)
         host = machines.ajouter(T.BASE, machines.noeud_nouveau_code()["code"], "Bureau")
         machines.noeud_autoriser_piloter(True)
-        held = T.A.conv_nouvelle()["id"]
-        T.A.conv_renommer(held, "Rapport du bureau")
+        held = T.A.conv_new()["id"]
+        T.A.conv_rename(held, "Rapport du bureau")
 
         def restore():
             machines._ecrire_registre([])
@@ -2162,9 +2162,9 @@ class Chat(unittest.TestCase):
             for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES):
                 kept.clear()
             machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
-            T.A.enregistrer_reglages(before)
+            T.A.save_settings(before)
             try:
-                T.A.conv_supprimer(held)
+                T.A.conv_delete(held)
             except (OSError, ValueError):
                 pass
         self.addCleanup(restore)
@@ -2195,7 +2195,7 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
         p.attendre(TEXT + ".includes('Answer from the host.')")
         p.attendre("!!document.querySelector('.composer button[type=submit]')")
-        sent = [m for m in T.A.conv_lire(held)["messages"] if m["role"] == "user"]
+        sent = [m for m in T.A.conv_read(held)["messages"] if m["role"] == "user"]
         self.assertEqual((sent[-1]["content"], len(sent[-1].get("images") or [])), ("Question for the host", 1), "the turn ran on the host, which keeps it")
         p.attendre("document.querySelector('.thread .sent img')?.naturalWidth === 1")
         self.picture("5h5-remote-conversation")
@@ -2203,11 +2203,11 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.rename-button').click()")
         p.attendre("!!document.querySelector('#title')")
         p.evaluer("(() => { const box = document.querySelector('#title'); box.value = 'Notes du bureau'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('form.rename').requestSubmit(); })()")
-        self.eventually(lambda: T.A.conv_lire(held)["titre"] == "Notes du bureau", "renamed on the host")
+        self.eventually(lambda: T.A.conv_read(held)["titre"] == "Notes du bureau", "renamed on the host")
         p.evaluer("window.confirm = () => true")
         machines.CONVERSATIONS.update(t=0.0)          # the list of the host is read again
         p.evaluer("[...document.querySelectorAll('.list .remote li')].find(li => li.innerText.includes('bureau')).querySelector('.remove').click()")
-        self.eventually(lambda: held not in [entry["id"] for entry in T.A.conv_liste()], "deleted on the host")
+        self.eventually(lambda: held not in [entry["id"] for entry in T.A.conv_list()], "deleted on the host")
         p.attendre("!document.querySelector('header .on-host')")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
@@ -2286,7 +2286,7 @@ class Chat(unittest.TestCase):
         (folder / "CLAUDE.md").write_text("Rules.", encoding="utf-8")
         (folder / "donnees" / "conversations" / "0000beef.json").write_text(json.dumps({"id": "0000beef", "titre": "Taken over", "date": "2026-01-02T10:00:00",
                                                                                         "maj": "2026-01-02T10:00:00", "messages": [{"role": "user", "content": "Hi"}]}), encoding="utf-8")
-        self.addCleanup(lambda: T.A.conv_supprimer("0000beef") if "0000beef" in [c["id"] for c in T.A.conv_liste()] else None)
+        self.addCleanup(lambda: T.A.conv_delete("0000beef") if "0000beef" in [c["id"] for c in T.A.conv_list()] else None)
         T.A.add_work(str(folder), "Details folder")
         self.addCleanup(lambda: [T.A.remove_work(entry["id"], False) for entry in T.A.works_state()["liste"] if entry["nom"] == "Details folder"])
         p.evaluer("location.hash = '#/projects'")
@@ -2303,10 +2303,10 @@ class Chat(unittest.TestCase):
         p.attendre("!!%s.querySelector('.takeover fieldset')" % card)
         p.evaluer("[...%s.querySelectorAll('.takeover .button')].find(b => b.innerText === 'Reprendre…').click()" % card)
         p.attendre("!!%s.querySelector('.takeover [role=group]')" % card)
-        self.assertNotIn("0000beef", [c["id"] for c in T.A.conv_liste()], "asking is not taking over")
+        self.assertNotIn("0000beef", [c["id"] for c in T.A.conv_list()], "asking is not taking over")
         p.evaluer("%s.querySelector('.takeover [role=group] .button.primary').click()" % card)
         p.attendre("!!%s.querySelector('.details .taken li')" % card)          # the report stays once the takeover block is gone
-        self.eventually(lambda: "0000beef" in [c["id"] for c in T.A.conv_liste()], "the conversation was taken over")
+        self.eventually(lambda: "0000beef" in [c["id"] for c in T.A.conv_list()], "the conversation was taken over")
         (base / "elsewhere").mkdir()
         p.evaluer("(() => { const box = [...%s.querySelectorAll('.details label')].find(l => l.innerText.startsWith('Le déplacer')).querySelector('input'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
                   % (card, json.dumps(str(base / "elsewhere"))))
@@ -2926,8 +2926,8 @@ class Chat(unittest.TestCase):
         p = self.page
         folder = Path(T.A.RACINE) / "skills"
         self.addCleanup(lambda: [f.unlink() for f in folder.glob("*.md")] if folder.is_dir() else None)
-        saved = {name: T.A.lire_memoire(name) for name in ("CONTEXTE.md", "MEMOIRE.md")}
-        self.addCleanup(lambda: [T.A.ecrire_memoire(name, text) for name, text in saved.items()])
+        saved = {name: T.A.read_memory(name) for name in ("CONTEXTE.md", "MEMOIRE.md")}
+        self.addCleanup(lambda: [T.A.write_memory(name, text) for name, text in saved.items()])
         p.evaluer("location.hash = '#/settings/tools'")
         p.attendre("!!document.querySelector('#skill-name')")
         self.assertTrue(p.evaluer("!!document.querySelector('.skills-empty')"), "no skill yet: the page says so")
@@ -2954,7 +2954,7 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('#memory-context')")
         p.evaluer("(() => { const set = %s; set('#memory-context', 'Je fais des jeux.'); set('#memory-notes', 'Aime le the.'); document.querySelector('.memory form').requestSubmit(); })()" % set_value)
         p.attendre("!!document.querySelector('.memory .done')")
-        self.assertEqual((T.A.lire_memoire("CONTEXTE.md"), T.A.lire_memoire("MEMOIRE.md")), ("Je fais des jeux.", "Aime le the."))
+        self.assertEqual((T.A.read_memory("CONTEXTE.md"), T.A.read_memory("MEMOIRE.md")), ("Je fais des jeux.", "Aime le the."))
         if AXE.is_file():
             self.axe("on the memory")
         self.assertEqual(p.erreurs, [])
@@ -3091,11 +3091,11 @@ class Chat(unittest.TestCase):
     def test_5x_a_long_conversation_has_a_button_back_to_its_end(self):
         """Maintainer's report (2026-11-20): the old page's « ↓ » button was missing. The thread follows its end only when the person is there."""
         p = self.page
-        c = T.A.conv_nouvelle()
+        c = T.A.conv_new()
         c["titre"] = "Longue"
         c["messages"] = [{"role": "user" if i % 2 == 0 else "assistant", "content": "Message %d.\n\n%s" % (i, "Une ligne de texte. " * 30)} for i in range(40)]
-        T.A.conv_ecrire(c)
-        self.addCleanup(T.A.conv_supprimer, c["id"])
+        T.A.conv_write(c)
+        self.addCleanup(T.A.conv_delete, c["id"])
         p.evaluer("location.hash = '#/chat/%s'" % c["id"])
         p.evaluer("location.reload()")          # the Chat reads the conversation of the address when the page opens
         p.attendre("document.querySelector('.main h1')?.innerText === 'Longue' && document.querySelectorAll('.thread .markdown').length >= 20")
@@ -3170,11 +3170,11 @@ class Chat(unittest.TestCase):
         """test_5x failed 3 times in 5 runs of this file: the opened thread was left above its end. Its size changed after the move to the end,
         with no new message to move it again; and the scroll event of that move, a frame later, took content grown in between for the person going up."""
         p = self.page
-        c = T.A.conv_nouvelle()
+        c = T.A.conv_new()
         c["titre"] = "Longue et changeante"
         c["messages"] = [{"role": "user" if i % 2 == 0 else "assistant", "content": "Message %d.\n\n%s" % (i, "Une ligne de texte. " * 30)} for i in range(40)]
-        T.A.conv_ecrire(c)
-        self.addCleanup(T.A.conv_supprimer, c["id"])
+        T.A.conv_write(c)
+        self.addCleanup(T.A.conv_delete, c["id"])
         last = "[...document.querySelectorAll('.thread .markdown')].at(-1)"
         self.addCleanup(p.evaluer, "%s.style.paddingBottom = ''; document.querySelector('.dock').style.paddingBottom = ''" % last)
         p.evaluer("location.hash = '#/chat/%s'" % c["id"])

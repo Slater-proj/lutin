@@ -176,11 +176,11 @@ class CheminReseau(unittest.TestCase):
         B = chr(92)
         unc = B * 2 + "NAS" + B + "Partage" + B + "Dossier" + B + "sorties"
         demande = "dis-moi ce qu'il y a ici " + unc
-        self.assertEqual(o.reparer_unc("dir " + unc[1:], demande), "dir " + unc, "un antislash perdu est rendu")
-        self.assertEqual(o.reparer_unc("dir " + unc, demande), "dir " + unc, "déjà correct : inchangé")
+        self.assertEqual(o.repair_unc("dir " + unc[1:], demande), "dir " + unc, "un antislash perdu est rendu")
+        self.assertEqual(o.repair_unc("dir " + unc, demande), "dir " + unc, "déjà correct : inchangé")
         lecteur = "dir C:" + B + "NAS" + B + "Partage" + B + "Dossier" + B + "sorties"
-        self.assertEqual(o.reparer_unc(lecteur, demande), lecteur, "un chemin de lecteur n'est jamais touché")
-        self.assertEqual(o.reparer_unc("dir " + unc[1:], "bonjour"), "dir " + unc[1:], "la demande ne parle d'aucun chemin réseau : rien n'est deviné")
+        self.assertEqual(o.repair_unc(lecteur, demande), lecteur, "un chemin de lecteur n'est jamais touché")
+        self.assertEqual(o.repair_unc("dir " + unc[1:], "bonjour"), "dir " + unc[1:], "la demande ne parle d'aucun chemin réseau : rien n'est deviné")
 
 
 class DonneesReservees(unittest.TestCase):
@@ -196,12 +196,12 @@ class DonneesReservees(unittest.TestCase):
             avant = (m.RACINE, m.DONNEES)
             m.RACINE, m.DONNEES = racine, donnees
             try:
-                self.assertEqual(tools.chemin_sur("ok.txt"), racine / "ok.txt")
+                self.assertEqual(tools.safe_path("ok.txt"), racine / "ok.txt")
                 for ecriture in (False, True):
                     with self.assertRaises(m.ErreurOutil):
-                        tools.chemin_sur("donnees/notifications.json", ecriture)
+                        tools.safe_path("donnees/notifications.json", ecriture)
                 with self.assertRaises(m.ErreurOutil):
-                    tools.chemin_sur("donnees")
+                    tools.safe_path("donnees")
             finally:
                 m.RACINE, m.DONNEES = avant
 

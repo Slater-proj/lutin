@@ -319,7 +319,7 @@ class Carte(unittest.TestCase):
         self.addCleanup(patch.stop)
 
     def remettre(self):
-        ml.regler_serveur("exllamav3", {"port_exllamav3": 0})
+        ml.configure_server("exllamav3", {"port_exllamav3": 0})
         engines.CONTEXT.clear()
         engines.CONTEXT.update(self.ancien)
 
@@ -329,10 +329,10 @@ class Carte(unittest.TestCase):
     def test_le_modele_charge_est_celui_que_tabbyapi_dit(self):
         """TabbyAPI loads the model on the first request: until then nothing is in memory, and a stopped server holds nothing. The engine says so, the page shows it by the selector."""
         self.assertTrue(self.mo.charge_connue())
-        with mock.patch.object(ml.MoteurExterne, "_json", return_value={"id": "Qwen-exl3"}):
+        with mock.patch.object(ml.ExternalEngine, "_json", return_value={"id": "Qwen-exl3"}):
             self.assertEqual(self.mo.en_memoire("Qwen-exl3"), {"taille": 0, "vram": 0})
             self.assertIsNone(self.mo.en_memoire("Autre-exl3"), "another model than the one loaded")
-        with mock.patch.object(ml.MoteurExterne, "_json", side_effect=OSError("refused")):
+        with mock.patch.object(ml.ExternalEngine, "_json", side_effect=OSError("refused")):
             self.assertIsNone(self.mo.en_memoire("Qwen-exl3"), "a server that is stopped, or that holds no model (TabbyAPI answers by an error)")
         self.assertFalse(engines.ENGINES["openai"].charge_connue(), "another OpenAI-compatible server does not say which model it holds")
 
@@ -349,11 +349,11 @@ class Carte(unittest.TestCase):
 
     def test_adresse_locale_imposee_port_regle_et_statut(self):
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:5000/v1")
-        ml.regler_serveur("exllamav3", {"port_exllamav3": 5555})
+        ml.configure_server("exllamav3", {"port_exllamav3": 5555})
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:5555/v1")
         for mauvais in (80, "abc", 99999):
             with self.assertRaises(Exception):
-                ml.regler_serveur("exllamav3", {"port_exllamav3": mauvais})
+                ml.configure_server("exllamav3", {"port_exllamav3": mauvais})
         self.assertEqual(self.mo.statut()["detail"], "ExLlamaV3 n'est pas installé.")
 
     def test_l_installation_et_le_telechargement_recoivent_la_fenetre_de_conversation_reglee(self):

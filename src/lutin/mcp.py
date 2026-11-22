@@ -45,13 +45,13 @@ def config_path():
 
 
 def read():
-    d = _m.lire_json(config_path(), {})
+    d = _m.read_json(config_path(), {})
     serveurs = d.get("serveurs") if isinstance(d, dict) else None
     return {"serveurs": serveurs if isinstance(serveurs, dict) else {}}
 
 
 def write(cfg):
-    _m.ecrire_atomique(config_path(), json.dumps(cfg, ensure_ascii=False, indent=1))
+    _m.write_atomic(config_path(), json.dumps(cfg, ensure_ascii=False, indent=1))
     try:
         os.chmod(config_path(), 0o600)          # il peut contenir un jeton d'accès
     except OSError:
@@ -313,7 +313,7 @@ class Connection:
         if self.proc is not None and self.proc.poll() is None:
             try:
                 from . import tools
-                tools.tuer_arbre(self.proc.pid)
+                tools.kill_tree(self.proc.pid)
             except Exception:  # noqa: BLE001
                 try:
                     self.proc.kill()

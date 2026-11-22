@@ -196,7 +196,7 @@ def _file_index(depot, dossiers=None):
 
 
 def _read_index(depot, dossiers=None):
-    d = _donnees.lire_json(_file_index(depot, dossiers), {})
+    d = _donnees.read_json(_file_index(depot, dossiers), {})
     return d if isinstance(d, dict) else {}
 
 
@@ -221,7 +221,7 @@ def descriptions(depot, skills, http=None, dossiers=None, travailleurs=6):
                 deja[s["dir"]] = dict(r, sha=s["sha"])
         try:
             _file_index(depot, dossiers).parent.mkdir(parents=True, exist_ok=True)
-            _donnees.ecrire_atomique(_file_index(depot, dossiers), json.dumps({"skills": deja}, ensure_ascii=False))
+            _donnees.write_atomic(_file_index(depot, dossiers), json.dumps({"skills": deja}, ensure_ascii=False))
         except OSError:
             pass
         if limite:
@@ -421,7 +421,7 @@ def install(depot, dossier, racine, http=None, danger_ok=False, licence_ok=False
                                                  "nom": f["nom"], "fichiers": len(a_copier)}, ensure_ascii=False), encoding="utf-8")
         if cible.exists():
             shutil.rmtree(cible)
-        _donnees.remplacer(tmp, cible)       # Windows refuse parfois le renommage un instant : nouvel essai
+        _donnees.replace_file(tmp, cible)       # Windows refuse parfois le renommage un instant : nouvel essai
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
@@ -484,7 +484,7 @@ def _sources_file():
 
 def sources():
     """Les dépôts parcourus : ceux proposés au départ (non modifiables) puis ceux que l'utilisateur a ajoutés."""
-    ajoutes = _donnees.lire_json(_sources_file(), {}).get("depots", []) if isinstance(_donnees.lire_json(_sources_file(), {}), dict) else []
+    ajoutes = _donnees.read_json(_sources_file(), {}).get("depots", []) if isinstance(_donnees.read_json(_sources_file(), {}), dict) else []
     sortie = [{"depot": d, "nom": _t(n), "defaut": True} for d, n in DEFAULT_SOURCES]
     sortie += [{"depot": d, "nom": d, "defaut": False} for d in ajoutes if isinstance(d, str) and d not in dict(DEFAULT_SOURCES)]
     return sortie
@@ -499,7 +499,7 @@ def add_source(texte):
             return sources()
         if len(courant) >= 30:
             raise ValueError(_t("Déjà 30 dépôts ajoutés : retire-en un d'abord."))
-        _donnees.ecrire_atomique(_sources_file(), json.dumps({"depots": courant + [depot]}))
+        _donnees.write_atomic(_sources_file(), json.dumps({"depots": courant + [depot]}))
     return sources()
 
 
@@ -508,5 +508,5 @@ def remove_source(depot):
         courant = [s["depot"] for s in sources() if not s["defaut"]]
         if depot not in courant:
             raise ValueError(_t("Ce dépôt n'est pas dans ta liste (ceux proposés au départ ne se retirent pas)."))
-        _donnees.ecrire_atomique(_sources_file(), json.dumps({"depots": [d for d in courant if d != depot]}))
+        _donnees.write_atomic(_sources_file(), json.dumps({"depots": [d for d in courant if d != depot]}))
     return sources()

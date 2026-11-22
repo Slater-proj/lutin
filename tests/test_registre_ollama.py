@@ -120,9 +120,9 @@ class DansLlamaCpp(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-registre-llama-"))
         self.ancien = dict(engines.CONTEXT)
         engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, profil_attendu=None, dossier_ollama=lambda: None)
-        ml.CACHE_PARTAGE.clear()
-        self.m = ml.MoteurLlamaCpp()
-        self.addCleanup(lambda: (engines.CONTEXT.update(self.ancien), ml.CACHE_PARTAGE.clear(), shutil.rmtree(self.tmp, ignore_errors=True)))
+        ml.SHARED_CACHE.clear()
+        self.m = ml.LlamaCppEngine()
+        self.addCleanup(lambda: (engines.CONTEXT.update(self.ancien), ml.SHARED_CACHE.clear(), shutil.rmtree(self.tmp, ignore_errors=True)))
 
     def test_telecharger_puis_lister_puis_supprimer(self):
         vrai = ollama_registry.download
@@ -137,8 +137,8 @@ class DansLlamaCpp(unittest.TestCase):
         self.assertEqual(self.m.modeles()["installes"], [])
 
     def test_serveur_externe_ne_telecharge_pas(self):
-        ml.regler("llamacpp", "http://127.0.0.1:9999")
-        with self.assertRaises(ml.ErreurMoteur):
+        ml.configure("llamacpp", "http://127.0.0.1:9999")
+        with self.assertRaises(ml.EngineError):
             self.m.telecharger_ollama("qwen3:8b", lambda *a: None)
 
 

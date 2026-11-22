@@ -118,7 +118,7 @@ class DemarrageSansDoublon(unittest.TestCase):
         avant = (sys.excepthook, threading.excepthook)
         lances = []
         try:
-            with mock.patch.object(_m, "PORT", port), mock.patch.object(_m, "watch_loop", lambda: lances.append("surveillance")), mock.patch.object(_m, "purger_sauvegardes", lambda: lances.append("purge")):
+            with mock.patch.object(_m, "PORT", port), mock.patch.object(_m, "watch_loop", lambda: lances.append("surveillance")), mock.patch.object(_m, "purge_backups", lambda: lances.append("purge")):
                 with self.assertRaises(SystemExit) as e:
                     _m.principal()
         finally:

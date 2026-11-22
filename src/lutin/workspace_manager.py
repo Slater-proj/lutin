@@ -95,7 +95,7 @@ def remove_work(ident, nettoyer=False):
 def clean_copies(dossier):
     """Supprime le sous-dossier des copies de conversations que Lutin a posé dans ce dossier de travail. Renvoie le nombre de fichiers supprimés (0 s'il n'y en a pas)."""
     from . import storage
-    cible = Path(dossier) / storage.DOSSIER_COPIES
+    cible = Path(dossier) / storage.COPIES_FOLDER
     if not cible.is_dir() or cible.is_symlink():
         return 0
     n = sum(1 for f in cible.rglob("*") if f.is_file())
@@ -145,7 +145,7 @@ def _preview(p):
         if claude[cle]:
             lus.append(modele.format(len(claude[cle])))
     from . import storage
-    copies = sum(1 for f in (p / storage.DOSSIER_COPIES).glob("*.md")) if (p / storage.DOSSIER_COPIES).is_dir() else 0
+    copies = sum(1 for f in (p / storage.COPIES_FOLDER).glob("*.md")) if (p / storage.COPIES_FOLDER).is_dir() else 0
     ancien = None
     try:
         if _trav.key(p) != _trav.key(_m.DONNEES.parent):

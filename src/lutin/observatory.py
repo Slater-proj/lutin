@@ -38,7 +38,7 @@ def record(genre, conversation="", **champs):
                 f.write(ligne + "\n")
             if chemin.stat().st_size > MAX_EVENTS * 400:          # rogner de temps en temps, sans relire le fichier à chaque évènement
                 lignes = chemin.read_text(encoding="utf-8", errors="replace").splitlines()[-MAX_EVENTS:]
-                _donnees.ecrire_atomique(chemin, "\n".join(lignes) + "\n")
+                _donnees.write_atomic(chemin, "\n".join(lignes) + "\n")
     except (OSError, ValueError, TypeError):
         pass
 

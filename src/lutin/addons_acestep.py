@@ -141,7 +141,7 @@ def _name_file(texte, extension):
 # ------------------------------------------------------------------------------- l'outil
 def _refusal(ctx):
     from . import tools
-    return tools.refus(ctx, _t("Refusé par l'utilisateur."))
+    return tools.refusal(ctx, _t("Refusé par l'utilisateur."))
 
 
 def _wait_for(task_id):

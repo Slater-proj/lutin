@@ -38,13 +38,13 @@ class Setup(unittest.TestCase):
             self.assertEqual(V.call("GET", "/api/v1/setup", V.OWNER)[1]["needed"], False)
 
     def test_what_a_used_installation_leaves_is_what_is_looked_at(self):
-        with mock.patch.object(A, "conv_liste", return_value=[]), mock.patch.object(A, "DONNEES", A.DONNEES / "empty-folder-for-this-test"):
+        with mock.patch.object(A, "conv_list", return_value=[]), mock.patch.object(A, "DONNEES", A.DONNEES / "empty-folder-for-this-test"):
             self.assertFalse(api_v1._has_history())
-        with mock.patch.object(A, "conv_liste", return_value=[{"id": "0123abcd"}]):
+        with mock.patch.object(A, "conv_list", return_value=[{"id": "0123abcd"}]):
             self.assertTrue(api_v1._has_history())
         (A.DONNEES / "reglages.json").write_text("{}", encoding="utf-8")
         self.addCleanup(lambda: (A.DONNEES / "reglages.json").unlink(missing_ok=True))
-        with mock.patch.object(A, "conv_liste", return_value=[]):
+        with mock.patch.object(A, "conv_list", return_value=[]):
             self.assertTrue(api_v1._has_history())
 
     def test_finishing_or_skipping_is_remembered(self):

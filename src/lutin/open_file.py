@@ -41,7 +41,7 @@ def resolve(texte, racine):
         try:
             p = candidat.resolve()
             if p.is_file() and (racine in p.parents):
-                _outils.chemin_sur(str(p))          # les règles de l'assistant : .git, données de Lutin…
+                _outils.safe_path(str(p))          # les règles de l'assistant : .git, données de Lutin…
                 return p
         except (OSError, ValueError, _outils._m.ErreurOutil):
             continue
@@ -60,7 +60,7 @@ def read(rel_url, racine):
     if not morceaux or ".." in morceaux:
         raise ValueError(_t("Fichier introuvable dans le dossier de travail."))
     try:
-        p = _outils.chemin_sur("/".join(morceaux))
+        p = _outils.safe_path("/".join(morceaux))
     except _outils._m.ErreurOutil as e:
         raise ValueError(str(e))
     if not p.is_file():

@@ -45,12 +45,12 @@ def path():
 
 
 def read():
-    liste = _d.lire_json(path(), [])
+    liste = _d.read_json(path(), [])
     return [m for m in liste if isinstance(m, dict) and RE_ID.match(str(m.get("id", "")))] if isinstance(liste, list) else []
 
 
 def _write(liste):
-    _d.ecrire_atomique(path(), json.dumps(liste, ensure_ascii=False, indent=1))
+    _d.write_atomic(path(), json.dumps(liste, ensure_ascii=False, indent=1))
 
 
 def find(ident):
@@ -223,17 +223,17 @@ def _turn(m):
     """Un tour de la mission. Renvoie False sans rien faire si aucune place n'est libre ou si le dossier de travail est occupé par un autre, True si un tour a eu lieu."""
     if _turns.full():
         return False
-    conv = _m.conv_lire(m["conv"]) if m.get("conv") and _d.conv_existe(m["conv"]) else None
+    conv = _m.conv_read(m["conv"]) if m.get("conv") and _d.conv_exists(m["conv"]) else None
     nouvelle = conv is None
     if nouvelle:
-        conv = _m.conv_nouvelle()
+        conv = _m.conv_new()
         conv["titre"] = "🎯 " + m["nom"]
         conv["travail"] = m["travail"]
     try:
         siege = _turns.reserve(conv, work=m["travail"], also=lambda stop: ALIVE["arrets"].__setitem__(m["id"], stop))          # une conversation où quelqu'un écrit attend (ADR 0015)
     except _turns.TurnRefused as refus:
         if nouvelle:
-            _d.conv_supprimer(conv["id"])
+            _d.conv_delete(conv["id"])
         if refus.code == _turns.WORKSPACE_CONFLICT:
             modify(m["id"], message=refus.message[:200])
         return False
@@ -241,9 +241,9 @@ def _turn(m):
     autonome = bool(m["autonome"])
     base = _m.reglages()
     if m.get("lie"):                                                       # mission menée dans une conversation : ses options font foi (autonome = Fichiers auto ET Commandes auto cochés, relu à chaque tour)
-        o = _d.options_lire(m["conv"])
+        o = _d.options_read(m["conv"])
         autonome = bool(o.get("auto_ecriture") and o.get("auto_commandes"))
-        base = _d.appliquer_options(base, m["conv"])
+        base = _d.apply_options(base, m["conv"])
         if autonome != bool(m["autonome"]):
             modify(m["id"], autonome=autonome)
     r = dict(base, mode="technique", memoire_longue="fichier", fiche_scribe=True, auto_ecriture=autonome, auto_commandes=autonome, _mission=m["id"])
@@ -262,7 +262,7 @@ def _turn(m):
     if actuel is None:
         return True
     try:
-        apres = _m.conv_lire(conv["id"])
+        apres = _m.conv_read(conv["id"])
         faits = sum(1 for x in apres["messages"] if x.get("role") == "tool") - avant
     except (ValueError, OSError):
         faits = 0

@@ -86,7 +86,7 @@ def _path(ident):
 
 
 def _load(ident, modele):
-    brut = _m.lire_json(_path(ident), {})
+    brut = _m.read_json(_path(ident), {})
     if brut.get("modele") != modele:
         return {}                                                     # un autre modèle d'embeddings : ses vecteurs ne sont pas comparables
     cache = {}
@@ -103,7 +103,7 @@ def _load(ident, modele):
 def _save(ident, modele, cache, gardes):
     """Écrit les vecteurs de ces passages seulement (ceux qui n'existent plus dans la conversation sont oubliés)."""
     v = {h: base64.b64encode(cache[h].tobytes()).decode("ascii") for h in gardes if h in cache}
-    _m.ecrire_atomique(_path(ident), json.dumps({"modele": modele, "v": v}))
+    _m.write_atomic(_path(ident), json.dumps({"modele": modele, "v": v}))
 
 
 def remove(ident):

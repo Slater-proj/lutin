@@ -282,7 +282,7 @@ def start(port=DEFAULT_PORT, dossiers=None, attente_s=240, lancer=subprocess.Pop
 def stop(dossiers=None, tuer=None):
     """Arrête TabbyAPI (et ses sous-processus) d'après le numéro de processus noté au démarrage. True s'il y avait quelque chose à arrêter ou si rien ne tournait."""
     if tuer is None:
-        from .tools import tuer_arbre as tuer
+        from .tools import kill_tree as tuer
     pid_fichier = folder(dossiers) / "tabby.pid"
     try:
         pid = int(pid_fichier.read_text(encoding="utf-8").strip())

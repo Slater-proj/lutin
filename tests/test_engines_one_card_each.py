@@ -74,7 +74,7 @@ class OldSetting(Files):
         self.assertIn("qwen3-8b-exl3", system.splitlines()[-1])
 
     def test_saving_another_setting_keeps_the_old_engine_as_it_was_written(self):
-        storage.enregistrer_reglages({"num_ctx": 8192})
+        storage.save_settings({"num_ctx": 8192})
         settings, servers = self.read()
         self.assertEqual((settings["moteur"], settings["num_ctx"]), ("openai", 8192))
         self.assertEqual(servers, self.OLD)
@@ -82,7 +82,7 @@ class OldSetting(Files):
 
     def test_choosing_the_address_engine_forgets_the_old_server_and_stops_it(self):
         with mock.patch.object(engines.ENGINES["exllamav3"], "arreter_gere", return_value=True) as stop:
-            storage.enregistrer_reglages({"moteur": "openai"})
+            storage.save_settings({"moteur": "openai"})
         stop.assert_called_once_with()          # one OpenAI-compatible server at a time, as the old select did
         settings, servers = self.read()
         self.assertEqual(settings["moteur"], "openai")
@@ -91,7 +91,7 @@ class OldSetting(Files):
         self.assertEqual(A.reglages()["moteur"], "openai")
 
     def test_choosing_the_engine_by_its_new_name_writes_it(self):
-        storage.enregistrer_reglages({"moteur": "lmstudio"})
+        storage.save_settings({"moteur": "lmstudio"})
         self.assertEqual(self.read()[0]["moteur"], "lmstudio")
         self.assertEqual(agent.moteur_actuel().id, "lmstudio")
 
@@ -110,7 +110,7 @@ class OldSetting(Files):
         self.assertFalse(engine.exllamav3_choisi())
 
     def test_a_managed_engine_has_no_server_to_choose(self):
-        with self.assertRaises(ml.ErreurMoteur):
+        with self.assertRaises(ml.EngineError):
             ml.apply_settings(engines.ENGINES["colibri"], {"serveur": "lmstudio"})
 
 

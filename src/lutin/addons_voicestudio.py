@@ -172,12 +172,12 @@ def _folder_audio(ctx):
 
 def _file_audio(chemin, maximum):
     """Un fichier audio du projet, ou produit plus tôt par l'addon. Lève ErreurOutil sinon (type, taille, chemin hors zone)."""
-    from .tools import chemin_sur
+    from .tools import safe_path
     brut = str(chemin or "").strip()
     if not brut:
         raise _m.ErreurOutil(_t("Il faut le chemin d'un enregistrement."))
     try:
-        p = chemin_sur(brut)
+        p = safe_path(brut)
     except _m.ErreurOutil:
         p = Path(brut).resolve()
         sortie = folder_output().resolve()
@@ -200,7 +200,7 @@ def _name_file(texte, extension):
 # ------------------------------------------------------------------------------- outils
 def _refusal(ctx):
     from . import tools
-    return tools.refus(ctx, _t("Refusé par l'utilisateur."))
+    return tools.refusal(ctx, _t("Refusé par l'utilisateur."))
 
 
 def speak_tool(args, ctx):

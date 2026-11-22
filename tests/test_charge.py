@@ -64,13 +64,13 @@ class ReglagesDeCharge(unittest.TestCase):
 
     def test_les_valeurs_sont_bornees_et_les_absurdites_deviennent_automatique(self):
         for brut, attendu in ((4, 4), ("6", 6), (0, 1), (9999, 256), ("", None), (None, None), ("beaucoup", None), (3.7, 3)):
-            r = A.enregistrer_reglages({"num_thread": brut})
+            r = A.save_settings({"num_thread": brut})
             self.assertEqual(r["num_thread"], attendu, repr(brut))
         for brut, attendu in ((0, 0), (2, 2), (-5, 0), (100000, 240), ("", None)):
-            self.assertEqual(A.enregistrer_reglages({"garde_min": brut})["garde_min"], attendu, repr(brut))
+            self.assertEqual(A.save_settings({"garde_min": brut})["garde_min"], attendu, repr(brut))
 
     def test_les_coeurs_vont_dans_toutes_les_requetes_au_modele(self):
-        A.enregistrer_reglages({"num_thread": 3})
+        A.save_settings({"num_thread": 3})
         r = A.reglages()
         for temperature in (0, 0.2, 0.3, 0.4, r["temperature"]):
             self.assertEqual(A.options_modele(r, temperature)["num_thread"], 3)
@@ -79,13 +79,13 @@ class ReglagesDeCharge(unittest.TestCase):
 
     def test_duree_de_garde(self):
         self.assertEqual(A.duree_garde(), "30m", "automatique : comme avant")
-        A.enregistrer_reglages({"liberer_si_comfy": False})
+        A.save_settings({"liberer_si_comfy": False})
         self.assertIsNone(A.duree_garde(), "automatique, sans ComfyUI : le délai d'Ollama")
         self.assertEqual(A.avec_garde({"model": "x"}), {"model": "x"})
-        A.enregistrer_reglages({"garde_min": 2})
+        A.save_settings({"garde_min": 2})
         self.assertEqual(A.duree_garde(), "2m")
         self.assertEqual(A.avec_garde({"model": "x"})["keep_alive"], "2m")
-        A.enregistrer_reglages({"garde_min": 0})
+        A.save_settings({"garde_min": 0})
         self.assertEqual(A.avec_garde({"model": "x"})["keep_alive"], "0m", "0 : libéré dès la fin de la réponse")
 
     def test_la_page_propose_les_reglages_et_les_profils(self):

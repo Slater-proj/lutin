@@ -132,7 +132,7 @@ class Options(unittest.TestCase):
     def test_a_change_is_stored_for_this_conversation_only_under_the_french_names(self):
         status, answer = V.call("PATCH", self.path, V.OWNER, body={"auto_approve_commands": True, "mode": "mission", "mission_hours": 4, "thinking": True, "num_predict": 2048})
         self.assertEqual((status, answer["auto_approve_commands"], answer["mode"], answer["mission_hours"], answer["thinking"], answer["num_predict"]), (200, True, "mission", 4, True, 2048))
-        self.assertEqual(A.options_lire(self.identifier), {"auto_commandes": True, "mode": "mission", "mission_duree_h": 4, "reflexion": True, "num_predict": 2048})
+        self.assertEqual(A.options_read(self.identifier), {"auto_commandes": True, "mode": "mission", "mission_duree_h": 4, "reflexion": True, "num_predict": 2048})
         other = V.call("POST", "/api/v1/conversations", V.OWNER, body={})[1]["id"]
         self.assertEqual(V.call("GET", "/api/v1/conversations/{}/options".format(other), V.OWNER)[1]["auto_approve_commands"], False)
         self.assertEqual(V.call("PATCH", self.path, V.OWNER, body={})[1], V.call("GET", self.path, V.OWNER)[1], "nothing asked, nothing changed")

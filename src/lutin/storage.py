@@ -14,20 +14,20 @@ from . import core as _m
 
 
 # --------------------------------------------------------------------------- réglages, mémoire, conversations
-VERROU_REGLAGES = threading.Lock()
-LECTURE_ESSAIS = 50          # lire_json : un fichier en train d'être remplacé (Windows) est relu toutes les 10 ms, une demi-seconde au plus
+SETTINGS_LOCK = threading.Lock()
+READ_ATTEMPTS = 50          # lire_json : un fichier en train d'être remplacé (Windows) est relu toutes les 10 ms, une demi-seconde au plus
 
 
-def lire_json(chemin, defaut):
+def read_json(chemin, defaut):
     """Le JSON du fichier, ou `defaut` s'il manque, est abîmé (coupure de courant) ou n'a pas le type attendu (objet, liste) : un fichier de données douteux ne doit jamais faire planter l'application.
     Sous Windows, ouvrir le fichier à l'instant où ecrire_atomique le remplace lève PermissionError : ce n'est pas un fichier absent, on relit un peu plus tard
     (sinon une liste de missions ou un registre se lit vide un instant : tests/test_storage_reads.py)."""
-    for essai in range(LECTURE_ESSAIS):
+    for essai in range(READ_ATTEMPTS):
         try:
             valeur = json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
             break
         except PermissionError:
-            if essai == LECTURE_ESSAIS - 1:
+            if essai == READ_ATTEMPTS - 1:
                 return defaut
             time.sleep(0.01)
         except (OSError, ValueError):
@@ -37,15 +37,15 @@ def lire_json(chemin, defaut):
     return valeur
 
 
-def ecrire_atomique(chemin, texte):
+def write_atomic(chemin, texte):
     chemin = Path(chemin)
     chemin.parent.mkdir(parents=True, exist_ok=True)
     tmp = chemin.with_name(chemin.name + "." + secrets.token_hex(3) + ".tmp")
     tmp.write_text(texte, encoding="utf-8")
-    remplacer(tmp, chemin)
+    replace_file(tmp, chemin)
 
 
-def remplacer(source, cible, essais=40):
+def replace_file(source, cible, essais=40):
     """os.replace, réessayé pendant deux secondes au plus : sous Windows, un antivirus, l'indexeur ou une lecture en cours tient le fichier ou le dossier un instant
     et le renommage lève PermissionError (WinError 5) ; ce n'est pas un refus durable (tests/test_skills_tiers.py)."""
     for essai in range(essais):
@@ -57,12 +57,12 @@ def remplacer(source, cible, essais=40):
     os.replace(str(source), str(cible))
 
 
-def enregistrer_reglages(nouveau):
-    with VERROU_REGLAGES:                                       # deux enregistrements qui se croisent ne s'écrasent pas
-        return _enregistrer_reglages(nouveau)
+def save_settings(nouveau):
+    with SETTINGS_LOCK:                                       # deux enregistrements qui se croisent ne s'écrasent pas
+        return _save_settings(nouveau)
 
 
-def _enregistrer_reglages(nouveau):
+def _save_settings(nouveau):
     from . import tool_settings
     tool_settings.check(nouveau)          # une commande dangereuse ou un outil inconnu est refusé avec une explication (le nettoyage ne l'ignorerait qu'en silence)
     r = _m.reglages()
@@ -77,12 +77,12 @@ def _enregistrer_reglages(nouveau):
         raise ValueError(_t("Moteur inconnu."))
     moteur_ecrit = r["moteur"]
     if r["moteur"] == moteur_avant:          # an old « openai » + « serveur » setting, read as that server (ADR 0020), is written back as it was until the person changes the engine
-        stocke = str(lire_json(_m.DONNEES / "reglages.json", {}).get("moteur") or "")
-        if stocke and engines.chosen_id(stocke, _llamacpp().serveur_ancien()) == moteur_avant:
+        stocke = str(read_json(_m.DONNEES / "reglages.json", {}).get("moteur") or "")
+        if stocke and engines.chosen_id(stocke, _llamacpp().old_server()) == moteur_avant:
             moteur_ecrit = stocke
     else:
         if r["moteur"] == engines.OPENAI:
-            _llamacpp().oublier_serveur_ancien()          # chosen for itself: an address, no longer the server named in its old settings
+            _llamacpp().forget_old_server()          # chosen for itself: an address, no longer the server named in its old settings
         avant = engines.ENGINES.get(moteur_avant)
         if moteur_avant in engines.MANAGED_SERVERS and (r["moteur"] in engines.MANAGED_SERVERS or r["moteur"] == engines.OPENAI) and hasattr(avant, "arreter_gere"):
             try:
@@ -135,7 +135,7 @@ def _enregistrer_reglages(nouveau):
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
     tool_settings.clean(r)
-    ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2, moteur=moteur_ecrit), ensure_ascii=False, indent=1))
+    write_atomic(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2, moteur=moteur_ecrit), ensure_ascii=False, indent=1))
     return _m.reglages()
 
 
@@ -144,7 +144,7 @@ def _llamacpp():
     return llamacpp_engine
 
 
-def lire_memoire(nom):
+def read_memory(nom):
     f = _m.MEMOIRE / nom
     try:
         return f.read_text(encoding="utf-8-sig")
@@ -152,39 +152,39 @@ def lire_memoire(nom):
         return ""
 
 
-def ecrire_memoire(nom, texte):
+def write_memory(nom, texte):
     if nom not in ("CONTEXTE.md", "MEMOIRE.md"):
         raise ValueError("Fichier de mémoire inconnu.")
     if len(texte) > 60000:
         raise ValueError("Texte trop long (60 000 caractères au maximum).")
-    ecrire_atomique(_m.MEMOIRE / nom, texte)
+    write_atomic(_m.MEMOIRE / nom, texte)
 
 
-def noter(note):
+def add_note(note):
     note = " ".join(str(note).split())[:600]
     if not note:
         raise _m.ErreurOutil("Note vide.")
     ligne = "- {} : {}\n".format(datetime.now().strftime("%Y-%m-%d"), note)
     f = _m.MEMOIRE / "MEMOIRE.md"
-    existant = lire_memoire("MEMOIRE.md") or _t("# Mémoire de l'assistant\n\nNotes durables (ajoutées par l'assistant ou à la main).\n\n")
-    if position_notes(existant) < 0:                        # sans la section des notes, une note n'était ni listée ni relue : la section est créée
+    existant = read_memory("MEMOIRE.md") or _t("# Mémoire de l'assistant\n\nNotes durables (ajoutées par l'assistant ou à la main).\n\n")
+    if notes_position(existant) < 0:                        # sans la section des notes, une note n'était ni listée ni relue : la section est créée
         from . import i18n
-        existant = existant.rstrip("\n") + "\n" + (MARQUES_NOTES[1] if i18n.language() == "en" else MARQUE_NOTES) + "\n"
+        existant = existant.rstrip("\n") + "\n" + (NOTES_MARKERS[1] if i18n.language() == "en" else NOTES_MARKER) + "\n"
     texte = existant.rstrip("\n") + "\n" + ligne
-    i = position_notes(texte)
+    i = notes_position(texte)
     if i >= 0:                                              # la section des notes ne grossit pas sans fin : on garde les 40 dernières lignes
         tete, notes = texte[:i], texte[i:].split("\n")
         if len(notes) > 43:
             notes = notes[:2] + notes[-40:]
         texte = tete + "\n".join(notes) + "\n"
-    ecrire_atomique(f, texte)
+    write_atomic(f, texte)
     return _t("Noté dans memoire/MEMOIRE.md.")
 
 
-def lister_notes():
+def list_notes():
     """Les notes durables de l'assistant (les lignes « - date : texte » de la section des notes de MEMOIRE.md), dans l'ordre du fichier : la plus récente en dernier."""
-    memoire = lire_memoire("MEMOIRE.md")
-    i = position_notes(memoire)
+    memoire = read_memory("MEMOIRE.md")
+    i = notes_position(memoire)
     notes = []
     for ligne in (memoire[i:] if i >= 0 else "").split("\n"):
         if ligne.startswith("- "):
@@ -193,21 +193,21 @@ def lister_notes():
     return notes
 
 
-def supprimer_note(ligne):
+def delete_note(ligne):
     """Retire la première ligne de notes identique à `ligne` (le texte exact reçu de lister_notes : pas d'indice qui pourrait viser une autre note si le fichier a changé entre-temps)."""
-    memoire = lire_memoire("MEMOIRE.md")
-    i = position_notes(memoire)
+    memoire = read_memory("MEMOIRE.md")
+    i = notes_position(memoire)
     if i < 0 or not ligne.startswith("- "):
         raise ValueError(_t("Note introuvable."))
     lignes = memoire[i:].split("\n")
     if ligne not in lignes:
         raise ValueError(_t("Note introuvable."))
     lignes.remove(ligne)
-    ecrire_atomique(_m.MEMOIRE / "MEMOIRE.md", memoire[:i] + "\n".join(lignes))
+    write_atomic(_m.MEMOIRE / "MEMOIRE.md", memoire[:i] + "\n".join(lignes))
     return {"ok": True}
 
 
-def lister_skills():
+def list_skills():
     """Les fiches de skills (skills/*.md) : le contenu du projet, construit par l'utilisateur.
     On ne lit que les titres ici (le contenu se lit à la demande avec l'outil « lire »)."""
     dossier = _m.RACINE / "skills"
@@ -229,54 +229,54 @@ def lister_skills():
     return fiches
 
 
-RE_DESC_SKILL = re.compile(r"^[ÀA] lire quand\s+(.+)$", re.M)
+RE_SKILL_DESC = re.compile(r"^[ÀA] lire quand\s+(.+)$", re.M)
 
 
-def description_skill(nom):
+def skill_description(nom):
     """« À lire quand… » : la phrase que la fiche donne sur elle-même, pour que le modèle sache quand l'ouvrir. Vide si la fiche n'en a pas (le contenu n'est jamais copié dans le prompt)."""
     try:
         tete = (_m.RACINE / "skills" / nom).read_text(encoding="utf-8-sig", errors="ignore")[:1500]
     except OSError:
         return ""
-    m = RE_DESC_SKILL.search(tete)
+    m = RE_SKILL_DESC.search(tete)
     return " ".join(m.group(1).split())[:170].rstrip(".") if m else ""
 
 
-MARQUE_NOTES = "\n## Notes de l'assistant"
+NOTES_MARKER = "\n## Notes de l'assistant"
 
 
-MARQUES_NOTES = (MARQUE_NOTES, "\n## Assistant notes")          # le modèle de mémoire anglais (data/en/MEMOIRE.md) a son propre titre
+NOTES_MARKERS = (NOTES_MARKER, "\n## Assistant notes")          # le modèle de mémoire anglais (data/en/MEMOIRE.md) a son propre titre
 
 
-def position_notes(texte):
+def notes_position(texte):
     """Où commence la section des notes de l'assistant (dans l'une ou l'autre langue), ou -1."""
-    trouvees = [i for i in (texte.find(m) for m in MARQUES_NOTES) if i >= 0]
+    trouvees = [i for i in (texte.find(m) for m in NOTES_MARKERS) if i >= 0]
     return min(trouvees) if trouvees else -1
 
 
-LIMITE_CONTEXTE = 14000          # caractères de CONTEXTE.md relus à chaque conversation
-COUPURES = {}                   # ce que le modèle ne lit PAS en entier : nom -> (taille réelle, ce qui est relu) ; la page et la conversation le disent, rien n'est coupé en silence
+CONTEXT_LIMIT = 14000          # caractères de CONTEXTE.md relus à chaque conversation
+CUTS = {}                   # ce que le modèle ne lit PAS en entier : nom -> (taille réelle, ce qui est relu) ; la page et la conversation le disent, rien n'est coupé en silence
 
 
-def _signaler_coupure(nom, taille, relu):
+def _report_cut(nom, taille, relu):
     """Garde (et journalise une fois) ce qui est coupé ; efface la mention quand le texte tient de nouveau."""
     if taille <= relu:
-        COUPURES.pop(nom, None)
+        CUTS.pop(nom, None)
         return
-    if COUPURES.get(nom) != (taille, relu):
-        COUPURES[nom] = (taille, relu)
+    if CUTS.get(nom) != (taille, relu):
+        CUTS[nom] = (taille, relu)
         _m.journaliser("{} : {} caractères, {} relus par le modèle à chaque conversation (le reste est coupé)".format(nom, taille, relu))
 
 
-def borner_contexte(texte, limite=LIMITE_CONTEXTE):
+def bound_context(texte, limite=CONTEXT_LIMIT):
     """CONTEXTE.md tel que le modèle le lit : les `limite` premiers caractères, et un marqueur qui dit ce qui manque (le modèle sait alors qu'il lui manque quelque chose, et le dit)."""
-    _signaler_coupure("CONTEXTE.md", len(texte), limite)
+    _report_cut("CONTEXTE.md", len(texte), limite)
     if len(texte) <= limite:
         return texte
     return texte[:limite] + _t("\n[... CONTEXTE.md coupé : {} caractères non relus (limite : {}). Si une information du projet te manque, dis-le à l'utilisateur.]").format(len(texte) - limite, limite)
 
 
-def _garder_la_fin(texte, place):
+def _keep_the_end(texte, place):
     """Les derniers caractères qui tiennent dans `place` (marqueur compris), précédés d'un marqueur qui dit combien de caractères plus anciens ne sont pas relus."""
     if len(texte) <= place:
         return texte
@@ -285,23 +285,23 @@ def _garder_la_fin(texte, place):
     return marque.format(len(texte) - utile) + (texte[-utile:] if utile else "")
 
 
-def texte_memoire(memoire, budget=6000):
+def memory_text(memoire, budget=6000):
     """Ce qui est relu de MEMOIRE.md à chaque conversation : les parties fixes (décisions de l'utilisateur, limites) toujours, et seulement la fin de la section « Notes de l'assistant »
     (qui grossit). Sans cette section, les derniers caractères du fichier. Ce qui n'est pas relu est dit par un marqueur (jamais coupé en silence)."""
-    i = position_notes(memoire)
+    i = notes_position(memoire)
     if i < 0:
-        _signaler_coupure("MEMOIRE.md", len(memoire), budget)
-        return _garder_la_fin(memoire, budget)
+        _report_cut("MEMOIRE.md", len(memoire), budget)
+        return _keep_the_end(memoire, budget)
     fixe = memoire[:i][:budget - 1500]
     reste = memoire[i:]
-    _signaler_coupure("MEMOIRE.md", len(memoire), len(fixe) + min(len(reste), budget - len(fixe)))
-    return fixe + _garder_la_fin(reste, budget - len(fixe))
+    _report_cut("MEMOIRE.md", len(memoire), len(fixe) + min(len(reste), budget - len(fixe)))
+    return fixe + _keep_the_end(reste, budget - len(fixe))
 
 
 RE_SKILL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\- ]{0,98}\.md$")
 
 
-def _fichier_skill(nom):
+def _skill_file(nom):
     if not RE_SKILL.match(str(nom)):
         raise ValueError("Nom de skill invalide (lettres, chiffres, tirets, espaces, et .md).")
     dossier = _m.RACINE / "skills"
@@ -309,19 +309,19 @@ def _fichier_skill(nom):
     return dossier / nom
 
 
-def lire_skill(nom):
-    return _fichier_skill(nom).read_text(encoding="utf-8-sig")
+def read_skill(nom):
+    return _skill_file(nom).read_text(encoding="utf-8-sig")
 
 
-def ecrire_skill(nom, texte):
+def write_skill(nom, texte):
     if len(texte) > 60000:
         raise ValueError("Texte trop long (60 000 caractères au maximum).")
-    ecrire_atomique(_fichier_skill(nom), texte)
+    write_atomic(_skill_file(nom), texte)
     return {"ok": True}
 
 
-def supprimer_skill(nom):
-    f = _fichier_skill(nom)
+def delete_skill(nom):
+    f = _skill_file(nom)
     if not f.is_file():
         raise ValueError("Skill introuvable : " + str(nom))
     f.unlink()
@@ -331,15 +331,15 @@ def supprimer_skill(nom):
 RE_CONV = re.compile(r"^[0-9a-f]{8,16}$")
 
 
-def conv_chemin(ident):
+def conv_path(ident):
     if not RE_CONV.match(ident or ""):
         raise ValueError("Conversation inconnue.")
     return _m.DONNEES / "conversations" / (ident + ".json")
 
 
-def conv_lire(ident):
+def conv_read(ident):
     """The stored conversation (lutin.store, ADR 0017). ValueError when the identifier is malformed or no conversation has it."""
-    conv_chemin(ident)                                          # checks the identifier
+    conv_path(ident)                                          # checks the identifier
     from . import store
     c = store.read(ident)
     if c is None:
@@ -347,19 +347,19 @@ def conv_lire(ident):
     return c
 
 
-def conv_existe(ident):
+def conv_exists(ident):
     from . import store
     return bool(RE_CONV.match(ident or "")) and store.exists(ident)
 
 
-def conv_ecrire_telle_quelle(c):
+def conv_write_as_is(c):
     """Stores the conversation without touching its date « maj » (a review of changes, a cleanup: the list order must not move)."""
     from . import store
-    conv_chemin(c["id"])
+    conv_path(c["id"])
     store.write(c)
 
 
-def reparer_conversation(conv):
+def repair_conversation(conv):
     """Après un arrêt brutal, un appel d'outil peut être resté sans réponse : on en inscrit une, pour que la conversation reste cohérente pour le modèle."""
     msgs, i, repares = conv["messages"], 0, 0
     while i < len(msgs):
@@ -382,27 +382,27 @@ def reparer_conversation(conv):
     return repares
 
 
-def conv_nouvelle():
+def conv_new():
     ident = secrets.token_hex(4)
     c = {"id": ident, "titre": "Nouvelle conversation", "date": datetime.now().isoformat(timespec="seconds"), "messages": [], "resume": ""}
-    conv_ecrire(c)
+    conv_write(c)
     return c
 
 
-def conv_ecrire(c):
+def conv_write(c):
     if getattr(getattr(_m.LOCAL_TOUR, "stop", None), "abandonne", False):
         return          # ce fil exécute un tour abandonné après « Arrêter » : la conversation a continué sans lui, il ne doit rien écraser
     c["maj"] = datetime.now().isoformat(timespec="milliseconds")          # à la milliseconde : deux conversations écrites dans la même seconde restent dans l'ordre
-    conv_chemin(c["id"])
+    conv_path(c["id"])
     from . import store
     store.write(c)                                             # one transaction: a reader never sees half of it (ADR 0017)
     try:
-        copier_dans_le_dossier_de_travail(c)
+        copy_to_work_folder(c)
     except OSError as erreur:                               # une copie impossible (dossier en lecture seule, disque réseau absent) ne doit jamais empêcher d'enregistrer la conversation
         _m.journaliser("Copie de la conversation {} dans le dossier de travail impossible : {!r}".format(c.get("id"), erreur))
 
 
-DOSSIER_COPIES = "conversations-lutin"
+COPIES_FOLDER = "conversations-lutin"
 
 
 def conv_markdown(c):
@@ -430,28 +430,28 @@ def conv_markdown(c):
     return "\n".join(lignes).rstrip() + "\n"
 
 
-def nom_de_copie(c):
+def copy_name(c):
     titre = unicodedata.normalize("NFKD", c.get("titre") or "conversation").encode("ascii", "ignore").decode().lower()
     titre = re.sub(r"[^a-z0-9]+", "-", titre).strip("-")[:50] or "conversation"
     return "{}-{}-{}.md".format(str(c.get("date", ""))[:10] or "sans-date", titre, c["id"])
 
 
-def dossier_de_travail_de(c):
+def work_folder_of(c):
     """Le dossier de travail de cette conversation (le sien, sinon le dossier courant)."""
     from . import workspaces as _trav
     t = _trav.by_id(_m.config_lue(), c["travail"]) if c.get("travail") else None
     return Path(t["chemin"]) if t else _m.RACINE
 
 
-def copier_dans_le_dossier_de_travail(c):
+def copy_to_work_folder(c):
     """Si le réglage est coché : une copie lisible (Markdown) de la conversation dans `conversations-lutin/` du dossier de travail. Écrite seulement si elle change. Renvoie le chemin ou None."""
     if not _m.reglages().get("copie_conversations") or not c.get("messages"):
         return None
-    dossier = dossier_de_travail_de(c) / DOSSIER_COPIES
+    dossier = work_folder_of(c) / COPIES_FOLDER
     if not dossier.parent.is_dir():
         return None
     texte = conv_markdown(c)
-    f = dossier / nom_de_copie(c)
+    f = dossier / copy_name(c)
     for ancien in dossier.glob("*-" + c["id"] + ".md") if dossier.is_dir() else []:
         if ancien != f:                                  # le titre a changé : l'ancien nom disparaît, la conversation n'a qu'une copie
             ancien.unlink(missing_ok=True)
@@ -461,14 +461,14 @@ def copier_dans_le_dossier_de_travail(c):
     except OSError:
         pass
     dossier.mkdir(exist_ok=True)
-    ecrire_atomique(f, texte)
+    write_atomic(f, texte)
     return f
 
 
 CACHE_CONV = {}          # kept for compatibility: the list is a query of lutin.store now (ADR 0017)
 
 
-def conv_liste():
+def conv_list():
     """Every conversation, pinned ones first, then the most recent: one query (lutin.store)."""
     from . import store
     return store.listing()
@@ -478,19 +478,19 @@ def conv_liste():
 # Mode, réflexion, écritures et commandes automatiques, essai à blanc, web, longueur : chaque conversation a les siennes, dans un petit fichier à part (donnees/options/<id>.json) pour que le changement d'une option
 # ne se croise jamais avec l'écriture de la conversation par une réponse en cours. Les accords automatiques sont FAUX par défaut ; le modèle, lui, reste un réglage commun.
 OPTIONS_CONV = ("mode", "reflexion", "auto_ecriture", "auto_commandes", "essai_a_blanc", "web", "num_predict", "mission_duree_h")
-LONGUEURS = (0, 512, 1024, 2048, 4096, 8192, 16384, 32768)
-DUREES_MISSION = (1, 2, 4, 8, 12, 24, 48, 72)
-VERROU_OPTIONS = threading.Lock()
+LENGTHS = (0, 512, 1024, 2048, 4096, 8192, 16384, 32768)
+MISSION_DURATIONS = (1, 2, 4, 8, 12, 24, 48, 72)
+OPTIONS_LOCK = threading.Lock()
 RE_IDENT = re.compile(r"^[0-9a-f]{8}$")
 
 
-def options_chemin(ident):
+def options_path(ident):
     if not RE_IDENT.match(str(ident or "")):
         raise ValueError("Conversation inconnue.")
     return _m.DONNEES / "options" / (ident + ".json")
 
 
-def nettoyer_options(brut):
+def clean_options(brut):
     """Ne garde que les options connues, avec des valeurs valides."""
     sortie = {}
     if not isinstance(brut, dict):
@@ -504,7 +504,7 @@ def nettoyer_options(brut):
                 sortie[k] = v
         elif k in ("num_predict", "mission_duree_h"):
             try:
-                if int(v) in (LONGUEURS if k == "num_predict" else DUREES_MISSION):
+                if int(v) in (LENGTHS if k == "num_predict" else MISSION_DURATIONS):
                     sortie[k] = int(v)
             except (TypeError, ValueError):
                 pass
@@ -513,30 +513,30 @@ def nettoyer_options(brut):
     return sortie
 
 
-def options_lire(ident):
+def options_read(ident):
     try:
-        options_chemin(ident)
+        options_path(ident)
     except ValueError:
         return {}
     from . import store
-    return nettoyer_options(store.options_read(ident))
+    return clean_options(store.options_read(ident))
 
 
-def options_ecrire(ident, nouvelles):
+def options_write(ident, nouvelles):
     """Fusionne ces options dans celles de la conversation (celles qu'on ne cite pas ne changent pas). Rend les options en vigueur."""
-    options_chemin(ident)
+    options_path(ident)
     from . import store
-    with VERROU_OPTIONS:
-        actuelles = nettoyer_options(store.options_read(ident))
-        actuelles.update(nettoyer_options(nouvelles))
+    with OPTIONS_LOCK:
+        actuelles = clean_options(store.options_read(ident))
+        actuelles.update(clean_options(nouvelles))
         store.options_write(ident, actuelles)
     return actuelles
 
 
-def appliquer_options(r, ident):
+def apply_options(r, ident):
     """Les réglages d'une réponse : ceux de la machine, puis les options de cette conversation. Les accords automatiques ne viennent QUE de la conversation (faux sans choix de sa part)."""
     r = dict(r)
-    o = options_lire(ident)
+    o = options_read(ident)
     r["auto_ecriture"] = bool(o.get("auto_ecriture", False))
     r["auto_commandes"] = bool(o.get("auto_commandes", False))
     for k in ("mode", "reflexion", "essai_a_blanc", "web", "num_predict"):
@@ -545,20 +545,20 @@ def appliquer_options(r, ident):
     return r
 
 
-def rafraichir_accords(ctx):
+def refresh_approvals(ctx):
     """Une case cochée ou décochée PENDANT une réponse compte dès l'outil suivant : on relit les options de la conversation (seulement si elle en a)."""
     if ctx.get("mission") or ctx.get("identite") == "planifié":
         return
     try:
         conv_id = ctx["conv"]["id"]
-        o = options_lire(conv_id)
+        o = options_read(conv_id)
         if o:
             ctx["auto_ecriture"], ctx["auto_commandes"] = bool(o.get("auto_ecriture", False)), bool(o.get("auto_commandes", False))
     except (KeyError, ValueError, OSError):
         pass
 
 
-def options_nettoyer_orphelins(ids):
+def options_clean_orphans(ids):
     from . import store
     n = 0
     for ident in store.options_ids():
@@ -568,8 +568,8 @@ def options_nettoyer_orphelins(ids):
     return n
 
 
-def conv_supprimer(ident):
-    conv_chemin(ident)
+def conv_delete(ident):
+    conv_path(ident)
     _m.annuler_scribe(ident)                                   # le scribe de fond ne doit pas refaire la fiche d'une conversation supprimée
     from . import store
     store.delete(ident)                                        # its options with it
@@ -580,8 +580,8 @@ def conv_supprimer(ident):
     embeddings.remove(ident)                             # et ses vecteurs de recherche par le sens
 
 
-def conv_renommer(ident, titre):
-    c = conv_lire(ident)
+def conv_rename(ident, titre):
+    c = conv_read(ident)
     c["titre"] = titre.strip()[:120]
-    conv_ecrire(c)
+    conv_write(c)
     return c

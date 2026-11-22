@@ -209,55 +209,55 @@ def ignore_chemin(p):
 
 
 from .storage import (  # noqa: F401  (déplacé dans storage.py : moteur ré-exporte ses noms)
-    appliquer_options,
-    options_ecrire,
-    options_lire,
-    options_nettoyer_orphelins,
-    rafraichir_accords,
+    apply_options,
+    options_write,
+    options_read,
+    options_clean_orphans,
+    refresh_approvals,
     CACHE_CONV,
-    MARQUES_NOTES,
-    MARQUE_NOTES,
+    NOTES_MARKERS,
+    NOTES_MARKER,
     RE_CONV,
-    RE_DESC_SKILL,
+    RE_SKILL_DESC,
     RE_SKILL,
-    _fichier_skill,
-    conv_chemin,
-    conv_ecrire,
-    conv_ecrire_telle_quelle,
-    conv_existe,
-    conv_lire,
-    conv_liste,
-    conv_nouvelle,
-    conv_renommer,
-    conv_supprimer,
-    description_skill,
-    ecrire_atomique,
-    ecrire_memoire,
-    ecrire_skill,
-    enregistrer_reglages,
-    lire_json,
-    lire_memoire,
-    lire_skill,
-    lister_skills,
-    noter,
-    position_notes,
-    reparer_conversation,
-    supprimer_skill,
-    texte_memoire,
-    borner_contexte,
-    COUPURES,
-    LIMITE_CONTEXTE,
+    _skill_file,
+    conv_path,
+    conv_write,
+    conv_write_as_is,
+    conv_exists,
+    conv_read,
+    conv_list,
+    conv_new,
+    conv_rename,
+    conv_delete,
+    skill_description,
+    write_atomic,
+    write_memory,
+    write_skill,
+    save_settings,
+    read_json,
+    read_memory,
+    read_skill,
+    list_skills,
+    add_note,
+    notes_position,
+    repair_conversation,
+    delete_skill,
+    memory_text,
+    bound_context,
+    CUTS,
+    CONTEXT_LIMIT,
 )
 
 
 def reglages():
     """Les réglages en vigueur (valeurs par défaut des nouvelles conversations, et réglages de la machine). Les options propres à chaque conversation sont à part : voir donnees.options_lire."""
     r = dict(REGLAGES_DEFAUT)
-    brut = lire_json(DONNEES / "reglages.json", {})
+    brut = read_json(DONNEES / "reglages.json", {})
     r.update({k: v for k, v in brut.items() if k in REGLAGES_DEFAUT})
     if r.get("moteur") == "openai":          # ExLlamaV3, LM Studio or Colibri chosen inside the settings of the « openai » engine before ADR 0020: read as that engine, the file is not rewritten
         from . import engines as _mo, llamacpp_engine as _ml
-        r["moteur"] = _mo.chosen_id(r["moteur"], _ml.serveur_ancien())
+        r["moteur"] = _mo.chosen_id(r["moteur"], _ml.old_server())
     r["memoire_longue"] = "fichier"                                                  # la fiche de suivi pour tous (ADR 0019) : un ancien « resume » ou « demander » enregistré vaut la fiche, le fichier n'est pas réécrit
     r["num_ctx"] = max(4096, min(131072, int(r["num_ctx"])))
     r["temperature"] = max(0.0, min(2.0, float(r["temperature"])))
@@ -284,53 +284,53 @@ _hardware.USER_BUDGET = lambda: reglages().get("budget_go") or ""          # la 
 
 
 from .tools import (  # noqa: F401  (déplacé dans tools.py : moteur ré-exporte ses noms)
-    Attente,
-    EXTENSIONS_BINAIRES,
-    OUTILS,
+    PendingApproval,
+    BINARY_EXTENSIONS,
+    TOOLS,
     PURGE,
-    RE_HORS_PROJET,
-    SAUVEGARDES_JOURS,
-    SORTIE_BORNE,
-    Tampon,
-    VERIFICATION_FAITE,
-    chemin_sur,
-    commande_lecture_sure,
-    construire_hors_projet,
+    RE_OUTSIDE_PROJECT,
+    BACKUP_DAYS,
+    BOUNDED_OUTPUT,
+    Buffer,
+    CHECK_DONE,
+    safe_path,
+    safe_read_command,
+    build_outside_project,
     difference,
-    ecrire_et_verifier,
-    ecrire_exact,
-    jeton_outil,
-    lancer_processus,
-    limiter_memoire_processus,
-    lire_exact,
-    lire_flux,
-    noter_apres,
-    octets_dossier,
-    outil_chercher,
-    outil_ecrire,
-    outil_document,
-    outil_etat,
-    outil_executer,
-    outil_installer_module,
-    outil_lire,
-    outil_lire_plusieurs,
-    outil_lister,
-    outil_modifier,
-    outil_modifier_plusieurs,
-    outil_symboles,
-    parcourir,
-    passage_proche,
-    positions_ligne,
-    purger_donnees,
-    purger_sauvegardes,
+    write_and_check,
+    write_exact,
+    tool_token,
+    start_process,
+    limit_process_memory,
+    read_exact,
+    read_stream,
+    record_after,
+    folder_bytes,
+    search_tool,
+    write_tool,
+    document_tool,
+    state_tool,
+    run_tool,
+    install_module_tool,
+    read_tool,
+    read_many_tool,
+    list_tool,
+    edit_tool,
+    edit_many_tool,
+    symbols_tool,
+    walk_files,
+    nearby_passage,
+    line_positions,
+    purge_data,
+    purge_backups,
     rel,
-    remplacer_une_fois,
-    repondre_attente,
-    sauvegarder,
-    sha_fichier,
-    tuer_arbre,
-    verifier_js,
-    verifier_syntaxe,
+    replace_once,
+    answer_pending,
+    back_up,
+    file_sha,
+    kill_tree,
+    check_js,
+    check_syntax,
 )
 
 
@@ -530,7 +530,7 @@ def _liberer_autres_moteurs(tout, sauf=None):
     libres = []
     try:
         from . import llamacpp_engine as _ml, engines as _mo
-        llama, proc = _mo.ENGINES.get("llamacpp"), _ml.SERVEUR.get("proc")
+        llama, proc = _mo.ENGINES.get("llamacpp"), _ml.SERVER.get("proc")
         if llama is not None and proc is not None and proc.poll() is None:
             llama.arreter()
             libres.append("llama.cpp")
@@ -565,7 +565,7 @@ def modeles_retenus(sauf=None):
             pass
     try:
         from . import llamacpp_engine as _ml, engines as _mo
-        proc = _ml.SERVEUR.get("proc")
+        proc = _ml.SERVER.get("proc")
         if proc is not None and proc.poll() is None:
             noms.append("llama.cpp")
         for i in _mo.MANAGED_SERVERS:
@@ -746,7 +746,7 @@ def chemin_config():
 
 def config_lue():
     c = chemin_config()
-    return _config.migrate_config(lire_json(c, {})) if c else _config.migrate_config({})
+    return _config.migrate_config(read_json(c, {})) if c else _config.migrate_config({})
 
 
 def config_ecrire(cfg):
@@ -997,7 +997,7 @@ def traduire_evenement(e):
 def lire_propositions():
     """Nouveautés de modèles trouvées par la vérification au lancement (voir lutin.updates) : un fichier du cache, jamais le réseau."""
     chemin = os.environ.get("LUTIN_PROPOSITIONS")
-    d = lire_json(Path(chemin), None) if chemin else None
+    d = read_json(Path(chemin), None) if chemin else None
     return d if isinstance(d, dict) else {"propositions": [], "erreurs": [], "date": 0}
 
 
@@ -1007,19 +1007,19 @@ def traiter_proposition(cle, appliquer):
     prop = next((p for p in lire_propositions().get("propositions", []) if p.get("cle") == cle), None)
     if not config_f or not prop:
         raise ValueError("Proposition introuvable.")
-    cfg = lire_json(Path(config_f), {})
+    cfg = read_json(Path(config_f), {})
     modeles = cfg.setdefault("modeles", {})
     modeles.setdefault("ignores", [])
     if cle not in modeles["ignores"] and not (appliquer and prop.get("type") == "maj"):          # une mise à jour installée ne doit pas faire taire les suivantes
         modeles["ignores"].append(cle)
     if appliquer and prop.get("role"):
         modeles.setdefault("choisis", {})[prop["role"]] = prop["modele"]
-    ecrire_atomique(Path(config_f), json.dumps(cfg, ensure_ascii=False, indent=1))
+    write_atomic(Path(config_f), json.dumps(cfg, ensure_ascii=False, indent=1))
     chemin = os.environ.get("LUTIN_PROPOSITIONS")
     if chemin:
         d = lire_propositions()
         d["propositions"] = [p for p in d.get("propositions", []) if p.get("cle") != cle]
-        ecrire_atomique(Path(chemin), json.dumps(d, ensure_ascii=False, indent=1))
+        write_atomic(Path(chemin), json.dumps(d, ensure_ascii=False, indent=1))
     return {"ok": True}
 
 
@@ -1060,7 +1060,7 @@ def ecouter_aussi_en_local(hote):
 def ecrire_fichier_console(hote):
     """Adresse et jeton de la console locale (lutin chat) : un fichier que seul l'utilisateur de cette machine peut lire."""
     f = DONNEES / "console.json"
-    ecrire_atomique(f, json.dumps({"adresse": "http://{}:{}".format("127.0.0.1" if hote in ("0.0.0.0", "") else hote, PORT), "jeton": JETON_CONSOLE, "pid": os.getpid()}))
+    write_atomic(f, json.dumps({"adresse": "http://{}:{}".format("127.0.0.1" if hote in ("0.0.0.0", "") else hote, PORT), "jeton": JETON_CONSOLE, "pid": os.getpid()}))
     try:
         os.chmod(f, 0o600)
     except OSError:
@@ -1098,9 +1098,9 @@ def principal():
     except OSError as erreur:
         journaliser("Impossible d'écouter sur {}:{} : {!r}".format(hote, PORT, erreur))
         raise SystemExit(_t("Le port {} est déjà pris, sans doute par un autre Lutin déjà lancé sur cette machine : celui-ci s'arrête. ({})").format(PORT, erreur))
-    purger_sauvegardes()
+    purge_backups()
     try:
-        purger_donnees()
+        purge_data()
     except OSError as erreur:
         journaliser("Purge impossible : {!r}".format(erreur))
     refresh_plan(force=True)

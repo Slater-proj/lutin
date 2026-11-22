@@ -54,7 +54,7 @@ class SansApi(unittest.TestCase):
 
     def test_llamacpp_choisit_la_plus_recente_publication_qui_a_ses_fichiers(self):
         rs = updates.releases_from_page("ggml-org/llama.cpp", r"b\d+", 4, http=http_sans_api)
-        etiquette, assets = ll.choisir_fichiers(rs, "windows", "amd64", "cpu")
+        etiquette, assets = ll.choose_files(rs, "windows", "amd64", "cpu")
         self.assertEqual(etiquette, "b199")
         self.assertEqual(len(assets), 1)
 
