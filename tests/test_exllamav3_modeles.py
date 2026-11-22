@@ -92,6 +92,27 @@ class Catalogue(unittest.TestCase):
         self.assertEqual([x["go"] for x in q], [5.2, 6.9, 8.8])
         self.assertEqual(q[0]["commit"], "a" * 40)
 
+    def test_un_depot_a_une_seule_branche_propose_main(self):
+        """Beaucoup de dépôts EXL3 de la communauté rangent leur seule quantification sur « main » (« …-2.75bpw ») : elle est proposée, sinon la page
+        n'avait aucun bouton (retour du mainteneur, 22/11). Un LoRA ou un dépôt GGUF sur « main » n'est pas un modèle qu'ExLlamaV3 lance."""
+        q = C.quantizations("0xSero/Laguna-S-2.1-Hybrid-2.75bpw", faux_hf(branches={"main": "m" * 40}))
+        self.assertEqual([(x["revision"], x["bpw"], x["go"], x["commit"]) for x in q], [("main", 2.75, 1.0, "m" * 40)])
+
+        def depot_de(fichiers):
+            def f(url, entetes=None):
+                if url.endswith("/refs"):
+                    return 200, {}, json.dumps({"branches": [{"name": "main", "targetCommit": "m" * 40}]}).encode()
+                return 200, {}, json.dumps([{"type": "file", "size": 9, "path": p} for p in fichiers]).encode()
+            return f
+        self.assertEqual(C.quantizations("x/Lora", depot_de(["adapter_config.json", "adapter_model.safetensors"])), [], "un LoRA")
+        self.assertEqual(C.quantizations("x/M-GGUF", depot_de(["config.json", "M.Q4_K_M.gguf", "m.safetensors"])), [], "des fichiers GGUF")
+
+    def test_un_depot_gguf_n_est_jamais_propose_a_exllamav3(self):
+        """Un dépôt GGUF peut porter l'étiquette « exl3 » de son modèle d'origine (mradermacher/…-i1-GGUF) : Hugging Face le rend pour « filter=exl3 », la page le
+        montrait, et ExLlamaV3 n'avait aucune précision à proposer (retour du mainteneur, 22/11)."""
+        brut = [depot("Laguna-S-2.1-Heretic-i1-GGUF", auteur="mradermacher", tags=["gguf", "exl3"]), depot("Autre", auteur="y", tags=["exl3", "gguf"]), depot("Laguna-S-2.1-exl3")]
+        self.assertEqual([m["id"] for m in C.search("laguna", "populaire", True, 1, faux_hf(brut))["modeles"]], ["turboderp/Laguna-S-2.1-exl3"])
+
     def test_les_pannes_de_hugging_face_sont_dites_clairement(self):
         def panne(code):
             return lambda url, entetes=None: (code, {}, b"")

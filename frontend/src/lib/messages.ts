@@ -1612,7 +1612,7 @@ const en = {
   "emodels.started": "Download of {} started: its progress is shown at the top of the screen.",
   "emodels.loaded": "in memory",
   "emodels.variants_of": "Precisions of {}",
-  "emodels.no_variants": "No precision to choose for this model.",
+  "emodels.no_variants": "This repository has no file this engine can run: look for the same model in another format, or choose another engine (Settings > Engine).",
   "emodels.results": "Found",
 };
 
@@ -3228,7 +3228,7 @@ const fr: Partial<Record<keyof typeof en, string>> = {
   "emodels.started": "Téléchargement de {} lancé : son avancement s'affiche en haut de l'écran.",
   "emodels.loaded": "en mémoire",
   "emodels.variants_of": "Précisions de {}",
-  "emodels.no_variants": "Aucune précision à choisir pour ce modèle.",
+  "emodels.no_variants": "Ce dépôt n'a aucun fichier que ce moteur sait lancer : cherche le même modèle dans un autre format, ou choisis un autre moteur (Réglages > Moteur).",
   "emodels.results": "Trouvés",
 };
 

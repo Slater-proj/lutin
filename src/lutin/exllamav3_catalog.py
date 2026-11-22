@@ -86,6 +86,8 @@ def search(q="", tri="recent", communaute=False, page=1, http=updates.http_get, 
         ident = str(m.get("id", ""))
         if not RE_REPO.match(ident) or etiquette not in (ident.lower() + " " + " ".join(str(t).lower() for t in (m.get("tags") or []))):
             continue
+        if etiquette != "gguf" and ("gguf" in ident.lower() or "gguf" in [str(t).lower() for t in (m.get("tags") or [])]):
+            continue          # un dépôt GGUF porte parfois l'étiquette « exl3 » de son modèle d'origine : ExLlamaV3 ne le lit pas, il n'aurait aucune précision à proposer
         tags = [str(t) for t in (m.get("tags") or [])]
         base = next((t.split(":", 2)[2] for t in tags if t.startswith("base_model:quantized:")), "") or next((t.split(":", 1)[1] for t in tags if t.startswith("base_model:") and t.count(":") == 1), "")
         sortie.append({"id": ident, "nom": ident.split("/")[-1], "auteur": ident.split("/")[0], "telechargements": int(m.get("downloads") or 0), "aime": int(m.get("likes") or 0), "maj": str(m.get("lastModified") or "")[:10],
@@ -132,13 +134,27 @@ def revision_size(depot, revision, http=updates.http_get):
     return sum(int(f.get("size") or 0) for f in d if isinstance(f, dict) and f.get("type") == "file")
 
 
+RE_BPW_IN_NAME = re.compile(r"(\d+(?:\.\d+)?)bpw", re.I)
+
+
 def quantizations(depot, http=updates.http_get):
-    """Les quantifications d'un dépôt : [{revision, bpw, go, commit}] triées du plus léger au plus lourd. `go` = somme exacte des fichiers de la branche (None si illisible)."""
+    """Les quantifications d'un dépôt : [{revision, bpw, go, commit}] triées du plus léger au plus lourd. `go` = somme exacte des fichiers de la branche (None si illisible).
+    Un dépôt sans branche « 4.0bpw »… qui range sa seule quantification sur « main » (des poids .safetensors) la propose sous « main », `bpw` lu dans son nom
+    s'il l'écrit : avant, la liste était vide et la page n'avait aucun bouton pour le télécharger."""
     liste = []
-    for nom, empreinte in branches_of(depot, http).items():
+    branches = branches_of(depot, http)
+    for nom, empreinte in branches.items():
         m = RE_BPW.match(nom)
         if m:
             liste.append({"revision": nom, "bpw": float(m.group(1)), "commit": empreinte})
+    if not liste and "main" in branches:
+        try:
+            fichiers = [str(f.get("path", "")).lower() for f in _json(API + "/" + urllib.parse.quote(depot, safe="/") + "/tree/main", http) if isinstance(f, dict) and f.get("type") == "file"]
+        except (ValueError, TypeError):
+            fichiers = []
+        if "config.json" in fichiers and any(f.endswith(".safetensors") for f in fichiers) and not any(f.endswith(".gguf") for f in fichiers):          # un modèle entier, pas un LoRA (adapter_config.json)
+            dans_le_nom = RE_BPW_IN_NAME.search(str(depot).split("/")[-1])
+            liste.append({"revision": "main", "bpw": float(dans_le_nom.group(1)) if dans_le_nom else 0.0, "commit": branches["main"]})
 
     def taille(q):
         try:
