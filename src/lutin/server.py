@@ -1922,6 +1922,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         try:
-            return self._envoyer(200, {"titre": _m.titre_propose(_m.conv_lire(ident), _m.reglages())})
-        except (OSError, ValueError) as erreur:
+            conv = _m.conv_lire(ident)
+        except ValueError:
+            return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
+        try:
+            return self._envoyer(200, {"titre": _m.titre_propose(conv, _m.reglages())})
+        except ValueError as erreur:          # the model answered nothing
             return self._envoyer(500, {"erreur": str(erreur)})
+        except OSError as erreur:             # the engine does not answer
+            return self._envoyer(502, {"erreur": str(erreur)})
