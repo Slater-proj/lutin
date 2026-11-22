@@ -18,6 +18,9 @@ PREFIX = "/app/"
 TYPES = {".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2",
          ".json": "application/json; charset=utf-8"}
 ASSET = re.compile(r"^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+$")          # one file name: no folder, no « .. », no hidden file
+# The build names every file of `assets/` after its content (`index-QzFXTu3w.js`): a name never changes meaning, so the browser keeps it and the page of a new
+# version asks for new names. Before, every visit fetched the whole interface again (`no-store`). `private`: the files need a session, no shared cache keeps them.
+ASSET_CACHE = "private, max-age=31536000, immutable"
 # Everything comes from this server: no inline script, no inline style, no other origin. `blob:` and `data:` are for the images of a conversation
 # and for the drawings of the diagrams. The only frame is the one that draws diagrams (ADR 0011): it has its own policy, below.
 CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; "

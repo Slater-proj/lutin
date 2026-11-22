@@ -159,7 +159,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             self.send_header("Content-Encoding", "gzip")
         self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(donnees)))
-        self.send_header("Cache-Control", "no-store")
+        if "Cache-Control" not in (en_tetes or {}):
+            self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         for k, v in (en_tetes or {}).items():
@@ -440,7 +441,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             fichier = _web_app.asset(reste[len("assets/"):])
             if fichier is None:
                 return self._envoyer(404, {"erreur": "introuvable"})
-            return self._envoyer(200, fichier[0], fichier[1])
+            return self._envoyer(200, fichier[0], fichier[1], {"Cache-Control": _web_app.ASSET_CACHE})
         if reste == _web_app.DIAGRAM:                            # le cadre isolé qui dessine les diagrammes (ADR 0011) : sa propre politique, ni jeton ni session dedans
             if not self._authentifie():
                 return self._envoyer(401, {"erreur": "authentification requise"})

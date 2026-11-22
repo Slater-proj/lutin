@@ -74,6 +74,13 @@ class Served(unittest.TestCase):
         status, headers, body = get("/app/assets/index-C2y.css", V.OWNER)
         self.assertEqual((status, headers["Content-Type"], body), (200, "text/css; charset=utf-8", "body{margin:0}"))
 
+    def test_the_built_files_are_kept_by_the_browser_and_the_page_is_not(self):
+        """A built file is named after its content: the browser keeps it (before, every visit fetched the whole interface again); the page that names them is
+        asked each time, so a new version is seen at once. `private`: they need a session."""
+        self.assertEqual(get("/app/assets/index-B1x_9.js", V.OWNER)[1]["Cache-Control"], "private, max-age=31536000, immutable")
+        self.assertEqual(get("/app/", V.OWNER)[1]["Cache-Control"], "no-store")
+        self.assertEqual(get("/app/assets/missing.js", V.OWNER)[1]["Cache-Control"], "no-store", "a refusal is not kept")
+
     def test_only_a_plain_file_name_of_the_assets_folder_can_be_read(self):
         for path in ("/app/assets/..%2Fsecret.json", "/app/assets/../secret.json", "/app/assets/%2e%2e/secret.json", "/app/assets/..\\secret.json", "/app/assets/.hidden.js",
                      "/app/assets/tool.exe", "/app/assets/sub/deep.js", "/app/assets/sub%2Fdeep.js", "/app/assets/missing.js", "/app/assets/", "/app/assets/index-B1x_9.js%00.css",
