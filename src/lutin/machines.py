@@ -934,11 +934,6 @@ def clear_lists():
         SYNC.clear()
 
 
-def offline_names():
-    """Noms des machines appairées qui ne répondent pas : leurs conversations importées restent utilisables ici mais ne se synchronisent plus."""
-    return [m["nom"] for m in read() if LAST_STATE.get(m["id"]) not in ("joignable", "operationnel") or not _recent(m["id"])]
-
-
 def forget_machine(ident):
     """Plus rien de cette machine dans les listes (modèles à choisir, conversations en jaune) : on ne peut plus lui parler."""
     with LOCK:
@@ -1100,7 +1095,6 @@ def clean_imported_copies():
     return supprimees
 
 
-RELAY_HEADERS = ("Content-Type", "Content-Disposition", "Content-Security-Policy", "Cache-Control", "X-Accel-Buffering")
 RE_RELAY_PATH = re.compile(r"^/[A-Za-z0-9_\-./%?=&]{1,300}$")
 
 

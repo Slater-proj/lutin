@@ -10,6 +10,7 @@ that a refused request never reached them."""
 import http.client
 import json
 import os
+import re
 import tempfile
 import threading
 import unittest
@@ -38,9 +39,6 @@ OPEN_TO_NOBODY = {
     ("POST", "/api/noeud/appairer"): (400, 403),     # another machine exchanging a code: no code, no token
     ("GET", "/"): (200,),                            # the sign-in page (see test_the_page_itself_is_the_sign_in_page)
     ("GET", "/index.html"): (200,),
-    ("GET", "/ancienne/"): (200,),                   # the old page, at /ancienne/ since 1.0: the same sign-in page without a session
-    ("GET", "/ancienne/index.html"): (200,),
-    ("GET", "/ancienne"): (200,),                    # without a session: the sign-in page (with one, it sends to /ancienne/)
     ("GET", "/manifest.webmanifest"): (200,),        # what a phone needs to offer « add to home screen »: a name and icons, nothing of the user's
     ("GET", "/icone.svg"): (200,),
     ("GET", "/logo.svg"): (200,),
@@ -61,7 +59,7 @@ def request(method, path, headers=None, body=None):
     sent.update(ELSEWHERE)
     sent.update(headers or {})
     data = None
-    if method == "POST":
+    if method in ("POST", "PATCH"):
         data = json.dumps(body or {}).encode("utf-8")
         sent["Content-Type"] = "application/json"
     connection.request(method, path, body=data, headers=sent)
@@ -75,6 +73,12 @@ def routes(method):
     """Every exact route of the method, and one address under each prefix."""
     entry = CONTRACT[method]
     return sorted(entry["exact"]) + sorted(prefix + "x" for prefix in entry["prefix"] if prefix.startswith("/api/") and prefix != "/api/")
+
+
+def v1_routes(*rights):
+    """Every route of /api/v1 with one of these rights, its parameters filled with « x » (the rights are checked before the parameters)."""
+    from lutin import api_v1
+    return [(r["method"], re.sub(r"\{[a-z_]+\}", "x", r["path"])) for r in api_v1.table() if r["right"] in rights]
 
 
 def setUpModule():
@@ -124,33 +128,38 @@ class Nobody(unittest.TestCase):
         self.assertIn(A.TOKEN, request("GET", "/", {"Cookie": DEVICE["Cookie"]})[1])
 
 
+class NobodyOnV1(unittest.TestCase):
+    def test_every_route_of_v1_refuses_a_caller_without_a_session(self):
+        REACHED.clear()
+        wrong = [(method, path, status) for method, path in v1_routes("session", "configurator", "local", "read") for status in [request(method, path)[0]] if status != 401]
+        self.assertEqual(wrong, [], "routes of /api/v1 that answered a caller with no session (expected 401)")
+        self.assertEqual(REACHED, [], "a refused request reached an action")
+
+
 class PairedDevice(unittest.TestCase):
     def test_the_device_is_signed_in_but_cannot_configure(self):
-        status, text = request("GET", "/api/etat", DEVICE)
+        status, text = request("GET", "/api/v1/status", DEVICE)
         self.assertEqual(status, 200, text[:200])
+        self.assertFalse(json.loads(text)["access"]["can_configure"])
 
     def test_every_route_reserved_to_the_configurator_refuses_a_paired_device(self):
         REACHED.clear()
         called, wrong = 0, []
-        for method in ("GET", "POST"):
-            for path, right in sorted(CONTRACT["rights"][method].items()):
-                if right.endswith(":conditional"):
-                    continue                              # depends on what is asked: covered by the tests of each feature, not by a blind call
-                address = path + "x" if path in CONTRACT[method]["prefix"] else path
-                status, text = request(method, address, DEVICE)
-                called += 1
-                if status != 403:
-                    wrong.append((method, address, status, text[:120]))
+        for method, path in v1_routes("configurator", "local"):
+            status, text = request(method, path, DEVICE)
+            called += 1
+            if status != 403:
+                wrong.append((method, path, status, text[:120]))
         self.assertEqual(wrong, [], "routes reserved to the configurator that answered a paired device")
-        self.assertGreater(called, 55, "the inventory lists the reserved routes (the reader may have stopped seeing them)")
+        self.assertGreater(called, 100, "the table lists the reserved routes")
         self.assertEqual(REACHED, [], "a refused request reached an action")
 
     def test_the_guarded_actions_are_among_the_reserved_routes(self):
         """The markers only prove something if the dangerous routes are in the list that is called."""
-        reserved = CONTRACT["rights"]["POST"]
-        for path in ("/api/acces", "/api/mettre-a-jour", "/api/redemarrer", "/api/admin-distance", "/api/mcp-", "/api/travaux-ajouter"):
-            self.assertIn(path, reserved, path)
-            self.assertFalse(reserved[path].endswith(":conditional"), path)
+        reserved = set(v1_routes("configurator", "local"))
+        for route in (("PATCH", "/api/v1/access"), ("POST", "/api/v1/lutin/update"), ("POST", "/api/v1/lutin/restart"), ("PATCH", "/api/v1/access/remote-admin"),
+                      ("POST", "/api/v1/mcp-connectors"), ("POST", "/api/v1/projects"), ("POST", "/api/v1/backup/restore")):
+            self.assertIn(route, reserved, route)
 
 
 if __name__ == "__main__":

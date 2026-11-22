@@ -98,15 +98,6 @@ def find_for_conversation(conv_id):
     return liste[-1] if liste else None
 
 
-def by_conversation():
-    """{conversation: résumé de sa mission} : de quoi montrer l'avancement dans la conversation elle-même."""
-    sortie = {}
-    for m in read():
-        if m.get("lie") and m.get("conv"):
-            sortie[m["conv"]] = summary(m)
-    return sortie
-
-
 def forget_conversation(conv_id):
     """La conversation est supprimée : sa mission aussi."""
     for m in read():

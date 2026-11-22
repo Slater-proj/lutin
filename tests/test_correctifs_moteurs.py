@@ -14,7 +14,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 (_TEMP / "projet").mkdir(exist_ok=True)
 
 from lutin import core as _m  # noqa: E402  (avant les autres : import circulaire sinon)
-from lutin import diagnostic, engines, health  # noqa: E402
+from lutin import engines, health  # noqa: E402
 from lutin import llamacpp_engine as ml  # noqa: E402
 from lutin import engine_replace, loaded_resources as rc  # noqa: E402
 
@@ -197,56 +197,6 @@ class SeuilVideoPourTousLesMoteurs(unittest.TestCase):
     def test_ollama_et_llamacpp_repartissent_tout_seuls_pas_un_serveur_externe(self):
         for moteur, attendu in (("ollama", True), ("llamacpp", True), ("openai", False), (None, True)):
             self.assertEqual(health._engine_splits_itself({"moteur": moteur}), attendu, str(moteur))
-
-
-class PremierLancement(unittest.TestCase):
-    def test_un_autre_moteur_est_installe_on_le_propose_au_lieu_de_dire_qu_il_manque_un_moteur(self):
-        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", {"moteur": "ollama", "nom": "Ollama", "raison": "x"}, None, [{"moteur": "ollama", "nom": "Ollama"}], "openai")
-        self.assertFalse(r["pret"])
-        self.assertIn("Ollama est déjà installé", r["raison"])
-        self.assertNotIn("Aucun moteur n'est prêt", r["raison"])
-        self.assertIsNone(r["recommande"], "rien à installer : l'un est déjà là")
-        self.assertEqual(r["installes"], [{"moteur": "ollama", "nom": "Ollama"}])
-
-    def test_rien_de_choisi_ni_d_installe(self):
-        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", None, None, [], "openai")
-        self.assertIn("Aucun moteur n'est choisi ni installé", r["raison"])
-        self.assertNotIn("ne répond pas", r["raison"])
-
-    def test_colibri_installe_mais_arrete_se_demarre_il_ne_faut_pas_dire_d_installer_ollama(self):
-        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", None, None, [], "openai", {"nom": "Colibri", "installe": True})
-        self.assertFalse(r["pret"])
-        self.assertIn("Colibri est installé mais ne répond pas", r["raison"])
-        self.assertNotIn("Ollama", r["raison"])
-        self.assertEqual(r["gere"], {"nom": "Colibri", "installe": True})
-        self.assertIsNone(r["recommande"])
-
-    def test_serveur_gere_pas_installe_dit_de_l_installer_et_propose_l_autre_moteur_s_il_existe(self):
-        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", None, None, [{"moteur": "ollama", "nom": "Ollama"}], "openai", {"nom": "LM Studio", "installe": False})
-        self.assertIn("LM Studio n'est pas installé", r["raison"])
-        self.assertIn("Ollama, déjà installé", r["raison"])
-
-    def test_le_premier_lancement_de_la_page_reconnait_colibri_installe(self):
-        import lutin.server as srv
-        mo = engines.ENGINES["colibri"]          # an engine of its own since ADR 0020
-        ancien = dict(engines.CONTEXT)
-        engines.CONTEXT["donnees"] = lambda: _TEMP / "donnees-pl"
-        try:
-            with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: ""):
-                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.settings(), moteur="colibri"), None)
-            self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": True})
-            self.assertIn("aucun modèle", pl["raison"])
-            with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: str(_TEMP)):
-                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.settings(), moteur="colibri"), None)
-            self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": False})
-            self.assertNotIn("Ollama", pl["raison"])
-        finally:
-            engines.CONTEXT.clear()
-            engines.CONTEXT.update(ancien)
-
-    def test_comportement_inchange_pour_ollama_absent(self):
-        r = diagnostic.first_launch("Ollama", False, "Pas installé.", None, None, [], "ollama")
-        self.assertIn("Aucun moteur n'est prêt", r["raison"])
 
 
 class ProcessusMoteurs(unittest.TestCase):

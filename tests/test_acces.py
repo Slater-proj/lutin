@@ -1,12 +1,8 @@
 """La page Accès : niveau de sécurité (qui peut le changer, ce qui est refusé), code PIN et QR, redémarrage, restauration d'une sauvegarde, dossiers de travail — côté serveur et dans un vrai navigateur."""
-import html
 import http.client
 import io
 import json
 import os
-import re
-import subprocess
-import sys
 import tempfile
 import threading
 import unittest
@@ -75,76 +71,78 @@ class Base(unittest.TestCase):
 
 class NiveauDAcces(Base):
     def test_etat(self):
-        statut, e = requete("GET", "/api/acces")
+        statut, e = requete("GET", "/api/v1/access")
         self.assertEqual(statut, 200)
-        self.assertEqual((e["niveau"], e["modifiable"], e["docker"], e["redemarrage_necessaire"]), ("local", True, False, False))
-        self.assertEqual(sorted(e["niveaux"]), ["local", "proxy", "reseau"])
-        self.assertIn("PIN", e["avertissements"]["reseau"])
-        self.assertTrue(e["adresse"].startswith("http://") and e["adresse"].endswith(":8777/"))
+        self.assertEqual((e["level"], e["can_change"], e["docker"], e["restart_needed"]), ("local", True, False, False))
+        self.assertEqual(sorted(x["id"] for x in e["levels"]), ["local", "network", "proxy"])
+        self.assertIn("PIN", e["warnings"]["network"])
+        self.assertTrue(e["address"].startswith("http://") and e["address"].endswith(":8777/"))
 
     def test_changer_le_niveau_enregistre_et_demande_un_redemarrage(self):
-        statut, r = requete("POST", "/api/acces", corps={"niveau": "reseau"})
-        self.assertEqual((statut, "comprends" in r.get("erreur", "") or "compris" in r.get("erreur", "")), (400, True), "ouvrir l'accès demande de confirmer")
-        statut, r = requete("POST", "/api/acces", corps={"niveau": "reseau", "comprend": True})
-        self.assertEqual((statut, r), (200, {"redemarrage_necessaire": True}))
+        statut, r = requete("PATCH", "/api/v1/access", corps={"level": "network"})
+        message = r.get("error", {}).get("message", "")
+        self.assertEqual((statut, "comprends" in message or "compris" in message), (400, True), "ouvrir l'accès demande de confirmer")
+        statut, r = requete("PATCH", "/api/v1/access", corps={"level": "network", "understood": True})
+        self.assertEqual((statut, r["restart_needed"], r["saved"]["level"]), (200, True, "network"))
         self.assertEqual(json.loads(CONFIG.read_text(encoding="utf-8"))["securite"]["niveau"], "reseau")
         self.assertEqual(A.SECURITY.niveau, "local", "rien ne change avant le redémarrage")
-        self.assertTrue(requete("GET", "/api/acces")[1]["redemarrage_necessaire"])
-        self.assertTrue(requete("GET", "/api/etat")[1]["redemarrage"]["necessaire"])
-        statut, r = requete("POST", "/api/acces", corps={"niveau": "local"})
-        self.assertEqual((statut, r["redemarrage_necessaire"]), (200, False), "revenir au niveau actuel annule l'attente")
-        self.assertFalse(requete("GET", "/api/etat")[1]["redemarrage"]["necessaire"])
+        self.assertTrue(requete("GET", "/api/v1/access")[1]["restart_needed"])
+        self.assertTrue(requete("GET", "/api/v1/status")[1]["restart"]["needed"])
+        statut, r = requete("PATCH", "/api/v1/access", corps={"level": "local"})
+        self.assertEqual((statut, r["restart_needed"]), (200, False), "revenir au niveau actuel annule l'attente")
+        self.assertFalse(requete("GET", "/api/v1/status")[1]["restart"]["needed"])
 
     def test_le_niveau_proxy_demande_l_adresse_et_le_proxy(self):
-        statut, r = requete("POST", "/api/acces", corps={"niveau": "proxy", "comprend": True})
+        statut, r = requete("PATCH", "/api/v1/access", corps={"level": "proxy", "understood": True})
         self.assertEqual(statut, 400)
-        self.assertIn("Sécurité", r["erreur"])
-        statut, r = requete("POST", "/api/acces", corps={"niveau": "proxy", "comprend": True, "url_publique": "https://lutin.exemple.fr", "proxy_ips": ["127.0.0.1"]})
+        self.assertIn("Sécurité", r["error"]["message"])
+        statut, r = requete("PATCH", "/api/v1/access", corps={"level": "proxy", "understood": True, "public_url": "https://lutin.exemple.fr", "proxy_ips": ["127.0.0.1"]})
         self.assertEqual(statut, 200)
         enregistre = json.loads(CONFIG.read_text(encoding="utf-8"))["securite"]
         self.assertEqual((enregistre["url_publique"], enregistre["proxy_ips"]), ("https://lutin.exemple.fr", ["127.0.0.1"]))
-        self.assertEqual(requete("POST", "/api/acces", corps={"niveau": "klingon"})[0], 400)
+        self.assertEqual(requete("PATCH", "/api/v1/access", corps={"level": "klingon"})[0], 400)
 
     def test_dans_docker_le_niveau_vient_de_la_variable(self):
         with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"}):
-            e = requete("GET", "/api/acces")[1]
-            self.assertEqual((e["docker"], e["modifiable"]), (True, False))
-            statut, r = requete("POST", "/api/acces", corps={"niveau": "reseau", "comprend": True})
-            self.assertEqual(statut, 400)
-            self.assertIn("LUTIN_NIVEAU", r["erreur"])
+            e = requete("GET", "/api/v1/access")[1]
+            self.assertEqual((e["docker"], e["can_change"]), (True, False))
+            statut, r = requete("PATCH", "/api/v1/access", corps={"level": "network", "understood": True})
+            self.assertEqual(statut, 409)
+            self.assertIn("LUTIN_NIVEAU", r["error"]["message"])
 
     def test_qui_peut_changer_le_niveau(self):
         A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
         sur_la_machine = dict(self.session())
-        self.assertTrue(requete("GET", "/api/acces", sur_la_machine)[1]["modifiable"], "le navigateur de cette machine, au niveau réseau")
+        self.assertTrue(requete("GET", "/api/v1/access", sur_la_machine)[1]["can_change"], "le navigateur de cette machine, au niveau réseau")
         for intrus in ({"X-Forwarded-For": "192.168.1.50"}, {"Forwarded": "for=192.168.1.50"}, {"Via": "1.1 proxy"}, {"Host": "lutin.maison:8777"}, {"X-Real-IP": "10.0.0.2"}):
-            statut, e = requete("GET", "/api/acces", dict(sur_la_machine, **intrus))
+            statut, e = requete("GET", "/api/v1/access", dict(sur_la_machine, **intrus))
             if statut == 200:
-                self.assertFalse(e["modifiable"], intrus)
-                self.assertEqual(requete("POST", "/api/acces", dict(sur_la_machine, **intrus), {"niveau": "local"})[0], 403, intrus)
+                self.assertFalse(e["can_change"], intrus)
+                self.assertEqual(requete("PATCH", "/api/v1/access", dict(sur_la_machine, **intrus), {"level": "local"})[0], 403, intrus)
         A.SECURITY = S.Security(niveau=S.PROXY, port=8777, url_publique="https://lutin.exemple.fr", proxy_ips=["127.0.0.1"])
-        statut, e = requete("GET", "/api/acces", {"Remote-User": "moi", "Host": "lutin.exemple.fr"})
+        statut, e = requete("GET", "/api/v1/access", {"Remote-User": "moi", "Host": "lutin.exemple.fr"})
         if statut == 200:
-            self.assertFalse(e["modifiable"], "derrière un proxy installé sur la machine : jamais, le proxy ne prouve rien")
+            self.assertFalse(e["can_change"], "derrière un proxy installé sur la machine : jamais, le proxy ne prouve rien")
 
 
 class AppairageEtAppareils(Base):
     def test_pin_et_appareils(self):
         A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
         session = self.session()
-        statut, r = requete("POST", "/api/nouveau-pin", session, {})
-        self.assertEqual((statut, len(r["pin"]), r["valable_s"]), (200, 6, 600))
-        e = requete("GET", "/api/acces", session)[1]
-        self.assertEqual([a["nom"] for a in e["appareils"]], ["Téléphone"])
-        ident = e["appareils"][0]["id"]
-        self.assertEqual(requete("POST", "/api/appareils-revoquer", session, {"id": ident}), (200, {"revoques": 1}))
-        self.assertEqual(requete("GET", "/api/skills", session)[0], 401, "l'appareil déconnecté ne passe plus")
+        statut, r = requete("POST", "/api/v1/devices/pairing-code", session, {})
+        self.assertEqual((statut, len(r["code"]), r["valid_seconds"]), (201, 6, 600))
+        e = requete("GET", "/api/v1/devices", session)[1]
+        self.assertEqual([a["name"] for a in e["devices"]], ["Téléphone"])
+        ident = e["devices"][0]["id"]
+        self.assertEqual(requete("DELETE", "/api/v1/devices/" + ident, session)[1]["devices"], [])
+        self.assertEqual(requete("GET", "/api/v1/skills", session)[0], 401, "l'appareil déconnecté ne passe plus")
 
     def test_qr(self):
-        statut, r = requete("GET", "/api/qr?d=" + "http%3A%2F%2F192.168.1.50%3A8777%2F%23pin%3D123456")
-        self.assertEqual((statut, r["taille"], len(r["lignes"])), (200, 29, 29))
-        self.assertTrue(all(set(ligne) <= {"0", "1"} and len(ligne) == 29 for ligne in r["lignes"]))
-        self.assertEqual(requete("GET", "/api/qr?d=" + "x" * 300)[0], 400)
+        A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
+        statut, r = requete("POST", "/api/v1/devices/pairing-code", {"X-Token": A.CONSOLE_TOKEN}, {})          # at the level « network » even this browser pairs: the console asks
+        qr = r["qr"]
+        self.assertEqual((statut, len(qr["rows"])), (201, qr["size"]))
+        self.assertTrue(all(set(ligne) <= {"0", "1"} and len(ligne) == qr["size"] for ligne in qr["rows"]), "the address another device opens, drawn as a QR code")
 
     def test_la_page_de_connexion_lit_le_pin_du_qr_code(self):
         A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
@@ -160,12 +158,11 @@ class CommandesDuProjet(Base):
         c.mkdir(parents=True, exist_ok=True)
         (c / "bonjour.md").write_text("---\ndescription: Salue\n---\nDis bonjour à $ARGUMENTS", encoding="utf-8")
         try:
-            statut, r = requete("GET", "/api/commande-claude?nom=bonjour&args=le+monde")
-            self.assertEqual((statut, r), (200, {"texte": "Dis bonjour à le monde"}))
-            self.assertEqual(requete("GET", "/api/commande-claude?nom=absente")[0], 400)
-            self.assertEqual(requete("GET", "/api/commande-claude?nom=..%2F..%2Fx")[0], 400)
-            detecte = requete("GET", "/api/projet-claude")[1]["detecte"]
-            self.assertEqual([x["nom"] for x in detecte["commandes"]], ["bonjour"])
+            statut, r = requete("GET", "/api/v1/project-commands/bonjour?args=le+monde")
+            self.assertEqual((statut, r), (200, {"text": "Dis bonjour à le monde"}))
+            self.assertEqual(requete("GET", "/api/v1/project-commands/absente")[0], 404)
+            self.assertEqual(requete("GET", "/api/v1/project-commands/..%2F..%2Fx")[0], 404)
+            self.assertEqual([x["name"] for x in requete("GET", "/api/v1/project-commands")[1]["commands"]], ["bonjour"])
         finally:
             (c / "bonjour.md").unlink()
 
@@ -179,16 +176,16 @@ class Documents(Base):
         ecrire_zip(docs / "guide.docx", {"word/document.xml": "<w:document><w:p><w:r><w:t>La sauvegarde du NAS se lance chaque nuit à trois heures.</w:t></w:r></w:p></w:document>"})
         (docs / "casse.docx").write_bytes(b"pas un zip")
         try:
-            etat = requete("GET", "/api/documents")[1]
-            self.assertEqual(sorted(f["nom"] for f in etat["fichiers"]), ["docs/casse.docx", "docs/guide.docx", "docs/panne.pdf"])
-            self.assertEqual([e["nom"] for e in etat["erreurs"]], ["docs/casse.docx"], "un document illisible est signalé, il ne casse rien")
-            statut, r = requete("GET", "/api/documents-chercher?q=" + "sauvegarde+nuit")
+            etat = requete("GET", "/api/v1/documents")[1]
+            self.assertEqual(sorted(f["name"] for f in etat["files"]), ["docs/casse.docx", "docs/guide.docx", "docs/panne.pdf"])
+            self.assertEqual([e["nom"] for e in etat["errors"]], ["docs/casse.docx"], "un document illisible est signalé, il ne casse rien")
+            statut, r = requete("GET", "/api/v1/documents/search?q=" + "sauvegarde+nuit")
             self.assertEqual(statut, 200)
             self.assertEqual(r["passages"][0]["source"], "docs/guide.docx")
-            statut, r = requete("GET", "/api/documents-chercher?q=" + "proc%C3%A9dure+d%C3%A9ploiement")
-            self.assertEqual((r["passages"][0]["source"], r["passages"][0]["titre"]), ("docs/panne.pdf", "Page 1"), "la citation donne la page")
-            self.assertEqual(requete("GET", "/api/documents-chercher?q=")[0], 400)
-            self.assertEqual(requete("GET", "/api/documents-chercher?q=le+la")[0], 400)
+            statut, r = requete("GET", "/api/v1/documents/search?q=" + "proc%C3%A9dure+d%C3%A9ploiement")
+            self.assertEqual((r["passages"][0]["source"], r["passages"][0]["title"]), ("docs/panne.pdf", "Page 1"), "la citation donne la page")
+            self.assertEqual(requete("GET", "/api/v1/documents/search?q=")[0], 400)
+            self.assertEqual(requete("GET", "/api/v1/documents/search?q=le+la")[0], 400)
             lu = A.read_tool("docs/panne.pdf")
             self.assertIn("Deuxième ligne : procédure", lu)
             self.assertIn("## Page 1", lu)
@@ -199,36 +196,6 @@ class Documents(Base):
         finally:
             for n in ("panne.pdf", "guide.docx", "casse.docx"):
                 (docs / n).unlink(missing_ok=True)
-
-
-class ConseilPc(Base):
-    def test_sans_mesure_puis_avec_mesure(self):
-        from lutin import bench
-        # le matériel et Ollama sont simulés : le test ne dépend pas de la machine (ni de son délai)
-        from lutin import hardware
-        profil = hardware.Profile(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
-        ollama = {"actif": True, "installes": {}, "tailles": {}}
-        with mock.patch("lutin.hardware.detect", return_value=profil), mock.patch.object(A, "ollama_state", return_value=ollama), mock.patch.object(A, "model_ps", return_value=None):
-            self._conseil_avec_mesure(bench)
-
-    def _conseil_avec_mesure(self, bench):
-        chemin = A.bench_path()
-        existait = chemin.exists()
-        avant = chemin.read_bytes() if existait else None
-        modele = A.settings()["modele"]
-        try:
-            chemin.unlink(missing_ok=True)
-            self.assertEqual(requete("GET", "/api/conseil"), (200, {"mesure": None, "conseil": []}))
-            bench.save(chemin, {"modele": modele, "date": "2026-10-26T10:00:00", "resultats": {"vitesse": {"tok_s": 4.0, "chargement_s": 3.0}}, "notes": [], "complet": False})
-            statut, r = requete("GET", "/api/conseil")
-            self.assertEqual(statut, 200)
-            self.assertEqual(r["mesure"]["tok_s"], 4.0)
-            self.assertTrue(r["conseil"], "une vitesse très basse donne au moins un conseil")
-        finally:
-            if existait:
-                chemin.write_bytes(avant)
-            else:
-                chemin.unlink(missing_ok=True)
 
 
 class VerifierLutin(Base):
@@ -250,18 +217,18 @@ class VerifierLutin(Base):
     def test_version_plus_recente_annoncee(self):
         from lutin import updates
         with mock.patch.object(updates, "latest_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
-            statut, r = requete("POST", "/api/verifier-lutin", corps={})
+            statut, r = requete("POST", "/api/v1/lutin/check", corps={})
         self.assertEqual(statut, 200)
-        self.assertEqual(r["derniere"], "99.0.0")
-        self.assertEqual(r["nouvelle"]["version"], "99.0.0")
+        self.assertEqual(r["latest"], "99.0.0")
+        self.assertEqual(r["new_version"]["version"], "99.0.0")
 
     def test_hors_ligne_le_dit(self):
         from lutin import updates
         with mock.patch.object(updates, "latest_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
-            statut, r = requete("POST", "/api/verifier-lutin", corps={})
+            statut, r = requete("POST", "/api/v1/lutin/check", corps={})
         self.assertEqual(statut, 503)
-        self.assertIn("GitHub", r["erreur"])
-        self.assertIn("timed out", r["erreur"], "la vraie cause est montrée, pas un message vague")
+        self.assertIn("GitHub", r["error"]["message"])
+        self.assertIn("timed out", r["error"]["message"], "la vraie cause est montrée, pas un message vague")
 
 
 class Planification(Base):
@@ -276,41 +243,41 @@ class Planification(Base):
         super().tearDown()
 
     def test_ajout_validation_et_suppression(self):
-        for corps in ({"nom": "", "prompt": "x", "heure": "08:00", "jours": [0]}, {"nom": "a", "prompt": "x", "heure": "8h", "jours": [0]},
-                      {"nom": "a", "prompt": "x", "heure": "08:00", "jours": []}, {"nom": "a", "prompt": "x", "heure": "08:00", "jours": [9]}):
-            self.assertEqual(requete("POST", "/api/planifie-ajouter", corps=corps)[0], 400, corps)
-        statut, t = requete("POST", "/api/planifie-ajouter", corps={"nom": "Matin", "prompt": "résume le dépôt", "heure": "08:30", "jours": [0, 1, 2]})
-        self.assertEqual(statut, 200)
-        etat = requete("GET", "/api/planifie")[1]["taches"]
-        self.assertEqual([x["nom"] for x in etat], ["Matin"])
-        self.assertTrue(etat[0]["prochaine"])
-        self.assertEqual(requete("POST", "/api/planifie-activer", corps={"id": t["id"], "actif": False})[1]["actif"], False)
-        self.assertEqual(requete("GET", "/api/planifie")[1]["taches"][0]["prochaine"], "", "en pause : pas de prochaine exécution")
-        self.assertEqual(requete("POST", "/api/planifie-supprimer", corps={"id": t["id"]})[0], 200)
-        self.assertEqual(requete("POST", "/api/planifie-supprimer", corps={"id": t["id"]})[0], 400)
+        for corps in ({"name": "", "request": "x", "time": "08:00", "days": [0]}, {"name": "a", "request": "x", "time": "8h", "days": [0]},
+                      {"name": "a", "request": "x", "time": "08:00", "days": []}, {"name": "a", "request": "x", "time": "08:00", "days": [9]}):
+            self.assertEqual(requete("POST", "/api/v1/scheduled-tasks", corps=corps)[0], 400, corps)
+        statut, t = requete("POST", "/api/v1/scheduled-tasks", corps={"name": "Matin", "request": "résume le dépôt", "time": "08:30", "days": [0, 1, 2]})
+        self.assertEqual(statut, 201)
+        etat = requete("GET", "/api/v1/scheduled-tasks")[1]["tasks"]
+        self.assertEqual([x["name"] for x in etat], ["Matin"])
+        self.assertTrue(etat[0]["next_run"])
+        self.assertFalse(requete("PATCH", "/api/v1/scheduled-tasks/" + t["id"], corps={"active": False})[1]["active"])
+        self.assertEqual(requete("GET", "/api/v1/scheduled-tasks")[1]["tasks"][0]["next_run"], "", "en pause : pas de prochaine exécution")
+        self.assertEqual(requete("DELETE", "/api/v1/scheduled-tasks/" + t["id"])[0], 200)
+        self.assertEqual(requete("DELETE", "/api/v1/scheduled-tasks/" + t["id"])[0], 404)
 
     def test_canaux_de_notification_par_l_api_sans_jamais_renvoyer_un_secret(self):
         from lutin import notifications
         notifications.path_of().unlink(missing_ok=True)
-        statut, r = requete("POST", "/api/notifications-ajouter", corps={"nom": "Tel", "type": "gotify", "params": {"url": "http://h:8080", "jeton": "SECRET1"}})
-        self.assertEqual(statut, 200)
-        liste = requete("GET", "/api/notifications")[1]
+        statut, r = requete("POST", "/api/v1/notification-channels", corps={"name": "Tel", "type": "gotify", "params": {"url": "http://h:8080", "jeton": "SECRET1"}})
+        self.assertEqual(statut, 201)
+        liste = requete("GET", "/api/v1/notification-channels")[1]
         self.assertNotIn("SECRET1", json.dumps(liste))
-        self.assertEqual([c["nom"] for c in liste["canaux"]], ["Tel"])
-        self.assertEqual(requete("POST", "/api/notifications-ajouter", corps={"nom": "x", "type": "inconnu", "params": {}})[0], 400)
-        t = self.p.add("Matin", "x", "08:00", [0], notifier=liste["canaux"][0]["id"])
-        self.assertEqual(requete("POST", "/api/planifie-notifier", corps={"id": t["id"], "canal": ""})[1]["notifier"], "")
-        self.assertEqual(requete("POST", "/api/planifie-notifier", corps={"id": t["id"], "canal": "zzzz"})[0], 400)
-        self.assertEqual(requete("POST", "/api/notifications-supprimer", corps={"id": liste["canaux"][0]["id"]})[0], 200)
+        self.assertEqual([c["name"] for c in liste["channels"]], ["Tel"])
+        self.assertEqual(requete("POST", "/api/v1/notification-channels", corps={"name": "x", "type": "inconnu", "params": {}})[0], 400)
+        t = self.p.add("Matin", "x", "08:00", [0], notifier=liste["channels"][0]["id"])
+        self.assertEqual(requete("PATCH", "/api/v1/scheduled-tasks/" + t["id"], corps={"notify": ""})[1]["notify"], "")
+        self.assertEqual(requete("PATCH", "/api/v1/scheduled-tasks/" + t["id"], corps={"notify": "zzzz"})[0], 400)
+        self.assertEqual(requete("DELETE", "/api/v1/notification-channels/" + liste["channels"][0]["id"])[0], 200)
 
     def test_les_notifications_se_reglent_depuis_cette_machine_seulement(self):
         A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
-        statut, _ = requete("POST", "/api/notifications-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "type": "ntfy", "params": {"sujet": "x"}})
+        statut, _ = requete("POST", "/api/v1/notification-channels", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"name": "a", "type": "ntfy", "params": {"sujet": "x"}})
         self.assertEqual(statut, 403)
 
     def test_gestion_reservee_a_cette_machine(self):
         A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
-        statut, r = requete("POST", "/api/planifie-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "prompt": "x", "heure": "08:00", "jours": [0]})
+        statut, r = requete("POST", "/api/v1/scheduled-tasks", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"name": "a", "request": "x", "time": "08:00", "days": [0]})
         self.assertEqual(statut, 403, "un appareil appairé, ou un relais, ne planifie pas")
         self.assertEqual(self.p.read(), [])
 
@@ -438,22 +405,22 @@ class Planification(Base):
 
 class Redemarrage(Base):
     def test_refuse_sans_superviseur_ni_conteneur(self):
-        statut, r = requete("POST", "/api/redemarrer", corps={})
-        self.assertEqual(statut, 400)
-        self.assertIn("lutin", r["erreur"])
+        statut, r = requete("POST", "/api/v1/lutin/restart", corps={})
+        self.assertEqual(statut, 409)
+        self.assertIn("lutin", r["error"]["message"])
 
     def test_avec_superviseur(self):
         os.environ["LUTIN_SUPERVISE"] = "1"
         with mock.patch.object(access.threading, "Timer") as timer:
-            self.assertEqual(requete("POST", "/api/redemarrer", corps={}), (200, {"ok": True}))
+            self.assertEqual(requete("POST", "/api/v1/lutin/restart", corps={}), (200, {"restarting": True}))
             args = timer.call_args[0]
             self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [access.RESTART_CODE]))
             timer.return_value.start.assert_called_once()
             A.ACTIVE_TURNS["abcd1234"] = object()
             try:
-                statut, r = requete("POST", "/api/redemarrer", corps={})
-                self.assertEqual(statut, 400)
-                self.assertIn("réponse est en cours", r["erreur"])
+                statut, r = requete("POST", "/api/v1/lutin/restart", corps={})
+                self.assertEqual(statut, 409)
+                self.assertIn("réponse est en cours", r["error"]["message"])
             finally:
                 A.ACTIVE_TURNS.pop("abcd1234", None)
 
@@ -476,11 +443,11 @@ class Restauration(Base):
         (A.MEMORY / "NOTE.md").write_text("avant", encoding="utf-8")
         brut = self.archive()
         (A.MEMORY / "NOTE.md").write_text("après", encoding="utf-8")
-        statut, r = requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=brut)
+        statut, r = requete("POST", "/api/v1/backup/restore", {"Content-Type": "application/zip"}, brut=brut)
         self.assertEqual(statut, 200, r)
-        self.assertTrue(r["redemarrage_necessaire"])
+        self.assertTrue(r["restart_needed"])
         self.assertEqual((A.MEMORY / "NOTE.md").read_text(encoding="utf-8"), "avant")
-        self.assertTrue(Path(r["secours"]).is_file(), "l'état d'avant est gardé")
+        self.assertTrue(Path(r["kept_before"]).is_file(), "l'état d'avant est gardé")
         (A.MEMORY / "NOTE.md").unlink()
 
     def test_archives_refusees(self):
@@ -488,55 +455,24 @@ class Restauration(Base):
         with zipfile.ZipFile(mauvaise, "w") as z:
             z.writestr("manifeste.json", "{}")
             z.writestr("../evil.txt", "x")
-        statut, r = requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=mauvaise.getvalue())
+        statut, r = requete("POST", "/api/v1/backup/restore", {"Content-Type": "application/zip"}, brut=mauvaise.getvalue())
         self.assertEqual(statut, 400)
-        self.assertEqual(requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=b"pas un zip")[0], 400)
-        self.assertEqual(requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=b"")[0], 400)
+        self.assertEqual(requete("POST", "/api/v1/backup/restore", {"Content-Type": "application/zip"}, brut=b"pas un zip")[0], 400)
+        self.assertEqual(requete("POST", "/api/v1/backup/restore", {"Content-Type": "application/zip"}, brut=b"")[0], 400)
         self.assertFalse((A.MEMORY.parent / "evil.txt").exists())
 
     def test_une_requete_refusee_avec_un_gros_corps_recoit_quand_meme_sa_reponse(self):
         """Un refus répondu sans lire le corps réinitialisait la connexion de l'appelant (il perdait la réponse) : le serveur lit ce qui reste après avoir répondu."""
         for _ in range(15):
-            self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x" * 300_000)[0], 403)
+            self.assertEqual(requete("POST", "/api/v1/backup/restore", {"X-Token": "faux"}, brut=b"x" * 300_000)[0], 403)
 
     def test_restauration_reservee_a_cette_machine_et_authentifiee(self):
-        self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x")[0], 403)
+        self.assertEqual(requete("POST", "/api/v1/backup/restore", {"X-Token": "faux"}, brut=b"x")[0], 403)
         A.SECURITY = S.Security(niveau=S.RESEAU, port=8777)
-        self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": A.TOKEN}, brut=b"x")[0], 401, "pas de session")
+        self.assertEqual(requete("POST", "/api/v1/backup/restore", {"X-Token": A.TOKEN}, brut=b"x")[0], 401, "pas de session")
         session = self.session()
-        statut, r = requete("POST", "/api/restaurer", dict(session, **{"X-Forwarded-For": "192.168.1.50"}), brut=self.archive())
+        statut, r = requete("POST", "/api/v1/backup/restore", dict(session, **{"X-Forwarded-For": "192.168.1.50"}), brut=self.archive())
         self.assertEqual(statut, 403, "un appareil appairé ne restaure pas")
-
-
-class DansUnNavigateur(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        sys.path.insert(0, str(RACINE_TESTS / "tools"))
-        import captures
-        cls.captures = captures
-        try:
-            cls.chrome = captures.navigateur()
-        except SystemExit:
-            raise unittest.SkipTest("aucun navigateur trouvé")
-
-    def charger(self, langue, ancre):
-        with self.captures.serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
-            r = subprocess.run([self.chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--user-data-dir=" + str(tmp / "profil"), "--virtual-time-budget=9000", "--enable-logging=stderr", "--v=0",
-                                "--dump-dom", "http://127.0.0.1:%d/ancienne/%s" % (port, ancre)], capture_output=True, timeout=180, encoding="utf-8", errors="replace")
-        return r.stdout, [l for l in r.stderr.splitlines() if "CONSOLE" in l and ("rror" in l or "Uncaught" in l)]
-
-    def test_page_acces_et_dossiers_de_travail(self):
-        for langue, titre, bouton in (("fr", "Qui peut utiliser Lutin", "Enregistrer le niveau d'accès"), ("en", "Who can use Lutin", "Save the access level")):
-            dom, erreurs = self.charger(langue, "#acces")
-            self.assertEqual(erreurs, [], langue)
-            texte = html.unescape(re.sub(r"<[^>]+>", " ", dom))
-            self.assertIn(titre, texte)
-            self.assertIn(bouton, texte)
-            self.assertEqual(len(re.findall(r'name="niveauAcces"', dom)), 3, "trois niveaux proposés")
-        dom, erreurs = self.charger("en", "#reglages")
-        self.assertEqual(erreurs, [])
-        liste = dom.split('id="listeTravaux"', 1)[1][:3000]
-        self.assertIn("Project", html.unescape(re.sub(r"<[^>]+>", " ", liste)), "la liste des dossiers de travail est remplie")
 
 
 if __name__ == "__main__":

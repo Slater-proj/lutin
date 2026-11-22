@@ -4,7 +4,6 @@ import json
 import os
 import tempfile
 import unittest
-import urllib.parse
 from pathlib import Path
 from unittest import mock
 
@@ -158,11 +157,12 @@ class CatalogueColibri(unittest.TestCase):
 
 class Routes(unittest.TestCase):
     def test_les_trois_serveurs_geres_ont_les_memes_routes(self):
+        """ADR 0020: one family of routes for every engine, its identifier in the path; the three managed servers are among the engines it serves."""
+        from lutin import api_v1, engines
+        famille = {r["path"] for r in api_v1.table() if r["path"].startswith("/api/v1/engines/{id}/models")}
+        self.assertTrue({"/api/v1/engines/{id}/models", "/api/v1/engines/{id}/models/search", "/api/v1/engines/{id}/models/variants"} <= famille)
         for serveur_gere in ("exllamav3", "lmstudio", "colibri"):
-            for route in ("modeles", "catalogue", "quantifications"):
-                self.assertEqual(server.MANAGED_MODEL_ROUTES["/api/{}-{}".format(serveur_gere, route)], (serveur_gere, route))
-        self.assertEqual(len(server.MANAGED_MODEL_ROUTES), 9)
-        self.assertEqual(urllib.parse.urlsplit("/api/lmstudio-catalogue?q=x").path in server.MANAGED_MODEL_ROUTES, True)
+            self.assertIn(serveur_gere, engines.ENGINES)
 
 
 if __name__ == "__main__":

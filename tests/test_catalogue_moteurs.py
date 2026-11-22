@@ -193,9 +193,9 @@ class Lecture(unittest.TestCase):
 
 
 class Page(unittest.TestCase):
-    def test_l_api_donne_les_prereglages(self):
-        from lutin import server
-        liste = server.Handler._prereglages()
+    def test_le_catalogue_donne_les_prereglages(self):
+        """The OpenAI-compatible servers of the signed catalogue, each with its usual address (what a preset is made of)."""
+        liste = [cm.view(m) for m in cm.running()["moteurs"] if m.get("type", "externe") == "externe"]
         self.assertIn("lmstudio", [p["id"] for p in liste])
         self.assertTrue(all(p["adresse"].startswith("http") or p["experimental"] for p in liste), "seuls les expérimentaux peuvent ne pas avoir d'adresse habituelle vérifiée")
 

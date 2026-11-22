@@ -469,42 +469,45 @@ class Api(Base):
         return r.status, json.loads(texte) if texte else {}
 
     def test_lire_enregistrer_tester_sans_jamais_renvoyer_la_cle(self):
-        statut, v = self.appel("GET", "/api/web-recherche")
+        statut, v = self.appel("GET", "/api/v1/web-search")
+        cles = {k["provider"]: k for k in v["keys"]}
         self.assertEqual(statut, 200)
-        self.assertTrue(v["modifiable"] and not v["brave"])
-        self.assertEqual([m["nom"] for m in v["moteurs"]], ["duckduckgo", "bing"])
-        statut, v = self.appel("POST", "/api/web-recherche-config", {"searxng": URL_SX, "brave_cle": "cle-brave-123456"})
+        self.assertTrue(v["can_configure"] and not cles["brave"]["kept"])
+        self.assertEqual([m["id"] for m in v["engines"]], ["duckduckgo", "bing"])
+        statut, v = self.appel("PATCH", "/api/v1/web-search", {"searxng": URL_SX, "keys": {"brave": "cle-brave-123456"}})
         self.assertEqual(statut, 200)
-        self.assertEqual((v["searxng"], v["brave"], v["brave_fin"]), (URL_SX, True, "3456"))
-        statut, v2 = self.appel("GET", "/api/web-recherche")
+        cles = {k["provider"]: k for k in v["keys"]}
+        self.assertEqual((v["searxng"], cles["brave"]["kept"], cles["brave"]["ends_with"]), (URL_SX, True, "3456"))
+        statut, v2 = self.appel("GET", "/api/v1/web-search")
         self.assertNotIn("cle-brave-123456", json.dumps(v) + json.dumps(v2))
-        self.assertNotIn("cle-brave-123456", json.dumps(self.appel("GET", "/api/etat")[1]), "l'état général ne la contient pas non plus")
-        statut, t = self.appel("POST", "/api/web-recherche-test", {})
+        self.assertNotIn("cle-brave-123456", json.dumps(self.appel("GET", "/api/v1/status")[1]) + json.dumps(self.appel("GET", "/api/v1/settings")[1]), "l'état général ne la contient pas non plus")
+        statut, t = self.appel("POST", "/api/v1/web-search/test", {})
         self.assertEqual(statut, 200)
-        self.assertTrue({r["nom"]: r["ok"] for r in t["resultats"]}["searxng"])
+        self.assertTrue({r["id"]: r["ok"] for r in t["results"]}["searxng"])
 
     def test_la_recherche_dans_les_conversations_n_est_pas_masquee(self):
-        """/api/recherche est la recherche dans les conversations (page, barre latérale) ; celle du web a ses propres routes /api/web-recherche… : jamais la même adresse."""
-        statut, v = self.appel("GET", "/api/recherche?q=quelquechose")
+        """La recherche dans les conversations (GET /conversations?q=) et celle du web (/web-search…) : jamais la même adresse."""
+        statut, v = self.appel("GET", "/api/v1/conversations?q=quelquechose")
         self.assertEqual(statut, 200)
-        self.assertIn("resultats", v)
-        self.assertNotIn("moteurs", v)
-        self.assertIn("moteurs", self.appel("GET", "/api/web-recherche")[1])
+        self.assertIn("conversations", v)
+        self.assertNotIn("engines", v)
+        self.assertIn("engines", self.appel("GET", "/api/v1/web-search")[1])
 
     def test_entrees_invalides_refusees(self):
-        self.assertEqual(self.appel("POST", "/api/web-recherche-config", {"searxng": "ftp://x"})[0], 400)
-        self.assertEqual(self.appel("POST", "/api/web-recherche-config", {"brave_cle": "x y"})[0], 400)
+        self.assertEqual(self.appel("PATCH", "/api/v1/web-search", {"searxng": "ftp://x"})[0], 400)
+        self.assertEqual(self.appel("PATCH", "/api/v1/web-search", {"keys": {"brave": "x y"}})[0], 400)
+        self.assertEqual(self.appel("PATCH", "/api/v1/web-search", {"keys": {"inconnu": "x"}})[0], 400)
 
     def test_un_autre_appareil_ne_peut_pas_regler(self):
-        vrai = self.serveur.RequestHandlerClass._configurateur_strict
-        self.serveur.RequestHandlerClass._configurateur_strict = lambda self_: False          # un appareil appairé n'est jamais « cette machine »
+        vrai = self.serveur.RequestHandlerClass._configurateur
+        self.serveur.RequestHandlerClass._configurateur = lambda self_: False          # un appareil appairé ne configure pas Lutin
         try:
-            statut, v = self.appel("POST", "/api/web-recherche-config", {"searxng": URL_SX, "brave_cle": "cle-brave-123456"})
+            statut, v = self.appel("PATCH", "/api/v1/web-search", {"searxng": URL_SX, "keys": {"brave": "cle-brave-123456"}})
             self.assertEqual(statut, 403)
             self.assertEqual((web_search.view()["searxng"], web_search.view()["brave"]), ("", False), "rien n'a été enregistré")
-            self.assertFalse(self.appel("GET", "/api/web-recherche")[1]["modifiable"])
+            self.assertFalse(self.appel("GET", "/api/v1/web-search")[1]["can_configure"])
         finally:
-            self.serveur.RequestHandlerClass._configurateur_strict = vrai
+            self.serveur.RequestHandlerClass._configurateur = vrai
 
 
 if __name__ == "__main__":

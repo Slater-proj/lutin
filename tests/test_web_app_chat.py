@@ -493,8 +493,8 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.pin-button').click()")
         p.attendre("document.querySelector('.pin-button').getAttribute('aria-pressed') === 'true'")
         p.attendre("!!document.querySelector('.list .entry .tag')", 10)          # the pin shows in the list: the button is pressed with the answer of the server, the list is read again after it
-        stored = [c for c in T.lire("/api/etat")["conversations"] if c["titre"] == "Renamed on the page"]
-        self.assertEqual([c.get("epingle") for c in stored], [True], "renamed and pinned on the server, not only on the page")
+        stored = [c for c in T.appel("GET", "/conversations")["conversations"] if c["title"] == "Renamed on the page"]
+        self.assertEqual([c.get("pinned") for c in stored], [True], "renamed and pinned on the server, not only on the page")
         self.assertEqual(p.erreurs, [])
 
     def test_3c_a_message_is_edited_and_the_conversation_goes_on_from_it(self):
@@ -527,7 +527,7 @@ class Chat(unittest.TestCase):
         self.assertIn("commandes", p.evaluer("document.querySelector('.bar .auto').innerText"), "an approval that is on stays visible while the panel is shut")
         conversation = p.evaluer("document.querySelector('.list .entry[aria-current=true]') && 'open'")
         self.assertEqual(conversation, "open")
-        stored = [c for c in T.lire("/api/etat")["conversations"] if c["titre"] == "Renamed on the page"][0]["id"]
+        stored = [c for c in T.appel("GET", "/conversations")["conversations"] if c["title"] == "Renamed on the page"][0]["id"]
         self.eventually(lambda: T.A.options_read(stored).get("auto_commandes") is True, "auto_commandes stored on the server, for this conversation")
         p.evaluer("(() => { const s = document.querySelector('#options-panel select'); s.value = 'mission'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
         p.attendre("document.querySelectorAll('#options-panel select').length === 3")          # the mode, the longest answer, and the hours of a mission
@@ -554,7 +554,7 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
         p.attendre(TEXT + ".includes('Done with the option.')")
         p.attendre("!!document.querySelector('.composer button[type=submit]')")
-        created = [c for c in T.lire("/api/etat")["conversations"] if c["titre"].startswith("Message with an option")][0]["id"]
+        created = [c for c in T.appel("GET", "/conversations")["conversations"] if c["title"].startswith("Message with an option")][0]["id"]
         self.eventually(lambda: T.A.options_read(created).get("auto_ecriture") is True, "the option chosen before the conversation existed was applied to it")
         self.assertEqual(p.evaluer("document.querySelector('.bar .auto').innerText.includes('fichiers')"), True)
         p.evaluer("document.querySelectorAll('.approvals input')[0].click()")
@@ -644,7 +644,7 @@ class Chat(unittest.TestCase):
 
     def test_3g_an_answer_still_being_written_elsewhere_is_waited_for_after_a_reload(self):
         p = self.page
-        conversation = T.lire("/api/etat")["conversations"][0]["id"]
+        conversation = T.appel("GET", "/conversations")["conversations"][0]["id"]
         T.A.ACTIVE_TURNS[conversation] = threading.Event()          # as if another page (or a page before the reload) had sent a message and the answer was not finished
         self.addCleanup(T.A.ACTIVE_TURNS.pop, conversation, None)
         p.aller(T.BASE + "/app/")

@@ -52,67 +52,11 @@ def seen_folder():
     return d if d and (Path(d) / "manifests").is_dir() else ""
 
 
-USUAL_NAMES = ("", "IA", "AI", "ia", "ai", "Models", "models", "Modeles", "LLM", "llm", "Ollama", "ollama")
 SUBFOLDERS = ("", "Ollama", "ollama", "models", "Ollama/models", "ollama/models", "OLLAMA/models", "Models/Ollama", "models/ollama")
-
-
-def roots_to_visit():
-    """Les endroits où un dossier de modèles se range d'habitude : la racine de chaque disque (Windows), ou le dossier personnel et les montages (Linux/macOS). Seulement ceux qui existent."""
-    if os.name == "nt":
-        cibles = [Path(chr(c) + ":/") for c in range(ord("C"), ord("Z") + 1)]
-    else:
-        cibles = [Path.home(), Path("/srv"), Path("/data"), Path("/mnt"), Path("/media")] + [p for base in (Path("/mnt"), Path("/media")) if base.is_dir() for p in base.glob("*")][:20]
-    return [p for p in cibles if p.is_dir()]
-
-
-def find_models_folders(connus=()):
-    """Les dossiers qui contiennent déjà des modèles d'Ollama, pour retrouver ceux qu'on a téléchargés ailleurs : [{chemin, modeles, octets}], le plus fourni d'abord. On ne regarde que les emplacements usuels
-    (racines des disques, « IA », « Models », « Ollama »…), jamais tout le disque : c'est rapide, et un disque réseau lent ne bloque rien."""
-    from . import ollama_shared_models
-    vus, resultat = set(), []
-    candidats = [Path(c) for c in connus if c]
-    for r in roots_to_visit():
-        for base in USUAL_NAMES:
-            for sous in SUBFOLDERS:
-                candidats.append(r / base / sous if base or sous else r)
-    candidats.append(Path.home() / ".ollama" / "models")
-    for c in candidats:
-        try:
-            cle = os.path.normcase(str(c.resolve()))
-            if cle in vus or not (c / "manifests").is_dir():
-                continue
-            vus.add(cle)
-            lus = ollama_shared_models.read_shared(c)
-        except OSError:
-            continue
-        if lus:
-            resultat.append({"chemin": str(c), "modeles": len(lus), "octets": sum(v["taille"] for v in lus.values())})
-    return sorted(resultat, key=lambda x: -x["octets"])
-
-
-def models_elsewhere(installes):
-    """Si Ollama ne voit aucun modèle alors que le dernier dossier connu en contient : (dossier, nombre de modèles) ; None sinon."""
-    if installes:
-        return None
-    d = seen_folder()
-    if d:
-        from . import ollama_shared_models
-        n = len(ollama_shared_models.read_shared(d))
-        if n:
-            return (d, n)
-    if time.time() - _SEARCH["t"] > 300:          # jamais retenu : on cherche dans les emplacements usuels, sans insister, en arrière-plan (un disque réseau lent ne doit pas bloquer la page)
-        _SEARCH["t"] = time.time()
-        actuel = os.path.normcase(str(models_folder()))
-
-        def chercher():
-            _SEARCH["v"] = [x for x in find_models_folders(connus=[os.environ.get("OLLAMA_MODELS", "")]) if os.path.normcase(x["chemin"]) != actuel]
-        threading.Thread(target=chercher, daemon=True, name="recherche-modeles").start()
-    return (_SEARCH["v"][0]["chemin"], _SEARCH["v"][0]["modeles"]) if _SEARCH["v"] else None
 
 
 RE_FROM = re.compile(r"^FROM\s+(.+)$", re.M)
 RE_BLOB = re.compile(r"^(.*)[\\/]blobs[\\/][^\\/]+$")
-_SEARCH = {"t": 0.0, "v": []}
 _REAL = {"t": 0.0, "v": "", "nom": ""}
 
 
@@ -362,5 +306,3 @@ def copy_models(cible):
     return dict(COPY)
 
 
-def copy_state():
-    return dict(COPY)

@@ -114,16 +114,6 @@ def modify(ident, **champs):
     raise ValueError(_t("Cette tâche planifiée n'existe plus."))
 
 
-def set_notification(ident, canal):
-    """Associe (ou retire, canal vide) le canal de notification d'une tâche."""
-    canal = str(canal or "")
-    if canal:
-        from . import notifications
-        if notifications.find(canal) is None:
-            raise ValueError(_t("Ce canal de notification n'existe plus."))
-    return modify(ident, notifier=canal, derniere_notif="")
-
-
 def remove(ident, conversation=False):
     """Supprime la tâche pour de bon (elle ne se relancera plus). Si elle travaille en ce moment, elle est arrêtée. `conversation` : efface aussi sa conversation « ⏰ … » (par défaut elle est gardée)."""
     with LOCK:

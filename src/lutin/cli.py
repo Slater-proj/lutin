@@ -460,11 +460,11 @@ def command_pin(args):
     if not c:
         return 1
     try:
-        r = c.envoyer("/api/nouveau-pin", {})
+        r = c.envoyer("/devices/pairing-code", {})
     except client.ClientError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
-    print(_t("Code PIN : {}   (valable {} minutes, un seul appareil)").format(r["pin"], r["valable_s"] // 60))
+    print(_t("Code PIN : {}   (valable {} minutes, un seul appareil)").format(r["code"], r["valid_seconds"] // 60))
     return 0
 
 
@@ -474,17 +474,18 @@ def command_devices(args):
         return 1
     try:
         if args.action == "revoquer":
-            r = c.envoyer("/api/appareils-revoquer", {"id": args.id})
-            print(_t("{} appareil(s) déconnecté(s).").format(r["revoques"]))
+            before = len(c.obtenir("/devices")["devices"])
+            after = c.supprimer("/devices/" + args.id if args.id else "/devices")
+            print(_t("{} appareil(s) déconnecté(s).").format(before - len(after["devices"])))
             return 0
-        r = c.envoyer("/api/appareils", {})
+        r = c.obtenir("/devices")
     except client.ClientError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
-    if not r["appareils"]:
-        print(_t("Aucun appareil connecté (niveau : {}).").format(r["niveau"]))
-    for a in r["appareils"]:
-        print("{}  {}".format(a["id"], a["nom"]))
+    if not r["devices"]:
+        print(_t("Aucun appareil connecté (niveau : {}).").format(r["level"]))
+    for a in r["devices"]:
+        print("{}  {}".format(a["id"], a["name"]))
     return 0
 
 

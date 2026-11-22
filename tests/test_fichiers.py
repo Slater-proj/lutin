@@ -139,18 +139,11 @@ class Fichiers(unittest.TestCase):
                 dossier = (images if nom == "image" else attachments).folder()
                 self.assertEqual([f.name for f in dossier.iterdir() if f.name.endswith(".tmp")], [], "pas de fichier temporaire laissé")
 
-    def test_une_piece_jointe_se_retelecharge_sous_son_vrai_nom_et_s_ouvre_par_une_copie(self):
+    def test_une_piece_jointe_se_retelecharge_sous_son_vrai_nom(self):
         from lutin import attachments
         ident, nom, _ = attachments.save("# Notes\nbonjour".encode("utf-8"), "mes notes.md")
         octets, mime, vrai_nom = produced_files.part_read(ident, "mes notes.md")
         self.assertEqual((octets, vrai_nom), ("# Notes\nbonjour".encode("utf-8"), "mes notes.md"))
-        with mock.patch.object(produced_files.sys, "platform", "linux"), mock.patch.object(produced_files.subprocess, "Popen", lambda cmd: self.ouvertures.append(cmd)):
-            produced_files.part_open(ident, "mes notes.md")
-            with self.assertRaises(ValueError):
-                produced_files.part_open(ident, "script.bat")
-        copie = Path(self.ouvertures[0][1])
-        self.assertEqual(copie.name, "mes notes.md", "la copie porte le vrai nom")
-        self.assertEqual(copie.read_text(encoding="utf-8"), "# Notes\nbonjour")
         with self.assertRaises(ValueError):
             produced_files.part_read("../../etc/passwd", "x")
 

@@ -247,11 +247,11 @@ class Api(Base):
         self.assertEqual(self.appel("POST", "/api/noeud/partage", {"genre": "inconnu"}, entetes)[0], 400)
 
     def test_le_droit_ne_se_donne_que_depuis_cette_machine(self):
-        statut, r = self.appel("POST", "/api/machines-droit", {"droit": "memoire", "actif": True})
+        statut, r = self.appel("PATCH", "/api/v1/node/permissions", {"shares": {"memory": True}})
         self.assertEqual(statut, 200)
         self.assertTrue(machines.node_rights()["memoire"])
-        self.assertEqual(self.appel("POST", "/api/machines-droit", {"droit": "nimporte", "actif": True})[0], 400)
-        self.assertTrue(self.appel("GET", "/api/machines")[1]["noeud"]["droits"]["memoire"])
+        self.assertEqual(self.appel("PATCH", "/api/v1/node/permissions", {"shares": {"nimporte": True}})[0], 400)
+        self.assertTrue(self.appel("GET", "/api/v1/node")[1]["shares"]["memory"])
 
 
 if __name__ == "__main__":

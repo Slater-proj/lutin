@@ -132,22 +132,20 @@ class Served(unittest.TestCase):
             self.assertIsNone(web_app.diagram_page())
             self.assertEqual(get("/app/diagram.html", V.OWNER)[0], 404)
 
-    def test_the_new_interface_is_the_default_and_the_old_page_stays_reachable(self):
-        """1.0 (PARITY.md, decided on 2026-11-17): « / » is the new interface; the old page is at /ancienne/ during 1.x; /app/ keeps working; without a
-        session every one of them is the sign-in page."""
+    def test_the_new_interface_is_the_only_page(self):
+        """1.0: « / » is the interface; /app/ keeps working; the old page and its addresses are gone (ADR 0022); without a session « / » is the sign-in page."""
         status, headers, body = get("/", V.OWNER)
         self.assertEqual((status, headers["Content-Security-Policy"]), (200, web_app.CSP))
         self.assertEqual(body, get("/app/", V.OWNER)[2])
-        status, headers, old = get("/ancienne/", V.OWNER)
-        self.assertEqual(status, 200)
-        self.assertIn("securityLevel: 'strict'", old, "the old page itself")
-        self.assertIn('src="/lib/highlight.min.js"', old, "its libraries by an absolute path: they load from /ancienne/ too")
-        self.assertEqual(get("/ancienne", V.OWNER)[1].get("Location"), "/ancienne/")
+        for gone in ("/ancienne/", "/ancienne", "/lib/highlight.min.js", "/api/etat", "/h/x/api/etat", "/ouvrir/a.txt"):
+            self.assertEqual(get(gone, V.OWNER)[0], 404, gone)
         sign_in = get("/", V.ELSEWHERE)[2]
-        self.assertEqual(get("/ancienne/", V.ELSEWHERE)[2], sign_in)
+        self.assertIn("lutin pin", sign_in)
         self.assertNotIn(A.TOKEN, sign_in)
         (self.root / "index.html").unlink()
-        self.assertIn("securityLevel: 'strict'", get("/", V.OWNER)[2], "a copy without a build keeps the old page at « / »")
+        status, _, body = get("/", V.OWNER)
+        self.assertEqual(status, 404)
+        self.assertIn("npm run build", body, "a copy without a build says how to make one")
 
     def test_a_copy_without_a_build_says_so(self):
         (self.root / "index.html").unlink()

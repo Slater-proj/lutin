@@ -224,34 +224,6 @@ class Emplacements(unittest.TestCase):
         self.assertTrue(r["reseau"])
         self.assertTrue(any("réseau" in w for w in r["avertissements"]), "un dossier réseau est signalé")
 
-    def test_copie_des_modeles_existants(self):
-        import time
-        source, cible = _TEMP / "ollama-source", _TEMP / "ollama-cible"
-        (source / "blobs").mkdir(parents=True, exist_ok=True)
-        (source / "manifests" / "registry.ollama.ai" / "library" / "x").mkdir(parents=True, exist_ok=True)
-        (source / "blobs" / "sha256-aaa").write_bytes(b"A" * 3_000_000)
-        (source / "blobs" / "sha256-bbb").write_bytes(b"B" * 1_000_000)
-        (source / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").write_text("{}", encoding="utf-8")
-        os.environ["OLLAMA_MODELS"] = str(source)
-        with self.assertRaises(ValueError):
-            locations.copy_models(source)                                  # même dossier
-        with self.assertRaises(ValueError):
-            locations.copy_models(source / "dedans")                       # dans l'ancien
-        locations.copy_models(cible)
-        fin = time.time() + 20
-        while time.time() < fin and locations.copy_state()["etat"] == "en cours":
-            time.sleep(0.05)
-        self.assertEqual(locations.copy_state()["etat"], "fini", locations.copy_state())
-        self.assertEqual((cible / "blobs" / "sha256-aaa").stat().st_size, 3_000_000)
-        self.assertTrue((cible / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").is_file())
-        self.assertTrue((source / "blobs" / "sha256-aaa").is_file(), "l'ancien dossier n'est jamais supprimé")
-        self.assertEqual(list(cible.rglob("*.lutin-tmp")), [], "pas de fichier temporaire laissé")
-        locations.copy_models(cible)                                      # relancer saute ce qui est déjà copié
-        fin = time.time() + 20
-        while time.time() < fin and locations.copy_state()["etat"] == "en cours":
-            time.sleep(0.05)
-        self.assertEqual(locations.copy_state()["etat"], "fini")
-
 
 if __name__ == "__main__":
     unittest.main()

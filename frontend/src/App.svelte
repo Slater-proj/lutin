@@ -14,7 +14,6 @@
   import { fromLegacy } from "./lib/address";
   import type { Status } from "./lib/types";
   import Chat from "./screens/Chat.svelte";
-  import ComingSoon from "./screens/ComingSoon.svelte";
 
   // Chat is the screen most visits open: it comes with the page. The others, and the guide of the first launch, are loaded the first time they are
   // shown (a file of their own each, kept by the browser after), so that the page does not read every screen before it can draw one.
@@ -133,7 +132,6 @@
     </ul>
     <div class="foot">
       <button type="button" class="theme" onclick={changeTheme}><Icon name={theme as IconName} size={18} /><span>{t(("theme." + theme) as MessageKey)}</span></button>
-      <a class="legacy" href="/ancienne/">{t("legacy.link")}</a>
       {#if status?.offline}<a class="offline-mark" href="#/settings/safety" title={t("offline.mark_title")}>{t("offline.mark")}</a>{/if}
       {#if status}<p class="version">Lutin {status.version}</p>{/if}
     </div>
@@ -150,10 +148,8 @@
       {#await SCREENS.agents() then screen}<screen.default />{/await}
     {:else if area === "projects"}
       {#await SCREENS.projects() then screen}<screen.default />{/await}
-    {:else if area === "settings"}
-      {#await SCREENS.settings() then screen}<screen.default />{/await}
     {:else}
-      <ComingSoon name={t(("nav." + area) as MessageKey)} />
+      {#await SCREENS.settings() then screen}<screen.default />{/await}
     {/if}
   </main>
 </div>
@@ -295,7 +291,6 @@
     color: var(--color-text);
   }
 
-  .legacy,
   .version {
     padding: 0 var(--space-3);
     color: var(--color-text-muted);

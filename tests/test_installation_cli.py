@@ -144,18 +144,18 @@ class FauxClient:
         self.evenements, self.envoyes, self.recus = evenements, [], []
 
     def flux(self, chemin, corps):
-        self.recus.append(corps)
+        self.recus.append((chemin, corps))
         for e in self.evenements:
             if e == "INTERRUPTION":
                 raise KeyboardInterrupt
             yield e
 
-    def envoyer(self, chemin, corps):
+    def envoyer(self, chemin, corps, methode="POST"):
         self.envoyes.append((chemin, corps))
-        return {}
+        return {"id": "c9"} if chemin == "/conversations" else {}
 
     def obtenir(self, chemin):
-        return {"conversations": [{"id": "c1", "titre": "Un"}, {"id": "c2", "titre": "Deux"}], "reglages": {"modele": "m"}}
+        return {"conversations": [{"id": "c1", "title": "Un"}, {"id": "c2", "title": "Deux"}], "model": "m"}
 
 
 def terminal(evenements, saisies=()):
@@ -167,30 +167,33 @@ def terminal(evenements, saisies=()):
 
 class ChatTerminal(unittest.TestCase):
     def test_reponse_outil_et_fin(self):
-        t, sortie = terminal([{"type": "debut", "conversation": "c9"}, {"type": "texte", "texte": "Bon"}, {"type": "texte", "texte": "jour"}, {"type": "outil", "nom": "lire", "args": {"chemin": "a"}},
-                              {"type": "resultat", "texte": "ligne 1\nligne 2"}, {"type": "fin", "conversation": {"id": "c9", "titre": "T"}}])
+        t, sortie = terminal([{"type": "start", "conversation_id": "c9"}, {"type": "text", "text": "Bon"}, {"type": "text", "text": "jour"}, {"type": "tool_call", "name": "lire", "arguments": {"chemin": "a"}},
+                              {"type": "tool_result", "text": "ligne 1\nligne 2"}, {"type": "end", "conversation": {"id": "c9", "title": "T"}}])
         t.repondre("salut")
         texte = "".join(sortie)
         self.assertIn("Bonjour", texte)
         self.assertIn("⚙ lire", texte)
         self.assertIn("ligne 1 ligne 2", texte)
         self.assertEqual(t.conversation, "c9")
+        self.assertIn(("/conversations", {}), t.client.envoyes, "a new conversation is created first")
+        self.assertIn(("/conversations/c9/options", {"mode": "general"}), t.client.envoyes, "the mode goes to the options of the conversation")
         t.repondre("suite")
-        self.assertEqual(t.client.recus[-1]["conversation"], "c9", "la conversation continue")
+        self.assertEqual(t.client.recus[-1], ("/conversations/c9/turns", {"message": "suite", "thinking": False}), "la conversation continue")
+        self.assertEqual([c for c, _ in t.client.envoyes].count("/conversations"), 1, "one conversation for both messages")
 
     def test_accord_accepte_et_refuse(self):
-        evt = [{"type": "approbation", "id": "a1", "titre": "Écrire x", "detail": "d", "diff": "+x"}]
+        evt = [{"type": "approval_request", "id": "a1", "title": "Écrire x", "detail": "d", "diff": "+x"}]
         t, sortie = terminal(evt, ["o"])
         t.repondre("fais")
-        self.assertIn(("/api/approuver", {"id": "a1", "ok": True}), t.client.envoyes)
+        self.assertIn(("/approvals/a1", {"approved": True}), t.client.envoyes)
         t, sortie = terminal(evt, [""])
         t.repondre("fais")
-        self.assertIn(("/api/approuver", {"id": "a1", "ok": False}), t.client.envoyes, "par défaut : refusé")
+        self.assertIn(("/approvals/a1", {"approved": False}), t.client.envoyes, "par défaut : refusé")
 
     def test_ctrl_c_arrete_la_reponse(self):
-        t, sortie = terminal([{"type": "debut", "conversation": "c3"}, "INTERRUPTION"])
+        t, sortie = terminal([{"type": "start", "conversation_id": "c9"}, "INTERRUPTION"])
         t.repondre("long")
-        self.assertIn(("/api/arreter", {"conversation": "c3"}), t.client.envoyes)
+        self.assertIn(("/conversations/c9/stop", {}), t.client.envoyes)
         self.assertIn("arrêté", "".join(sortie))
 
     def test_erreur_du_serveur_est_affichee_sans_planter(self):
@@ -308,7 +311,7 @@ class Console(unittest.TestCase):
             (Path(t) / "console.json").write_text("{pas du json", encoding="utf-8")
             self.assertFalse(c.disponible())
             with self.assertRaises(client.ClientError):
-                c.obtenir("/api/etat")
+                c.obtenir("/status")
 
 
 class DejaInstalle(unittest.TestCase):

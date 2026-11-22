@@ -160,21 +160,21 @@ class Api(unittest.TestCase):
         web.SEARCH_CACHE.clear()
         web.BLOCKED.clear()
         with mock.patch.object(web, "engines_of_search", lambda: [("tavily", lambda q: [{"titre": "T1", "url": "https://exemple.org/a?utm_source=x", "extrait": "e" * 500, "date": "2026-05-01"}])]):
-            statut, r = self.appel("POST", "/api/web-apercu", {"q": "tarif électricité écrire à marie@example.com"})
+            statut, r = self.appel("POST", "/api/v1/web-search/preview", {"q": "tarif électricité écrire à marie@example.com"})
         self.assertEqual(statut, 200)
-        self.assertEqual(r["retire"], ["adresse e-mail"])
-        self.assertEqual(r["requete"], "tarif électricité écrire à")
-        self.assertEqual((r["resultats"][0]["domaine"], r["resultats"][0]["source"], len(r["resultats"][0]["extrait"])), ("exemple.org", "tavily", 300))
-        self.assertEqual(r["resultats"][0]["url"], "https://exemple.org/a")
-        self.assertEqual(self.appel("POST", "/api/web-apercu", {"q": "x"})[0], 400)
+        self.assertEqual(r["removed"], ["adresse e-mail"])
+        self.assertEqual(r["query"], "tarif électricité écrire à")
+        self.assertEqual((r["results"][0]["domain"], r["results"][0]["source"], len(r["results"][0]["extract"])), ("exemple.org", "tavily", 300))
+        self.assertEqual(r["results"][0]["url"], "https://exemple.org/a")
+        self.assertEqual(self.appel("POST", "/api/v1/web-search/preview", {"q": "x"})[0], 400)
 
     def test_journal_et_vidage_par_l_api(self):
         outbound.clear()
         outbound.record("bing", "une question", [], True)
-        statut, r = self.appel("GET", "/api/sorties")
-        self.assertEqual((statut, r["entrees"][0]["service"]), (200, "bing"))
-        self.assertEqual(self.appel("POST", "/api/sorties-vider", {})[0], 200)
-        self.assertEqual(self.appel("GET", "/api/sorties")[1]["entrees"], [])
+        statut, r = self.appel("GET", "/api/v1/health/outbound")
+        self.assertEqual((statut, r["entries"][0]["service"]), (200, "bing"))
+        self.assertEqual(self.appel("DELETE", "/api/v1/health/outbound")[0], 200)
+        self.assertEqual(self.appel("GET", "/api/v1/health/outbound")[1]["entries"], [])
 
 
 if __name__ == "__main__":

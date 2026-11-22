@@ -134,9 +134,9 @@ class Commande(unittest.TestCase):
         """Au niveau réseau, la page demande un code PIN même ici : l'icône en demande un au serveur et le glisse dans l'adresse (#pin=), la page de connexion le valide seule."""
         from lutin import client
         cfg = {"securite": {"niveau": "reseau", "port": 8790}}
-        with mock.patch.object(client.LocalClient, "envoyer", return_value={"pin": "123456", "valable_s": 600}) as envoyer:
+        with mock.patch.object(client.LocalClient, "envoyer", return_value={"code": "123456", "valid_seconds": 600}) as envoyer:
             self.assertEqual(zone.address_opening({"donnees": "x"}, cfg), "http://127.0.0.1:8790/#pin=123456")
-        envoyer.assert_called_once_with("/api/nouveau-pin", {})
+        envoyer.assert_called_once_with("/devices/pairing-code", {})
 
     def test_serveur_pas_encore_pret_l_adresse_simple_suffit(self):
         from lutin import client

@@ -9,7 +9,8 @@ import context  # noqa: F401
 RACINE = Path(__file__).resolve().parent.parent
 WEB = RACINE / "src" / "lutin" / "web"
 WINDOWS = RACINE / "installateur" / "windows"
-PAGE = (WEB / "index.html").read_text(encoding="utf-8")
+PAGE = (RACINE / "frontend" / "index.html").read_text(encoding="utf-8")          # the page of the interface (ADR 0002)
+COMPOSANTS = RACINE / "frontend" / "src" / "components"
 
 
 def entrees_ico(chemin):
@@ -56,7 +57,7 @@ class LogoVectoriel(unittest.TestCase):
 
     def test_la_page_l_utilise_dans_l_onglet_et_l_en_tete(self):
         self.assertIn('rel="icon" type="image/svg+xml" href="/icone.svg"', PAGE)
-        self.assertIn('<img src="/logo.svg"', PAGE)
+        self.assertIn('<img src="/logo.svg"', (COMPOSANTS / "Thread.svelte").read_text(encoding="utf-8"), "the logo beside each answer")
 
 
 class IconesWindows(unittest.TestCase):
@@ -88,10 +89,11 @@ class IconesDApplication(unittest.TestCase):
 
 class Trombone(unittest.TestCase):
     def test_le_trombone_est_un_dessin_qui_remplit_son_bouton(self):
-        bouton = re.search(r'<button id="bJoindre"[^>]*>(.*?)</button>', PAGE, re.S).group(1)
-        self.assertIn("<svg", bouton, "un dessin, pas le petit emoji")
-        self.assertNotIn("📎", bouton)
-        self.assertRegex(PAGE, r"\.saisie-ligne #bJoindre svg \{ width:2[4-9]px")
+        barre = (COMPOSANTS / "AttachmentBar.svelte").read_text(encoding="utf-8")
+        bouton = re.search(r'<button type="button" class="attach"[^>]*>(.*?)</button>', barre, re.S).group(1)
+        self.assertIn('<Icon name="attach"', bouton, "un dessin, pas le petit emoji")
+        self.assertNotIn("📎", barre)
+        self.assertIn("attach:", (COMPOSANTS / "Icon.svelte").read_text(encoding="utf-8"), "the drawing of the paper clip")
 
 
 if __name__ == "__main__":

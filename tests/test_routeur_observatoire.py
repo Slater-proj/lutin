@@ -235,12 +235,12 @@ class Api(unittest.TestCase):
         observatory.clear()
         observatory.record("tour", "c1", modele="qwen3:8b", machine="", jetons=50, tok_s=25.0)
         observatory.record("outil", "c1", outil="lire", duree_ms=10, ok=True)
-        statut, r = self.appel("GET", "/api/observatoire")
+        statut, r = self.appel("GET", "/api/v1/health/activity")
         self.assertEqual(statut, 200)
-        self.assertEqual(r["resume"]["modeles"][0]["modele"], "qwen3:8b")
-        self.assertEqual([e["type"] for e in r["recents"]], ["outil"], "les tours sont dans le résumé, pas dans la liste des évènements")
-        self.assertEqual(self.appel("POST", "/api/observatoire-vider", {})[0], 200)
-        self.assertEqual(self.appel("GET", "/api/observatoire")[1]["resume"]["modeles"], [])
+        self.assertEqual(r["models"][0]["model"], "qwen3:8b")
+        self.assertEqual([(o["tool"], o["calls"]) for o in r["tools"]], [("lire", 1)])
+        self.assertEqual(self.appel("DELETE", "/api/v1/health/activity")[0], 200)
+        self.assertEqual(self.appel("GET", "/api/v1/health/activity")[1]["models"], [])
 
     def test_historique_des_mesures_par_l_api(self):
         chemin = A.bench_path()
@@ -248,16 +248,18 @@ class Api(unittest.TestCase):
         l = Laboratoire()
         bench.save(chemin, l.mesure(40))
         bench.save(chemin, l.mesure(20, date="2026-11-08T10:00:00"))
-        statut, r = self.appel("GET", "/api/bench-historique")
+        from lutin import api_v1
+        statut, r = self.appel("GET", "/api/v1/bench")
         self.assertEqual(statut, 200)
-        self.assertEqual(r["regressions"][0]["genre"], "vitesse")
-        self.assertEqual(len(r["modeles"][0]["mesures"]), 2)
+        self.assertEqual(r["regressions"][0]["kind"], api_v1.BENCH_KINDS["vitesse"])
+        self.assertEqual(len(r["history"][0]["measures"]), 2)
 
     def test_le_reglage_routage_se_enregistre(self):
-        statut, r = self.appel("POST", "/api/reglages", {"routage": True})
-        self.assertEqual((statut, r.get("routage")), (200, True))
-        self.assertTrue(self.appel("GET", "/api/etat")[1]["reglages"]["routage"])
-        self.appel("POST", "/api/reglages", {"routage": False})
+        statut, r = self.appel("PATCH", "/api/v1/settings", {"routing": True})
+        self.assertEqual((statut, r.get("routing")), (200, True))
+        self.assertTrue(self.appel("GET", "/api/v1/settings")[1]["routing"])
+        self.assertTrue(A.settings()["routage"])
+        self.appel("PATCH", "/api/v1/settings", {"routing": False})
 
 
 if __name__ == "__main__":

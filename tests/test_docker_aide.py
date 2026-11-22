@@ -6,7 +6,7 @@ from pathlib import Path
 
 import context  # noqa: F401
 from lutin import core as _m  # noqa: F401  (avant les autres : import circulaire sinon)
-from lutin import diagnostic, docker_doctor, engines
+from lutin import docker_doctor, engines
 
 RACINE = Path(__file__).resolve().parent.parent
 
@@ -130,18 +130,6 @@ class Reglages(unittest.TestCase):
         with mock.patch.dict(os.environ, {"LUTIN_LLAMACPP_URL": "http://llamacpp:8080"}):
             self.assertTrue(mo.externe())
             self.assertEqual(mo.adresse(), "http://llamacpp:8080/v1")
-
-
-class PremierLancement(unittest.TestCase):
-    def test_moteur_pret(self):
-        self.assertTrue(diagnostic.first_launch("Ollama", True, "")["pret"])
-
-    def test_aucun_moteur_dit_pourquoi_et_recommande(self):
-        r = diagnostic.first_launch("Ollama", False, "Pas installé.", {"moteur": "ollama", "nom": "Ollama", "raison": "le plus simple"})
-        self.assertFalse(r["pret"])
-        self.assertIn("Ollama", r["raison"])
-        self.assertIn("Pas installé.", r["raison"])
-        self.assertEqual(r["recommande"]["moteur"], "ollama")
 
 
 class Annulation(unittest.TestCase):

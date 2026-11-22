@@ -730,11 +730,6 @@ class background_task:
         return False
 
 
-def running_tasks():
-    with TASKS_LOCK:
-        return list(BACKGROUND_TASKS.values())
-
-
 BENCH = {"en_cours": "", "etape": "", "erreur": "", "file": []}          # file : les modèles qui attendent leur tour dans une série (comparaison)
 
 
@@ -822,25 +817,6 @@ def read_log(n=200):
 # --------------------------------------------------------------------------- banc d'essai des modèles (vitesse et notes mesurées)
 def bench_path():
     return Path(os.environ.get("LUTIN_BENCH") or DATA / "bench.json")
-
-
-def start_bench(modele, rapide):
-    if not RE_MODEL_NAME.match(modele or ""):
-        raise ValueError("Nom de modèle invalide.")
-    with TURNS_LOCK:
-        if ACTIVE_TURNS:
-            raise ValueError("Une réponse est en cours : le banc d'essai fausserait les mesures. Attends sa fin.")
-        if BENCH["en_cours"]:
-            raise ValueError("Un banc d'essai est déjà en cours ({}).".format(BENCH["en_cours"]))
-        BENCH.update(en_cours=modele, etape="démarrage", erreur="", file=[])
-
-    def travail():
-        try:
-            _measure_one(modele, rapide)
-        finally:
-            BENCH.update(en_cours="", etape="")
-    threading.Thread(target=travail, daemon=True, name="banc-essai").start()
-    return {"ok": True}
 
 
 def _measure_one(modele, rapide):
@@ -965,15 +941,6 @@ def new_lutin_version():
         return None
     from . import updates
     return updates.new_version(chemin, VERSION)
-
-
-def web_page():
-    """La page d'accueil, avec le jeton, la version, la langue et (en anglais) le dictionnaire de l'interface."""
-    langue = _i18n.language()
-    dico = _i18n.dictionary("interface") if langue != "fr" else {}
-    donnees = json.dumps(dico, ensure_ascii=False).replace("</", "<\\/")          # une chaîne ne doit pas pouvoir fermer la balise <script>
-    page = (WEB / "index.html").read_text(encoding="utf-8")
-    return page.replace("__TOKEN__", TOKEN).replace("__VERSION__", VERSION).replace("__LANGUE__", langue).replace("__DICO__", donnees)
 
 
 def translate_json(objet, cle=""):

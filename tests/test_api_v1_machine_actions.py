@@ -165,11 +165,11 @@ class MachineActions(unittest.TestCase):
         self.assertEqual(api("POST", path + "skills", {"all": True})[1]["error"]["code"], "invalid_request")
         self.assertEqual(api("POST", "/api/v1/machines/{}/imports/skills".format(UNKNOWN))[1]["error"]["code"], "not_found")
 
-    def test_the_old_route_still_answers_400(self):
+    def test_a_refused_shutdown_says_which_box_to_tick(self):
         paired = self.pair()
-        status, answer = M.U.api("POST", "/api/machines-shutdown", {"id": paired["id"]})
-        self.assertEqual(status, 400)
-        self.assertIn("Autoriser les machines appairées", answer["erreur"])
+        status, answer = api("POST", "/api/v1/machines/{}/actions/shutdown".format(paired["id"]))
+        self.assertEqual(status, 409)
+        self.assertIn("Autoriser les machines appairées", answer["error"]["message"])
 
 
 if __name__ == "__main__":

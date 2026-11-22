@@ -8,7 +8,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-from . import setup_wizard, qr, backup
+from . import setup_wizard, backup
 from . import core as _m
 from . import security as _sec
 from .i18n import t as _t
@@ -136,13 +136,6 @@ def update():
 
 def update_state():
     return dict(UPDATE)
-
-
-def qr_json(texte):
-    if len(texte.encode("utf-8")) > qr.MAX_CAPACITY:
-        raise ValueError(_t("Texte trop long pour le code QR."))
-    m = qr.matrix(texte)
-    return {"taille": len(m), "lignes": ["".join(map(str, ligne)) for ligne in m]}
 
 
 def restore_stream(flux, taille):

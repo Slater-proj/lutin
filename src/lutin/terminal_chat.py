@@ -19,6 +19,7 @@ Pendant une réponse : Ctrl+C l'arrête (ce qui est déjà fait est gardé)."""
 MODE_ALIASES = {"polyvalent": "polyvalent", "travail": "technique", "code": "technique", "technique": "technique", "ecriture": "scenario", "écriture": "scenario", "scenario": "scenario",
                "recherche": "recherche", "discussion": "discussion"}
 MODE_NAMES = {"polyvalent": "polyvalent", "technique": "travail", "scenario": "écriture", "recherche": "recherche", "discussion": "discussion"}
+V1_MODES = {"polyvalent": "general", "technique": "technical", "scenario": "scenario", "recherche": "research", "discussion": "chat"}          # the words of /api/v1 (api_v1.SETTING_WORDS)
 
 
 class Terminal:
@@ -29,6 +30,7 @@ class Terminal:
         self.conversation = ""
         self.options = {"mode": "polyvalent", "reflexion": False}
         self.recentes = []
+        self.mode_sent = None          # (conversation, mode) last written to the options of the conversation
 
     def ecrire(self, texte="", fin="\n"):
         self.sortie(texte + fin)
@@ -44,34 +46,37 @@ class Terminal:
         except EOFError:
             reponse = ""
         ok = reponse in ("o", "oui", "y", "yes")
-        self.client.envoyer("/api/approuver", {"id": e["id"], "ok": ok})
+        self.client.envoyer("/approvals/" + e["id"], {"approved": ok})
         self.ecrire("   → " + (_t("accepté") if ok else _t("refusé")))
 
     def repondre(self, message):
-        corps = dict(self.options, message=message, conversation=self.conversation)
         try:
-            for e in self.client.flux("/api/chat", corps):
+            if not self.conversation:
+                self.conversation = self.client.envoyer("/conversations", {})["id"]
+            if self.mode_sent != (self.conversation, self.options["mode"]):
+                self.client.envoyer("/conversations/{}/options".format(self.conversation), {"mode": V1_MODES[self.options["mode"]]}, "PATCH")
+                self.mode_sent = (self.conversation, self.options["mode"])
+            for e in self.client.flux("/conversations/{}/turns".format(self.conversation), {"message": message, "thinking": self.options["reflexion"]}):
                 t = e.get("type")
-                if t == "debut":
-                    self.conversation = e["conversation"]
-                elif t == "texte":
-                    self.ecrire(e["texte"], "")
-                elif t == "pensee":
-                    pass                                              # la réflexion reste dans l'interface web ; ici on affiche seulement la réponse
-                elif t == "outil":
-                    self.ecrire("\n⚙ {} {}".format(e.get("nom", ""), str(e.get("args", ""))[:160]))
-                elif t == "resultat":
-                    self.ecrire("  ↳ " + " ".join(str(e.get("texte", "")).split())[:200])
-                elif t == "approbation":
+                if t == "text":
+                    self.ecrire(e.get("text", ""), "")
+                elif t == "tool_call":
+                    self.ecrire("\n⚙ {} {}".format(e.get("name", ""), str(e.get("arguments", ""))[:160]))
+                elif t == "tool_result":
+                    self.ecrire("  ↳ " + " ".join(str(e.get("text", "")).split())[:200])
+                elif t == "approval_request":
                     self.demander_accord(e)
-                elif t in ("info", "erreur"):
-                    self.ecrire("\n{} {}".format("ⓘ" if t == "info" else "✘", e.get("texte", "")))
-                elif t == "fin":
-                    self.conversation = e["conversation"]["id"]
+                elif t == "notice":
+                    self.ecrire("\nⓘ " + str(e.get("text", "")))
+                elif t == "error":
+                    self.ecrire("\n✘ " + str((e.get("error") or {}).get("message", "")))
+                elif t == "end":
+                    self.conversation = (e.get("conversation") or {}).get("id") or self.conversation
+                # the thinking stays in the web interface: here only the answer is shown
         except KeyboardInterrupt:
             if self.conversation:
                 try:
-                    self.client.envoyer("/api/arreter", {"conversation": self.conversation})
+                    self.client.envoyer("/conversations/{}/stop".format(self.conversation), {})
                 except ClientError:
                     pass
             self.ecrire("\n(arrêté)")
@@ -90,19 +95,19 @@ class Terminal:
             self.conversation = ""
             self.ecrire("Nouvelle conversation.")
         elif mot == "liste":
-            self.recentes = self.client.obtenir("/api/etat")["conversations"][:15]
+            self.recentes = self.client.obtenir("/conversations")["conversations"][:15]
             for i, c in enumerate(self.recentes, 1):
-                self.ecrire("{:>3}. {}".format(i, c.get("titre") or "(sans titre)"))
+                self.ecrire("{:>3}. {}".format(i, c.get("title") or "(sans titre)"))
         elif mot == "reprendre":
             if arg.isdigit() and 1 <= int(arg) <= len(self.recentes):
                 self.conversation = self.recentes[int(arg) - 1]["id"]
-                self.ecrire("Conversation reprise : " + (self.recentes[int(arg) - 1].get("titre") or ""))
+                self.ecrire("Conversation reprise : " + (self.recentes[int(arg) - 1].get("title") or ""))
             else:
                 self.ecrire(_t("Fais d'abord /liste, puis /reprendre <numéro>."))
         elif mot == "modele":
             if arg:
-                self.client.envoyer("/api/reglages", {"modele": arg})
-            self.ecrire(_t("Modèle : ") + self.client.obtenir("/api/etat")["reglages"]["modele"])
+                self.client.envoyer("/settings", {"model": arg}, "PATCH")
+            self.ecrire(_t("Modèle : ") + self.client.obtenir("/settings")["model"])
         elif mot == "mode":
             if arg in MODE_ALIASES:
                 self.options["mode"] = MODE_ALIASES[arg]

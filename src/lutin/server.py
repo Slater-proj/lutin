@@ -1,69 +1,25 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 import gzip
-import html
 from http.server import BaseHTTPRequestHandler
-from . import bench as _bench
-from . import engine_bench as _bench_moteurs
-from . import engine_metrics as _mesures
-from . import model_compat as _compat
 from . import power as _alimentation
 from . import machines as _machines
-from . import memory_estimate as _estimation
-from . import loaded_resources as _ressources
-from . import engine_catalog as _catalogue_moteurs
-from . import llamacpp_engine as _llamacpp
 from . import engines as _moteurs
-from . import web_search as _recherche
-from . import outbound as _sorties
-from . import observatory as _observatoire
-from . import web as _web
-from . import engine_updates as _moteurs_maj
-from . import mcp as _mcp
-from . import mcp_catalog as _mcp_catalogue
-from . import external_programs as _outils_externes
-from . import calibration as _calibrage
 from . import access as _acces
 from . import api_v1 as _api_v1
 from . import web_app as _web_app
-from . import model_fit as _adequation
 from . import managed_models as _geres
-from . import github as _github
-from . import third_party_skills as _skills
-from . import open_file as _ouverture
-from . import workspaces as _travaux
-from . import performance_advice as _conseil
-from . import low_end_mode as _conseil_machine
-from . import model_variants as _variantes
-from . import diagnostic as _diagnostic
-from . import locations as _emplacements
-from . import model_discovery as _decouverte
-from . import storage as _donnees
-from . import offline as _hl
 from . import modes as _modes
 from . import attachments as _pieces
 from . import images as _images
-from . import addons as _addons
-from . import embeddings as _embeddings
 from . import produced_files as _fichiers
-from . import hardware as _machine
 from . import mission as _mission
 from . import background_jobs as _fond
-from . import notifications as _notif
-from . import scheduled_tasks as _plan
-from . import recall as _rappel
-from . import progress_sheet as _suivi
 from . import i18n as _i18n
-from . import claude_project as _pc
-from . import backup as _sauv
 from . import security as _sec
 from .i18n import t as _t
-from datetime import datetime
-import io
 import json
 import os
-import sys
 import time
-from pathlib import Path
 import re
 import subprocess
 import threading
@@ -76,11 +32,6 @@ from . import turn_runner as _turns
 STREAM_WRITE_TIMEOUT = 20      # secondes : une page qui ne lit plus (onglet gelé) ne doit pas figer la réponse
 COMPRESSIBLE_TYPES = ("text/html", "application/json", "text/javascript", "application/javascript", "text/css", "image/svg+xml")          # jamais les images ni les archives (déjà compressées)
 STREAM_HEARTBEAT = 15          # secondes entre deux lignes vides envoyées pour garder le flux ouvert derrière un reverse proxy
-
-
-MANAGED_MODEL_ROUTES = {          # les trois serveurs que Lutin gère ont les mêmes routes : (serveur, ce qu'elle rend)
-    "/api/{}-{}".format(serveur, route): (serveur, nom) for serveur in ("exllamav3", "lmstudio", "colibri")
-    for route, nom in (("modeles", "modeles"), ("catalogue", "catalogue"), ("quantifications", "quantifications"))}
 
 
 class _CountedBody:
@@ -203,179 +154,9 @@ class Handler(BaseHTTPRequestHandler):
         relais = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "Via", "X-Real-IP")
         return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._is_loop(_sec._without_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._without_port(self.headers.get("Host") or "") == _m.IP_LAN))
 
-    def _vue_moteur(self, mo, courant):
-        """Un moteur pour la page : description, forces et faiblesses, état, ce qui est possible (ou pourquoi non), tâche en cours, réglages d'adresse sans la clé."""
-        v = mo.vue(mo.id == courant)
-        modeles = mo.modeles()
-        statut = mo.statut()
-        return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.task(mo.id), telechargeable=mo.telechargeable(), maj=_moteurs_maj.state().get(mo.id),
-                    reglages=_llamacpp.settings_view(mo.id) if (mo.adresse_modifiable or hasattr(mo, "info_dossier")) else {})
-
-    @staticmethod
-    def _prereglages():
-        """Les serveurs compatibles OpenAI du catalogue signé (adresse habituelle, forces, faiblesses), pour les proposer d'un clic. Un catalogue illisible n'empêche jamais la page."""
-        try:
-            systeme, docker = _llamacpp._system(), bool(_moteurs.CONTEXT["en_docker"]())
-            try:
-                profil = _moteurs.CONTEXT["profil"]()
-                fabricants = sorted({g.fabricant for g in (getattr(profil, "gpus", None) or [])})
-            except Exception:  # noqa: BLE001  (profil illisible : aucun serveur n'est écarté à cause du matériel... sauf ceux qui exigent une carte)
-                fabricants = []
-            sortie = []
-            for m in _catalogue_moteurs.running()["moteurs"]:
-                if m.get("type", "externe") != "externe":
-                    continue
-                v = dict(_catalogue_moteurs.view(m))
-                v["compatible"], v["raison_incompatible"] = _catalogue_moteurs.compatibility(v, systeme, docker, fabricants)          # filtré selon la machine où Lutin tourne (système, Docker, carte graphique)
-                sortie.append(v)
-            return sortie
-        except Exception:  # noqa: BLE001
-            return []
-
-    @staticmethod
-    def _diagnostic_moteur(mo, o, r):
-        """Pour un moteur autre qu'Ollama : ce qui empêche de discuter (moteur absent ou muet, aucun modèle, modèle choisi absent)."""
-        ouvrir = {"type": "onglet", "nom": "reglages"}
-        if not o["actif"]:
-            return [{"niveau": "erreur", "texte": _t("Le moteur « {} » n'est pas prêt : installe-le ou vérifie son adresse.").format(mo.nom), "action": ouvrir}]
-        if not o["installes"]:
-            return [{"niveau": "attention", "texte": _t("Aucun modèle sur le moteur « {} » : télécharges-en un dans l'onglet Modèles.").format(mo.nom), "action": {"type": "onglet", "nom": "modeles"}}]
-        if r["modele"] not in o["installes"]:
-            return [{"niveau": "attention", "texte": _t("Le modèle « {} » n'existe pas sur le moteur « {} » : choisis-en un autre.").format(r["modele"], mo.nom), "action": {"type": "onglet", "nom": "modeles"}}]
-        return []
-
-    @staticmethod
-    def _memoire(r, o):
-        """Le modèle de conversation est-il chargé, et combien de mémoire prend-il (carte graphique / mémoire vive) ? Pour la barre d'état. None si Ollama est arrêté ou le modèle déchargé."""
-        if not o["actif"]:
-            return None
-        ps = _m.model_ps(r["modele"])
-        return {"modele": r["modele"], "taille": ps["taille"], "vram": ps["vram"]} if ps else None
-
-    @staticmethod
-    def _variantes_jugees(modele):
-        """Les variantes de précision de `modele` avec, pour chacune, ce que cette machine en dit (tient ou pas) et si elle est déjà installée."""
-        lues = _variantes.list_variants(modele)
-        profil = _adequation.ready_profile()
-        base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), {})
-        installes = set(_m.engine_state()["installes"])
-        sortie = []
-        for v in lues["variantes"]:
-            jugement = _adequation.judge(dict(base, go=v["go"]), profil) if profil is not None else {"niveau": "bien", "texte": ""}
-            sortie.append(dict(v, installe=v["id"] in installes, niveau=jugement["niveau"], jugement=jugement["texte"], explication=_variantes.describe(v["precision"])))
-        return {"modele": modele, "defaut": lues["defaut"], "variantes": sortie}
-
-    @staticmethod
-    def _compat(o):
-        """Pour chaque modèle du catalogue : compatible avec le moteur choisi ? (format, quantification, mémoire estimée, raisons). La page ne propose que les compatibles."""
-        try:
-            return _compat.for_list(_m._CATALOGUE["modeles"], _m.current_engine(), o["installes"])
-        except Exception:  # noqa: BLE001  (jamais une page cassée : sans cette liste, rien n'est masqué)
-            return {}
-
-    @staticmethod
-    def _estimation(modele, ctx, profil):
-        """L'estimation AVANT chargement pour un modèle du catalogue (mémoire prise, où, saturation, conseils), ou None si le modèle n'est pas au catalogue."""
-        m = next((x for x in _m._CATALOGUE["modeles"] if x["id"] == modele), None)
-        if m is None:
-            return None
-        e = _estimation.estimate(m, int(ctx), profil)
-        e["modele"] = modele
-        e["preset_experts"] = _estimation.experts_preset(m, profil, int(ctx))
-        return e
-
-    @staticmethod
-    def _avec_estimation(diagnostic, r, profil):
-        """Le modèle choisi ne tient pas (ou à peine) : le dire dans la bannière, AVANT qu'on le charge."""
-        try:
-            e = Handler._estimation(r["modele"], r["num_ctx"], profil)
-            if e and e["niveau"] in ("trop_gros", "sature") and not any(p.get("code") == "modele_trop_gros" for p in diagnostic):
-                diagnostic = list(diagnostic) + [{"code": "estimation", "niveau": "attention" if e["niveau"] == "sature" else "erreur", "texte": e["texte"] + (" " + e["conseils"][0] if e["conseils"] else ""), "action": {"type": "onglet", "nom": "modeles"}}]
-        except Exception:  # noqa: BLE001  (un plus : jamais une page cassée)
-            pass
-        return diagnostic
-
-    @staticmethod
-    def _premier_lancement(o, r, profil):
-        """Aucun moteur prêt ? La page désactive l'onglet Modèles avec la raison et propose le moteur conseillé (installer / choisir autre / plus tard)."""
-        try:
-            mo = _m.current_engine(r)
-            if o["actif"]:
-                return _diagnostic.first_launch(mo.nom, True, "")
-            reco = None          # pas de mo.statut() ici : il sonde le moteur (2 s) et /api/etat doit rester immédiat
-            try:
-                reco = _bench_moteurs.recommend(profil, banc=None, docker=_moteurs.CONTEXT["en_docker"](), modele_installe=False)
-            except Exception:  # noqa: BLE001  (la recommandation est un plus)
-                reco = None
-            from . import docker_engines as _md
-            dossier = _md.folder_engines()          # Docker : où le moteur sera installé, et si c'est un volume dédié (/engines) ou le volume des données
-            detail_dossier = _md.detail_folder_engines() if dossier else {}
-            emplacement = {"dossier": str(dossier), "dedie": detail_dossier.get("source") in ("env", "reglage", "montage"), "probleme": detail_dossier.get("probleme", ""), "montage": _md.MOUNT} if dossier else None
-            autres = []          # les autres moteurs déjà sur la machine (simple regard sur les fichiers, aucune sonde réseau)
-            for autre in _moteurs.ENGINES.values():
-                try:
-                    if autre.id == mo.id:
-                        continue
-                    if (autre.id == "ollama" and _m.ollama_path()) or (autre.id == "llamacpp" and autre.serveur_pret() is not None):
-                        autres.append({"moteur": autre.id, "nom": autre.nom})
-                except Exception:  # noqa: BLE001
-                    continue
-            if mo.id == "ollama":
-                detail = _t("Installé, mais arrêté.") if _m.ollama_path() else _t("Pas installé.")
-            elif mo.id == "llamacpp":
-                detail = _t("Installé, il démarre à la demande.") if mo.serveur_pret() is not None else _t("Pas installé.")
-            else:
-                detail = ""
-            gere = None          # Colibri, LM Studio ou ExLlamaV3 choisi : simple regard sur les fichiers (aucune sonde réseau)
-            if getattr(mo, "serveur", ""):
-                for choisi, nom, trouve in (("colibri_choisi", "Colibri", getattr(mo, "_colibri", None)), ("lmstudio_choisi", "LM Studio", getattr(mo, "_lms", None)), ("exllamav3_choisi", "ExLlamaV3", getattr(mo, "_exl", None))):
-                    if trouve and getattr(mo, choisi, lambda: False)():
-                        gere = {"nom": nom, "installe": trouve() is not None}
-                        if choisi == "colibri_choisi" and gere["installe"]:
-                            try:
-                                gere["sans_modele"] = not mo.modele_colibri()          # Colibri ne démarre qu'avec un modèle qu'il a préparé : sans lui, « Démarrer » ne peut rien faire
-                            except Exception:  # noqa: BLE001
-                                pass
-            return _diagnostic.first_launch(mo.nom, False, detail, {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement, autres, mo.id, gere)
-        except Exception:  # noqa: BLE001  (jamais une page cassée pour un constat de plus)
-            return {"pret": True, "raison": "", "recommande": None}
 
     REFLEXION = {}          # (moteur, machine, modèle) -> (instant, résultat) : /api/etat est demandé très souvent, le moteur ne doit pas être interrogé à chaque fois
 
-    @staticmethod
-    def _reflexion_possible(r, actif=True):
-        """Le modèle choisi a-t-il un mode réflexion ? True / False, ou None quand le moteur ne le dit pas ou ne répond pas (la case reste alors libre). La page grise et décoche la case quand c'est False."""
-        if not actif:
-            return None
-        cle = (r.get("moteur"), r.get("machine"), r["modele"])
-        gardee = Handler.REFLEXION.get(cle)
-        if gardee and time.monotonic() - gardee[0] < 30:
-            return gardee[1]
-        try:
-            caps = _m.capabilities(r["modele"])
-        except Exception:  # noqa: BLE001  (un confort : jamais une page cassée)
-            caps = None
-        valeur = None if caps is None else ("thinking" in caps)
-        Handler.REFLEXION[cle] = (time.monotonic(), valeur)
-        return valeur
-
-    @staticmethod
-    def _diagnostic(o, r, profil, modeles):
-        """Ce qui empêche Lutin de répondre (ou le gêne), pour la bannière du haut de la page."""
-        mo = _m.current_engine(r)
-        if _machines.remote_model(r, o["installes"]):          # le modèle choisi est celui d'une autre machine : il n'a pas à exister ici ni à tenir sur cette carte
-            if mo.id != "ollama":
-                return []
-            r = dict(r, modele="")
-        if mo.id != "ollama":
-            return Handler._diagnostic_moteur(mo, o, r)
-        jauge = _emplacements.models_gauge() or {}
-        libre = jauge.get("libre")
-        try:
-            return _diagnostic.diagnose(o["actif"], bool(_m.ollama_path()), [n for n in o["installes"] if not _embeddings.is_search_model(n)], r, profil, _m._CATALOGUE, _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]),
-                                             libre / 1e9 if libre else None, conseils=_conseil_machine.advice(profil, r), modeles_ailleurs=_emplacements.models_elsewhere(o["installes"]) if o["actif"] else None)
-        except (KeyError, TypeError, ValueError, AttributeError):
-            return []
 
     @staticmethod
     def _admin_tous():
@@ -466,18 +247,14 @@ class Handler(BaseHTTPRequestHandler):
             return _api_v1.dispatch(self, "GET")
         if chemin.startswith("/api/noeud/relais/"):            # une machine appairée mène une conversation ICI (droit « piloter »)
             return self._relais("GET")
-        if chemin.startswith("/h/"):                           # cette page affiche une conversation menée sur une autre machine
-            return self._vers_hote("GET")
         if chemin == "/api/noeud/etat":                        # une autre machine demande si ce Lutin peut faire tourner un modèle : jeton de nœud, rien d'autre n'est ouvert
             return self._noeud_etat()
         if chemin.startswith("/app/"):                           # la nouvelle interface (ADR 0002), aussi servie à « / » depuis la 1.0
             return self._nouvelle_interface(chemin)
-        if chemin in ("/", "/index.html", "/ancienne", "/ancienne/", "/ancienne/index.html") and not self._authentifie():
+        if chemin in ("/", "/index.html") and not self._authentifie():
             return self._page_connexion()
-        if chemin in ("/", "/index.html") and _web_app.built():          # 1.0 : la nouvelle interface est celle par défaut ; l'ancienne page reste à /ancienne/ pendant les versions 1.x
+        if chemin in ("/", "/index.html"):                     # the interface built from frontend/ (ADR 0002); a page says how to build it when it is missing
             return self._nouvelle_interface(_web_app.PREFIX)
-        if chemin == "/ancienne":
-            return self._envoyer(302, b"", "text/plain", {"Location": "/ancienne/"})
         if chemin.startswith("/api/"):
             if not self._authentifie():
                 return self._envoyer(401, {"erreur": "authentification requise"})
@@ -500,21 +277,6 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._envoyer(404, {"erreur": str(e)})
             return self._envoyer(200, octets, mime, {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(nom), "Content-Security-Policy": "default-src 'none'; sandbox"})
-        if chemin == "/api/ouvrir-chemin" or chemin.startswith("/ouvrir/"):          # un chemin cité dans une réponse devient un lien : le fichier du DOSSIER DE TRAVAIL s'ouvre dans le navigateur (jamais lancé)
-            if not self._authentifie():
-                return self._envoyer(401, {"erreur": "authentification requise"})
-            try:
-                if chemin == "/api/ouvrir-chemin":
-                    q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                    trouve = _ouverture.resolve((q.get("p") or [""])[0], _m.ROOT)
-                    if trouve is None:
-                        return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(_t("Fichier introuvable dans le dossier de travail.")) + "</h3><p>"
-                                             + html.escape(_t("Lutin ne retrouve que les fichiers du dossier de travail actif ({}). Si le fichier est ailleurs, ajoute son dossier comme dossier de travail (Réglages > Dossiers).").format(_m.ROOT)) + "</p>", "text/html; charset=utf-8")
-                    return self._envoyer(302, b"", "text/plain", {"Location": _ouverture.address(trouve, _m.ROOT)})
-                octets, mime, entetes = _ouverture.read(chemin[len("/ouvrir/"):], _m.ROOT)
-            except ValueError as e:
-                return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(str(e)) + "</h3>", "text/html; charset=utf-8")
-            return self._envoyer(200, octets, mime, entetes)
         if chemin.startswith("/fichier/"):                     # télécharger un fichier produit pendant une conversation (cookie de session, comme /image/)
             if not self._authentifie():
                 return self._envoyer(401, {"erreur": "authentification requise"})
@@ -524,266 +286,14 @@ class Handler(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._envoyer(404, {"erreur": str(e)})
             return self._envoyer(200, octets, mime, {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(nom), "Content-Security-Policy": "default-src 'none'; sandbox"})
-        if chemin in ("/", "/index.html", "/ancienne/", "/ancienne/index.html"):          # « / » seulement quand la nouvelle interface n'est pas construite (une copie de développement)
-            return self._envoyer(200, _m.web_page(), "text/html; charset=utf-8")
-        if chemin == "/api/etat":
-            o = _m.engine_state()
-            r = _m.settings()
-            modeles = _m.known_models(o["installes"], o.get("tailles"))
-            profil = _adequation.ready_profile()
-            return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
-                                       "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
-                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.ollama_path()) or _m.current_engine().id != "ollama", "moteur_nom": _mesures.display_name(_m.current_engine()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.read_model_registry()["masques"]), "actives": list(_m.ACTIVE_TURNS),
-                                       "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_list(), "racine": str(_m.ROOT), "donnees": str(_m.DATA),
-                                       "colibri_choisi": bool(getattr(_m.current_engine(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.current_engine(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.current_engine(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.current_engine().id, "niveau": _m.SECURITY.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.new_lutin_version(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_active(r.get("cluster")), "demandes_machines": len(_machines.node().get("demandes", [])), "modeles_distants": _machines.remote_models() if _machines.cluster_active(r.get("cluster")) else [], "conversations_distantes": _machines.remote_conversations() if _machines.cluster_active(r.get("cluster")) else [], "machines_hors_ligne": _machines.offline_names() if _machines.cluster_active(r.get("cluster")) else [], "taches_fond": _m.running_tasks(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.bench_path())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.PendingApproval.EN_COURS.values()],
-                                       "en_attente": sorted({a.conv for a in _m.PendingApproval.EN_COURS.values() if a.conv})})
-        if chemin == "/api/conseil":
-            r = _m.settings()
-            vitesse = ((_bench.read(_m.bench_path()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
-            if not vitesse or not vitesse.get("tok_s"):
-                return self._envoyer(200, {"mesure": None, "conseil": []})
-            from .hardware import detect
-            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyze(vitesse, detect(), r, _m._CATALOGUE, _m.engine_state()["installes"], _m.model_ps(r["modele"]))})
-        if chemin == "/api/notifications":
-            return self._envoyer(200, {"canaux": _notif.list_channels(), "types": _notif.channel_types()})
-        if chemin == "/api/planifie":
-            return self._envoyer(200, _plan.state())
-        if chemin == "/api/github":                              # le compte GitHub (facultatif) : configuré ou non, jamais le jeton
-            return self._envoyer(200, dict(_github.view(), modifiable=self._configurateur()))
-        if chemin.startswith("/api/skills-tiers"):               # skills tiers : sources, recherche, fiche, installés
-            return self._skills_tiers_lire(chemin)
-        if chemin == "/api/documents":
-            return self._envoyer(200, _rappel.documents_state())
-        if chemin == "/api/documents-chercher":
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            requete = (q.get("q") or [""])[0][:300]
-            if not _rappel.words(requete):
-                return self._envoyer(400, {"erreur": _t("Requête vide ou trop vague : donne quelques mots-clés.")})
-            return self._envoyer(200, {"passages": _rappel.search_documents(requete)})
-        if chemin == "/api/notes":
-            return self._envoyer(200, {"notes": _donnees.list_notes()})
-        if chemin == "/api/acces":
-            return self._envoyer(200, _acces.state(self._configurateur(), self._configurateur_strict(), self._admin_tous()))
-        if chemin == "/api/qr":
-            texte = urllib.parse.unquote(self.path.split("d=", 1)[1]) if "d=" in self.path else ""
-            try:
-                return self._envoyer(200, _acces.qr_json(texte))
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/commande-claude":
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            try:
-                return self._envoyer(200, {"texte": _pc.command(_m.ROOT, (q.get("nom") or [""])[0], (q.get("args") or [""])[0][:2000])})
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/projet-claude":
-            d = _pc.detect(_m.ROOT)
-            return self._envoyer(200, {"detecte": d, "resume": _pc.summary(d) if not _pc.is_empty(d) else "", "racine": str(_m.ROOT)})
-        if chemin == "/api/travaux":
-            return self._envoyer(200, dict(_m.works_state(), modifiable=self._configurateur()))
-        if chemin == "/api/dossiers":                          # le navigateur de dossiers de la page : seulement pour qui peut gérer les dossiers de travail (cette machine)
-            if not self._configurateur():
-                return self._envoyer(403, {"erreur": _t("Les dossiers se parcourent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            try:
-                return self._envoyer(200, _m.list_folders((q.get("chemin") or [""])[0]))
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/variantes":                           # les précisions (q4, q8, fp16…) d'un modèle de la bibliothèque, jugées pour CETTE machine
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            try:
-                return self._envoyer(200, self._variantes_jugees((q.get("modele") or [""])[0]))
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-            except OSError as e:
-                return self._envoyer(503, {"erreur": str(e)})
-        if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
-            courant = _m.current_engine().id
-            _moteurs_maj.in_background(bool(_m.read_config().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
-            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.entries()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.engines_folder_view()})
-        if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            mo = _moteurs.by_id((q.get("moteur") or [""])[0])
-            try:
-                if chemin == "/api/moteur-recherche":
-                    return self._envoyer(200, {"resultats": mo.chercher_modeles((q.get("q") or [""])[0])})
-                return self._envoyer(200, {"fichiers": mo.fichiers_du_depot((q.get("repo") or [""])[0])})
-            except AttributeError:
-                return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas de bibliothèque de modèles à parcourir.")})
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/outils":                              # uv et Node.js : ce qui est installé (par Lutin ou sur la machine)
-            return self._envoyer(200, {"outils": _outils_externes.state(), "modifiable": self._configurateur()})
-        if chemin == "/api/mcp-catalogue":                       # les connecteurs du catalogue (sans rien lancer)
-            return self._envoyer(200, {"serveurs": _mcp_catalogue.entries(), "modifiable": self._configurateur()})
-        if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
-            return self._envoyer(200, {"connecteurs": _mcp.view(), "modifiable": self._configurateur(), "limite": _mcp.limit_tools()})
-        if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            try:
-                r = _decouverte.search((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0], categorie=(q.get("c") or [""])[0], leger=(q.get("leger") or ["0"])[0] == "1")
-                profil = _adequation.ready_profile()
-                juger = (lambda go: _adequation.judge({"go": go}, profil)) if profil is not None else (lambda go: {"niveau": "bien", "texte": ""})
-                installes = set(_m.engine_state()["installes"])
-                modeles = _decouverte.evaluate_sizes(r["modeles"], juger)
-                for m in modeles:
-                    m["installes"] = sorted(t for t in m["tailles"] if m["nom"] + ":" + t in installes) + ([""] if m["nom"] in installes or m["nom"] + ":latest" in installes else [])
-                return self._envoyer(200, dict(r, modeles=modeles))
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-            except OSError as e:
-                return self._envoyer(503, {"erreur": str(e)})
-        if chemin == "/api/suivi":                               # la fiche de suivi d'une conversation (affichée, modifiable)
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            ident = (q.get("conversation") or [""])[0]
-            try:
-                conv = _m.conv_read(ident)
-                r = _m.settings()
-                sections = _suivi.read(ident)
-                return self._envoyer(200, {"sections": sections, "texte": _suivi.serialize(ident, sections), "mesure": _suivi.measure(ident, r["num_ctx"]), "mode": _m.long_memory(conv, r),
-                                           "mode_general": r["memoire_longue"], "chemin": str(_suivi.path(ident))})
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/addons":                              # les addons : état, réglages (jamais les secrets), dernière vérification
-            return self._envoyer(200, {"liste": _addons.entries(), "alertes": _addons.alerts()})
-        if chemin == "/api/addon-etat":                          # le panneau d'un addon actif (ex. Telegram : code d'appairage, brouillons) : seulement depuis cette machine
-            if not self._configurateur():
-                return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            try:
-                return self._envoyer(200, _addons.alive_state((q.get("id") or [""])[0]))
-            except _addons.AddonError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/addon-flux":                          # le flux en vigueur et celui qui est livré (éditeur de flux)
-            if not self._configurateur():
-                return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            ident = (q.get("id") or [""])[0]
-            try:
-                _addons.manifest(ident)
-                return self._envoyer(200, {"flux": _addons.stream(ident), "livre": _addons.shipped_stream(ident), "modifie": _addons.modified_stream(ident)})
-            except _addons.AddonError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/missions":                            # les missions longues : état et avancement
-            return self._envoyer(200, _mission.state())
-        if chemin == "/api/fichiers-crees":                      # tout ce que Lutin a créé (documents, images, vidéos, sons) : de quoi faire le ménage
-            return self._envoyer(200, _fichiers.entries())
-        if chemin == "/api/fond":                                # le travail de fond : travaux et avancement
-            return self._envoyer(200, {"liste": _fond.list_works()})
-        if chemin == "/api/fond-rapport":
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            try:
-                return self._envoyer(200, {"texte": _fond.report(_fond.find((q.get("id") or [""])[0]))})
-            except ValueError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-        if chemin == "/api/mettre-a-jour-etat":
-            return self._envoyer(200, _acces.update_state())
-        if chemin == "/api/dossier-modeles-chercher":            # retrouver des modèles déjà téléchargés (autre disque, ancien dossier)
-            if not self._configurateur():
-                return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-            return self._envoyer(200, {"dossiers": _emplacements.find_models_folders(connus=[_emplacements.seen_folder(), os.environ.get("OLLAMA_MODELS", ""), _emplacements.read_models_config()]), "actuel": str(_emplacements.models_folder())})
-        if chemin == "/api/dossier-modeles-etat":
-            return self._envoyer(200, _emplacements.copy_state())
-        if chemin == "/api/emplacements":                        # tous les dossiers que Lutin utilise, leur taille et la place libre
-            from . import locations
-            return self._envoyer(200, dict(locations.list_locations(), modifiable=self._configurateur()))
-        if chemin == "/api/journal":
-            m = re.search(r"[?&]n=(\d+)", self.path)
-            return self._envoyer(200, {"entrees": _m.read_log(int(m.group(1)) if m else 200)})
-        if chemin == "/api/sauvegarde":
-            tampon = io.BytesIO()
-            c = _m.config_path()
-            try:
-                _sauv.export({"config": c.parent if c else None, "donnees": _m.DATA, "memoire": _m.MEMORY}, tampon)
-            except _sauv.BackupError as e:
-                return self._envoyer(400, {"erreur": str(e)})
-            return self._envoyer(200, tampon.getvalue(), "application/zip", {"Content-Disposition": 'attachment; filename="lutin-sauvegarde-{}.zip"'.format(datetime.now().strftime("%Y%m%d-%H%M%S"))})
-        if chemin == "/api/propositions":
-            return self._envoyer(200, _m.read_proposals())
-        if chemin == "/api/bench-moteurs":                        # comparaison des moteurs : dernier résultat, recommandation et sa raison, avancement
-            return self._envoyer(200, _bench_moteurs.view(_m.DATA, _m.settings()["modele"], _moteurs.CONTEXT["profil"](), _moteurs.CONTEXT["en_docker"]()))
-        if chemin == "/api/estimation":                          # estimer AVANT de charger : mémoire prise, où, saturation, conseils, préréglage des modèles à experts
-            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            modele = (q.get("modele") or [""])[0] or _m.settings()["modele"]
-            try:
-                ctx = int((q.get("ctx") or [_m.settings()["num_ctx"]])[0])
-            except ValueError:
-                return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
-            e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.ready_profile())
-            return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
-        if chemin == "/api/observatoire":                         # Santé : ce que les modèles et les outils ont fait (noms, durées, compteurs ; jamais le texte des messages)
-            evenements = _observatoire.read(400)
-            return self._envoyer(200, {"resume": _observatoire.summary(evenements), "recents": [e for e in evenements if e["type"] != "tour"][:25], "modifiable": self._configurateur()})
-        if chemin == "/api/bench-historique":                     # Santé : l'évolution des mesures de chaque modèle et les régressions
-            historique = _bench.read_history(_m.bench_path())
-            return self._envoyer(200, {"regressions": _bench.regressions(_m.bench_path()), "modeles": [{"modele": m, "mesures": v[-6:]} for m, v in historique.items() if len(v) >= 1]})
-        if chemin == "/api/sorties":                              # Santé : ce qui est sorti de la machine (recherches envoyées à un service extérieur)
-            return self._envoyer(200, {"entrees": _sorties.read(60), "modifiable": self._configurateur()})
-        if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
-            return self._envoyer(200, dict(_recherche.view(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
-        if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
-            return self._envoyer(200, _mesures.view(_m.DATA, dict(_moteurs.ENGINES), _m.settings()))
-        if chemin.split("?")[0] in MANAGED_MODEL_ROUTES:          # onglet Modèles d'un serveur géré par Lutin : ce qui est téléchargé, ce qu'on peut télécharger, jugé pour cette machine
-            return self._modeles_serveur_gere(chemin)
-        if chemin == "/api/machines":                             # onglet Machines : le nœud de cette machine, les machines appairées et leur état
-            return self._envoyer(200, self._vue_machines())
-        if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
-            return self._envoyer(200, _ressources.state())
-        if chemin == "/api/sante-systeme":
-            return self._envoyer(200, _m.health_state())
-        if chemin == "/api/git":
-            return self._envoyer(200, _m.git_state())
-        if chemin == "/api/revue":
-            try:
-                return self._envoyer(200, _m.turn_review((re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]))
-            except ValueError as erreur:
-                return self._envoyer(404, {"erreur": str(erreur)})
-        if chemin == "/api/recherche":
-            return self._envoyer(200, _m.search_conversations(urllib.parse.unquote_plus(self.path.split("q=", 1)[1]) if "q=" in self.path else ""))
-        if chemin == "/api/contexte":
-            try:
-                ident = (re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]
-                return self._envoyer(200, _m.context_gauge(_m.conv_read(ident)))
-            except ValueError as erreur:
-                return self._envoyer(404, {"erreur": str(erreur)})
         if chemin in ("/manifest.webmanifest", "/icone.svg", "/logo.svg") or re.match(r"^/icone-(180|192|512)\.png$", chemin):
             return self._statique_pwa(chemin)
-        if chemin == "/api/memoire":
-            return self._envoyer(200, {"CONTEXTE.md": _m.read_memory("CONTEXTE.md"), "MEMOIRE.md": _m.read_memory("MEMOIRE.md")})
-        if chemin == "/api/skills":
-            liste = [{"nom": n, "titre": t} for n, t in _m.list_skills()]
-            return self._envoyer(200, {"skills": liste})
-        if chemin.startswith("/api/skills/"):
-            nom = urllib.parse.unquote(chemin[len("/api/skills/"):])
-            try:
-                return self._envoyer(200, {"nom": nom, "texte": _m.read_skill(nom)})
-            except (OSError, ValueError) as erreur:
-                return self._envoyer(404, {"erreur": str(erreur)})
-        if chemin == "/api/conversation":
+        if chemin == "/api/conversation" and self._via_relais:          # the machine protocol: a paired machine reads a conversation it leads here
             try:
                 ident = (re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]
                 return self._envoyer(200, dict(_m.conv_read(ident), options=_m.options_read(ident)))          # + les options de cette conversation (accords automatiques, mode…)
             except ValueError as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
-        # Fichiers statiques (lib/)
-        if chemin.startswith("/lib/"):
-            nom = chemin[5:]  # retire "/lib/"
-            base = (_m.WEB / "lib").resolve()
-            if not nom or ":" in nom or "\\" in nom or nom.startswith("/") or ".." in nom:          # avant tout accès disque (un chemin réseau ferait contacter une autre machine)
-                return self._envoyer(403, {"erreur": "interdit"})
-            try:
-                # Un chemin absolu (« C:/... », « \\serveur\... ») remplacerait le dossier lib/ dans la jointure : on vérifie le résultat final.
-                fichier = (base / nom).resolve()
-                dedans = fichier == base or base in fichier.parents
-            except (OSError, ValueError):
-                dedans = False
-            if not dedans:
-                return self._envoyer(403, {"erreur": "interdit"})
-            if fichier.is_file():
-                contenu = fichier.read_bytes()
-                mime = "application/javascript" if nom.endswith(".js") else "text/css" if nom.endswith(".css") else "application/octet-stream"
-                return self._envoyer(200, contenu, mime)
         return self._envoyer(404, {"erreur": "introuvable"})
 
     def _statique_pwa(self, chemin):
@@ -797,32 +307,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(200, _m.ICONE_SVG, "image/svg+xml; charset=utf-8")
         return self._envoyer(200, _m.icon_png(int(re.search(r"(\d+)", chemin).group(1))), "image/png")
 
-    @staticmethod
-    def _outil_vivant():
-        if not _m.TOOL_URL:
-            return False
-        try:
-            with urllib.request.urlopen(_m.TOOL_URL + "/api/sante", timeout=1.5):
-                return True
-        except (urllib.error.URLError, OSError, ValueError):
-            return False
 
     def _taille_corps(self):
         """La taille annoncée du corps de la requête : un nombre positif ou nul ; une valeur absurde (négative ou pas un nombre) vaut « trop gros », jamais une lecture sans fin."""
         brut = str(self.headers.get("Content-Length") or "0").strip()
         return int(brut) if brut.isascii() and brut.isdigit() else 1 << 40
 
-    def _restaurer(self):
-        if not self._authentifie():
-            return self._envoyer(401, {"erreur": "authentification requise"})
-        if not self._jeton_valide():
-            return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
-        if not self._configurateur():
-            return self._envoyer(403, {"erreur": _t("Une sauvegarde se restaure depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin restore.")})
-        try:
-            return self._envoyer(200, _acces.restore_stream(self.rfile, self._taille_corps()))
-        except ValueError as e:
-            return self._envoyer(400, {"erreur": str(e)})
 
     def _image(self):
         """Une image jointe : corps brut (le type est reconnu au contenu), au plus 8 Mo."""
@@ -875,14 +365,10 @@ class Handler(BaseHTTPRequestHandler):
             return _api_v1.dispatch(self, "POST")
         if self.path.startswith("/api/noeud/relais/"):
             return self._relais("POST")
-        if self.path.startswith("/h/"):
-            return self._vers_hote("POST")
-        if self.path == "/api/image":
+        if self.path == "/api/image" and self._via_relais:
             return self._image()
-        if self.path == "/api/document":
+        if self.path == "/api/document" and self._via_relais:
             return self._document()
-        if self.path == "/api/restaurer":                      # une archive .zip : corps brut, plus gros qu'un message
-            return self._restaurer()
         taille = self._taille_corps()
         if taille > 2_000_000:
             return self._envoyer(413, {"erreur": "message trop gros"})
@@ -928,307 +414,26 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(401, {"erreur": "authentification requise"})
         if not self._jeton_valide():
             return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
+        if not self._via_relais:                               # below: only the routes of the machine protocol, reached through /api/noeud/relais (RELAIS_POST)
+            return self._envoyer(404, {"erreur": "introuvable"})
         try:
-            if self.path == "/api/notes-ajouter":
-                try:
-                    _donnees.add_note(str(donnees.get("texte", "")))
-                except _m.ToolError as e:
-                    raise ValueError(str(e)) from e
-                return self._envoyer(200, {"notes": _donnees.list_notes()})
-            if self.path == "/api/notes-supprimer":
-                _donnees.delete_note(str(donnees.get("ligne", "")))
-                return self._envoyer(200, {"notes": _donnees.list_notes()})
-            if self.path == "/api/acces":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Le niveau d'accès ne se change que depuis cette machine.")})
-                return self._envoyer(200, _acces.apply(donnees, True))
-            if self.path == "/api/mettre-a-jour":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("La mise à jour se lance depuis cette machine (ou avec la commande lutin update).")})
-                return self._envoyer(200, _acces.update())
-            if self.path == "/api/redemarrer":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Le redémarrage se demande depuis cette machine.")})
-                return self._envoyer(200, _acces.restart())
-            if self.path == "/api/nouveau-pin":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": "le code ne se demande que depuis cette machine"})
-                return self._envoyer(200, {"pin": _m.DEVICES.nouveau_pin(), "valable_s": _sec.DURATION_PIN_S})
-            if self.path == "/api/appareils":
-                return self._envoyer(200, {"appareils": _m.DEVICES.liste(), "niveau": _m.SECURITY.niveau})
-            if self.path == "/api/appareils-revoquer":
-                return self._envoyer(200, {"revoques": _m.DEVICES.revoquer(donnees.get("id") or None)})
             if self.path == "/api/chat":
                 return self._chat(donnees)
-            if self.path == "/api/autotest":
-                return self._envoyer(200, _m.run_selftest(bool(donnees.get("profond"))))
             if self.path == "/api/annuler-tour":
                 return self._envoyer(200, _m.undo_turn(str(donnees.get("conversation", ""))))
-            if self.path == "/api/annuler-fichier":
-                return self._envoyer(200, _m.undo_turn(str(donnees.get("conversation", "")), str(donnees.get("chemin", ""))))
             if self.path == "/api/epingler" and str(donnees.get("id", "")) in _m.ACTIVE_TURNS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
             if self.path == "/api/epingler":
                 return self._envoyer(200, _m.pin_conversation(str(donnees.get("id", "")), donnees.get("epingle")))
-            if self.path == "/api/git-message":
-                return self._envoyer(200, _m.git_message_of(donnees.get("fichiers")))
-            if self.path == "/api/git-commit":
-                return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
             if self.path == "/api/memoire-choix":                                   # ancienne réponse à « fiche de suivi ou résumé ? » : la question n'est plus posée (ADR 0019), toujours 409
                 if not _m.answer_memory_choice(str(donnees.get("conversation", "")), str(donnees.get("choix", "")), donnees.get("garder")):
                     return self._envoyer(409, {"erreur": _t("Plus de question en attente pour cette conversation.")})
-                return self._envoyer(200, {"ok": True})
-            if self.path in ("/api/suivi", "/api/suivi-vider", "/api/memoire-conversation"):
-                ident = str(donnees.get("conversation", ""))
-                with _m.TURNS_LOCK:
-                    if ident in _m.ACTIVE_TURNS:
-                        return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
-                conv = _m.conv_read(ident)
-                r = _m.settings()
-                if self.path == "/api/suivi":
-                    _suivi.write(ident, _suivi.parse(str(donnees.get("texte", ""))[:20000]))
-                elif self.path == "/api/suivi-vider":
-                    _suivi.delete(ident)
-                else:
-                    if str(donnees.get("mode", "")) not in ("", "resume", "fichier"):          # accepté sans effet : la fiche de suivi pour toute conversation (ADR 0019)
-                        raise ValueError(_t("Mémoire des longues conversations inconnue (resume ou fichier)."))
-                return self._envoyer(200, {"mode": _m.long_memory(conv, r), "mesure": _suivi.measure(ident, r["num_ctx"]), "amorce": 0})
-            if self.path == "/api/embeddings-installer":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
-                return self._envoyer(200, _embeddings.start_installation())
-            if self.path == "/api/mission-action":                   # pause, reprise, arrêt d'une mission : comme envoyer un message, pour qui peut discuter
-                try:
-                    return self._envoyer(200, _mission.action(str(donnees.get("action", "")), donnees))
-                except ValueError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path in ("/api/conversation-dossiers", "/api/conversation-dossier-ouvrir"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                try:
-                    ident = str(donnees.get("id", ""))
-                    if self.path == "/api/conversation-dossiers":
-                        return self._envoyer(200, {"dossiers": _fichiers.folders_conversation(ident), "ouverture_possible": _fichiers.opening_possible()})
-                    return self._envoyer(200, _fichiers.open_folder_conversation(ident, str(donnees.get("chemin", ""))))
-                except (ValueError, OSError) as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path in ("/api/fichiers-crees-supprimer", "/api/fichiers-crees-dossier"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                try:
-                    if self.path == "/api/fichiers-crees-dossier":
-                        return self._envoyer(200, _fichiers.open_folder(str(donnees.get("id", ""))))
-                    ids = donnees.get("ids")
-                    return self._envoyer(200, _fichiers.remove_selection([str(i) for i in ids][:2000] if isinstance(ids, list) else []))
-                except ValueError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path == "/api/piece-ouvrir":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("L'ouverture d'un fichier se fait depuis cette machine : télécharge-le plutôt.")})
-                try:
-                    return self._envoyer(200, _fichiers.part_open(str(donnees.get("id", "")), str(donnees.get("nom", ""))))
-                except ValueError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path in ("/api/fichier-ouvrir", "/api/fichier-supprimer", "/api/media-supprimer") and not self._configurateur():
-                return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})          # un appareil appairé ne supprime ni n'ouvre rien sur la machine
-            if self.path in ("/api/fichier-ouvrir", "/api/fichier-supprimer"):
-                try:
-                    f = _fichiers.open_item if self.path == "/api/fichier-ouvrir" else _fichiers.remove
-                    return self._envoyer(200, f(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
-                except ValueError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path == "/api/media-supprimer":
-                return self._envoyer(200, _m.delete_media(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
-            if self.path == "/api/conversation-options":
-                ident = str(donnees.get("conversation", ""))
-                if not _m.conv_exists(ident):
-                    return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
-                return self._envoyer(200, {"options": _m.options_write(ident, donnees.get("options"))})
-            if self.path == "/api/epingler-message":
-                return self._envoyer(200, _m.pin_message(str(donnees.get("conversation", "")), donnees.get("index"), donnees.get("epingle")))
-            if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/addon-action", "/api/fond-creer", "/api/fond-action"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                try:
-                    if self.path == "/api/addon-activer":
-                        return self._envoyer(200, _addons.activate(str(donnees.get("id", "")), bool(donnees.get("actif"))))
-                    if self.path == "/api/addon-reglages":
-                        return self._envoyer(200, _addons.save_settings(str(donnees.get("id", "")), donnees.get("reglages") if isinstance(donnees.get("reglages"), dict) else {}))
-                    if self.path == "/api/addon-verifier":
-                        return self._envoyer(200, _addons.check(str(donnees.get("id", ""))))
-                    if self.path == "/api/addon-correction":
-                        return self._envoyer(200, _addons.propose_fix(str(donnees.get("id", ""))))
-                    if self.path == "/api/addon-flux":
-                        return self._envoyer(200, _addons.apply_stream(str(donnees.get("id", "")), donnees.get("flux")))
-                    if self.path == "/api/addon-flux-restaurer":
-                        return self._envoyer(200, _addons.restore_stream(str(donnees.get("id", ""))))
-                    if self.path == "/api/addon-action":
-                        return self._envoyer(200, _addons.action(str(donnees.get("id", "")), donnees.get("action", ""), donnees))
-                    if self.path == "/api/fond-creer":
-                        return self._envoyer(200, _fond.create(donnees.get("nom"), donnees.get("dossier"), donnees.get("motifs"), donnees.get("consigne"), bool(donnees.get("regulier")), donnees.get("intervalle_h", 24), bool(donnees.get("essai"))))
-                    return self._envoyer(200, _fond.action(str(donnees.get("id", "")), str(donnees.get("action", ""))))
-                except (_addons.AddonError, ValueError) as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path == "/api/travaux-apercu":
-                return self._envoyer(200, _m.work_preview(str(donnees.get("id", ""))))
-            if self.path in ("/api/dossier-modeles-analyse", "/api/dossier-modeles-copie", "/api/redemarrer-ollama"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
-                from . import locations
-                if self.path == "/api/dossier-modeles-analyse":
-                    return self._envoyer(200, locations.analyze_folder(str(donnees.get("chemin", ""))))
-                if self.path == "/api/dossier-modeles-copie":
-                    return self._envoyer(200, locations.copy_models(str(donnees.get("chemin", ""))))
-                return self._envoyer(200, {"message": _m.restart_ollama()})
-            if self.path == "/api/dossier-modeles":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
-                from . import locations
-                return self._envoyer(200, {"dossier": str(locations.set_models_folder(str(donnees.get("chemin", "")))), "note": _t("Les modèles déjà téléchargés ne sont pas déplacés : déplace-les à la main dans le nouveau dossier, ou retélécharge-les. Redémarre Ollama (quitte-le puis relance-le) pour qu'il utilise le nouveau dossier.")})
-            if self.path == "/api/travaux-choisir":
-                return self._envoyer(200, _m.choose_work(str(donnees.get("id", ""))))
-            if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer", "/api/travaux-deplacer", "/api/travaux-chemin"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": "Les dossiers de travail se gèrent depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin workspaces."})
-                if self.path == "/api/travaux-ajouter":
-                    return self._envoyer(200, _m.add_work(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
-                if self.path == "/api/travaux-deplacer":
-                    return self._envoyer(200, _m.move_work(str(donnees.get("id", "")), str(donnees.get("parent", "")), str(donnees.get("nom", ""))))
-                if self.path == "/api/travaux-chemin":
-                    return self._envoyer(200, _m.change_work_path(str(donnees.get("id", "")), str(donnees.get("chemin", ""))))
-                return self._envoyer(200, _m.remove_work(str(donnees.get("id", "")), bool(donnees.get("nettoyer"))))
-            if self.path in ("/api/reprise-detecter", "/api/reprise"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("La reprise des données d'un autre assistant se fait depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin migrate.")})
-                if self.path == "/api/reprise-detecter":
-                    return self._envoyer(200, _m.resume_detect(str(donnees.get("chemin", "")), str(donnees.get("dossier_skills", ""))))
-                return self._envoyer(200, _m.resume_import(str(donnees.get("chemin", "")), [str(c) for c in (donnees.get("choix") or [])], str(donnees.get("dossier_skills", "")), bool(donnees.get("ecraser")), str(donnees.get("cible", ""))))
-            if self.path == "/api/importer-claude":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin import-project.")})
-                return self._envoyer(200, _m.import_claude_project(str(donnees.get("chemin", "")), str(donnees.get("mode", "")), str(donnees.get("vers", "")), str(donnees.get("nom", ""))))
-            if self.path in ("/api/notifications-ajouter", "/api/notifications-supprimer", "/api/notifications-tester"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Les notifications se règlent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                if self.path == "/api/notifications-ajouter":
-                    return self._envoyer(200, {"canaux": _notif.add(donnees.get("nom"), str(donnees.get("type", "")), donnees.get("params"))})
-                if self.path == "/api/notifications-supprimer":
-                    return self._envoyer(200, {"canaux": _notif.remove(str(donnees.get("id", "")))})
-                return self._envoyer(200, _notif.test_channel(str(donnees.get("id", ""))))
-            if self.path.startswith(("/api/github-", "/api/skills-tiers-")):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                return self._skills_tiers_ecrire(self.path, donnees)
-            if self.path in ("/api/planifie-ajouter", "/api/planifie-modifier", "/api/planifie-arreter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer", "/api/planifie-notifier"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Les tâches planifiées se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                ident = str(donnees.get("id", ""))
-                if self.path == "/api/planifie-ajouter":
-                    return self._envoyer(200, _plan.add(donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail"), donnees.get("notifier"), donnees.get("date")))
-                if self.path == "/api/planifie-modifier":
-                    return self._envoyer(200, _plan.change(ident, donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail"), donnees.get("notifier"), donnees.get("date")))
-                if self.path == "/api/planifie-arreter":
-                    return self._envoyer(200, _plan.stop_task(ident))
-                if self.path == "/api/planifie-notifier":
-                    return self._envoyer(200, _plan.set_notification(ident, donnees.get("canal")))
-                if self.path == "/api/planifie-supprimer":
-                    return self._envoyer(200, _plan.remove(ident, bool(donnees.get("conversation"))))
-                if self.path == "/api/planifie-activer":
-                    return self._envoyer(200, _plan.modify(ident, actif=bool(donnees.get("actif"))))
-                if ident in _plan.RUNNING:
-                    raise ValueError(_t("Cette tâche travaille déjà."))
-                if len(_m.ACTIVE_TURNS) >= _m.CONCURRENT_TURNS:
-                    raise ValueError(_t("Une réponse est déjà en cours : attends sa fin."))
-                threading.Thread(target=lambda: _plan.execute(ident), daemon=True, name="planifie-lancer").start()
-                return self._envoyer(200, {"ok": True})
-            if self.path == "/api/calibrage":
-                action = str(donnees.get("action", ""))
-                if action == "start":
-                    return self._envoyer(200, _calibrage.start())
-                if action == "cancel":
-                    return self._envoyer(200, _calibrage.cancel())
-                if action == "apply":
-                    return self._envoyer(200, _calibrage.apply())
-                return self._envoyer(400, {"erreur": _t("Action inconnue.")})
-            if self.path == "/api/conseil-machine":
-                action = str(donnees.get("action", ""))
-                if action == "ignorer":
-                    _m.save_settings({"conseil_machine": False})
-                    return self._envoyer(200, {"ok": True})
-                if action == "appliquer":
-                    changements = _conseil_machine.apply(_adequation.ready_profile(), _m.settings())
-                    if changements:
-                        _m.save_settings(changements)
-                    return self._envoyer(200, {"ok": True, "appliques": changements})
-                return self._envoyer(400, {"erreur": _t("Action inconnue.")})
-            if self.path == "/api/bench-serie":
-                return self._envoyer(200, _m.start_bench_series([str(x) for x in (donnees.get("modeles") or [])][:8], bool(donnees.get("rapide"))))
-            if self.path == "/api/bench":
-                return self._envoyer(200, _m.start_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
-            if self.path == "/api/version-ignorer":
-                chemin = os.environ.get("LUTIN_VERSION_CACHE")
-                if not chemin:
-                    raise ValueError("Pas de vérification de version dans ce mode de lancement.")
-                from . import updates
-                updates.ignore_version(chemin, str(donnees.get("version", ""))[:40])
-                return self._envoyer(200, {"ok": True})
-            if self.path == "/api/verifier-lutin":                    # bouton « Vérifier les mises à jour » : une requête GitHub, tout de suite
-                chemin = os.environ.get("LUTIN_VERSION_CACHE")
-                if not chemin:
-                    return self._envoyer(400, {"erreur": _t("Pas de vérification de version dans ce mode de lancement.")})
-                from . import updates
-                avant = updates.read_version_file(chemin).get("date") or 0
-                d = updates.check_lutin({"cache": str(Path(chemin).parent)}, force=True)
-                if (d.get("date") or 0) <= avant:
-                    return self._envoyer(503, {"erreur": _t("Impossible de joindre GitHub : {}").format(d.get("erreur") or "?"), "actuelle": _m.VERSION})
-                return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": updates.read_version_file(chemin).get("version", ""), "nouvelle": _m.new_lutin_version()})
-            if self.path == "/api/langue":
-                try:
-                    return self._envoyer(200, {"langue": _i18n.save_language(str(donnees.get("valeur", "")).strip().lower())})
-                except ValueError:
-                    raise ValueError("Langue inconnue (fr, en ou auto).")
-            if self.path == "/api/hors-ligne":
-                voulu = bool(donnees.get("actif"))
-                if not voulu and not self._configurateur():
-                    return self._envoyer(403, {"erreur": "Le mode hors ligne ne se coupe que depuis cette machine."})
-                return self._envoyer(200, {"hors_ligne": _hl.set_mode(voulu)})
-            if self.path == "/api/modeles-verifier":
-                if _m.MODEL_CHECKER is None:
-                    return self._envoyer(501, {"erreur": "La vérification des modèles n'est pas disponible dans ce mode de lancement."})
-                portee = str(donnees.get("portee", "tout"))
-                if portee not in ("maj", "nouveaux", "tout"):
-                    raise ValueError("Portée inconnue.")
-                return self._envoyer(200, _m.MODEL_CHECKER(portee))
-            if self.path == "/api/propositions-traiter":
-                return self._envoyer(200, _m.handle_proposal(str(donnees.get("cle", "")), bool(donnees.get("appliquer"))))
-            if self.path == "/api/taches-effacer":
-                ident = str(donnees.get("conversation", ""))
-                with _m.TURNS_LOCK:
-                    travaille = ident in _m.ACTIVE_TURNS               # un tour en cours réécrit la conversation : on ne la touche pas
-                if not travaille:
-                    c = _m.conv_read(ident)
-                    c["taches"] = []
-                    _m.conv_write(c)
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/arreter":
                 return self._envoyer(200, _m.stop_conversation(str(donnees.get("conversation", ""))))
             if self.path == "/api/approuver":
                 _m.answer_pending(str(donnees.get("id", "")), donnees.get("ok"), bool(donnees.get("reactiver")))
                 return self._envoyer(200, {"ok": True})
-            if self.path == "/api/reglages":
-                rep = _m.save_settings(donnees)
-                if donnees.get("cluster") is False:
-                    _machines.clear_lists()          # mode multi-machines éteint : plus aucun modèle ni conversation distante gardé
-                return self._envoyer(200, rep)
-            if self.path == "/api/memoire":
-                _m.write_memory(str(donnees.get("fichier", "")), str(donnees.get("texte", "")))
-                return self._envoyer(200, {"ok": True})
-            if self.path == "/api/skills":
-                return self._envoyer(200, _m.write_skill(str(donnees.get("nom", "")), str(donnees.get("texte", ""))))
-            if self.path == "/api/skills-supprimer":
-                return self._envoyer(200, _m.delete_skill(str(donnees.get("nom", ""))))
-            if self.path == "/api/nouvelle":
-                return self._envoyer(200, _m.conv_new())
             if self.path in ("/api/supprimer", "/api/renommer", "/api/epingler") and str(donnees.get("id", "")) in _m.ACTIVE_TURNS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})          # sinon la fin de la réponse réécrirait la conversation par-dessus
             if self.path == "/api/supprimer":
@@ -1238,284 +443,12 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/renommer":
                 c = _m.conv_rename(str(donnees.get("id", "")), str(donnees.get("titre", "")))
                 return self._envoyer(200, {"ok": True, "titre": c["titre"]})
-            if self.path == "/api/titre-ia":
-                return self._titre_ia(donnees)
-            if self.path == "/api/installer-modele":
-                return self._envoyer(200, _m.install_model(str(donnees.get("modele", ""))))
-            if self.path == "/api/compacter":
-                return self._envoyer(200, _m.compact_conversation(str(donnees.get("conversation", ""))))
-            if self.path == "/api/plan":
-                _m.refresh_plan(force=True)
-                return self._envoyer(200, {"ok": True})
-            if self.path == "/api/rappeler":
-                try:
-                    return self._envoyer(200, {"texte": _m.recall_tool(str(donnees.get("requete", "")), 6)})
-                except _m.ToolError as erreur:
-                    raise ValueError(str(erreur))
-            if self.path == "/api/oublier-modele":
-                return self._envoyer(200, _m.forget_model(str(donnees.get("modele", ""))))
-            if self.path == "/api/modeles-restaurer":
-                return self._envoyer(200, _m.restore_models())
-            if self.path == "/api/admin-distance":
-                if not self._configurateur_strict():
-                    return self._envoyer(403, {"erreur": _t("L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin security).")})
-                if _acces.in_docker():
-                    return self._envoyer(400, {"erreur": _t("Dans Docker, l'administration à distance se règle avec la variable LUTIN_ADMIN_TOUS du conteneur (docs/DOCKER.md).")})
-                cfg = _m.read_config()
-                cfg["admin_a_distance"] = bool(donnees.get("actif"))
-                _m.write_config(cfg)
-                _m.log_event("Administration à distance {}.".format("ouverte" if cfg["admin_a_distance"] else "fermée"))
-                return self._envoyer(200, {"actif": cfg["admin_a_distance"]})
-            if self.path == "/api/web-recherche-config":               # l'adresse de SearXNG (seul hôte local que la recherche peut joindre) et les clés d'API : comme les connecteurs MCP (cette machine, ou LUTIN_ADMIN_TOUS / LUTIN_ADMINS)
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Régler la recherche web (adresse de SearXNG, clés d'API) est verrouillé depuis cet appareil. Depuis la machine elle-même c'est toujours possible ; en Docker ou depuis un autre appareil, ajoute LUTIN_ADMIN_TOUS=1 (ou ton nom dans LUTIN_ADMINS) au docker-compose, puis redémarre.")})
-                try:
-                    vue = _recherche.save(**{k: donnees[k] for k in ("searxng", "brave_cle", "tavily_cle", "exa_cle", "perplexity_cle") if k in donnees})
-                except ValueError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-                return self._envoyer(200, dict(vue, moteurs=_m.etat_moteurs_recherche(), modifiable=True))
-            if self.path == "/api/web-recherche-test":                 # interroge chaque moteur séparément et dit lequel marche
-                return self._envoyer(200, {"resultats": _m.tester_moteurs_recherche()})
-            if self.path.startswith("/api/machines-"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Ajouter une machine, ou prêter le moteur de celle-ci, se fait depuis cette machine (ou par un administrateur déclaré).")})
-                try:
-                    return self._envoyer(200, self._machines(self.path[len("/api/machines-"):], donnees))
-                except ValueError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path == "/api/observatoire-vider":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine elle-même.")})
-                _observatoire.clear()
-                return self._envoyer(200, {"ok": True})
-            if self.path == "/api/sorties-vider":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine elle-même.")})
-                _sorties.clear()
-                return self._envoyer(200, {"ok": True})
-            if self.path == "/api/web-apercu":                          # /web : les résultats BRUTS d'une recherche, sans modèle ; la requête est nettoyée comme pour le modèle
-                requete = str(donnees.get("q") or "").strip()[:300]
-                if len(requete) < 2:
-                    return self._envoyer(400, {"erreur": _t("Écris quelques mots à chercher, par exemple /web prix du kWh en France.")})
-                propre, retire = _sorties.clean_query(requete)
-                trouves, raisons = _web.search_results(propre or requete, 8) if propre else ([], [_t("requête vide une fois les données personnelles retirées")])
-                return self._envoyer(200, {"requete": propre, "retire": retire, "raisons": raisons,
-                                           "resultats": [{"titre": x.get("titre", ""), "url": x.get("url", ""), "extrait": str(x.get("extrait", ""))[:300], "date": x.get("date", ""), "source": x.get("source", ""),
-                                                          "domaine": _recherche.domain(x.get("url", ""))} for x in trouves]})
-            if self.path == "/api/moteurs-dossier":                    # le dossier où tous les moteurs s'installent (comme le dossier des modèles)
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                try:
-                    _llamacpp.set_engines_folder(donnees.get("dossier"))
-                except _llamacpp.EngineError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-                return self._envoyer(200, {"ok": True, "dossier_moteurs": _llamacpp.engines_folder_view()})
-            if self.path.startswith("/api/moteur-"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                mo = _moteurs.ENGINES.get(str(donnees.get("moteur", "")))
-                if mo is None:
-                    return self._envoyer(400, {"erreur": _t("Moteur inconnu.")})
-                action = self.path[len("/api/moteur-"):]
-                try:
-                    if action == "action":
-                        voulue = str(donnees.get("action", ""))
-                        possible = (mo.actions().get(voulue) or {})
-                        if voulue not in _moteurs.ACTIONS or not possible.get("possible"):
-                            return self._envoyer(400, {"erreur": possible.get("raison") or _t("Cette action n'est pas possible avec ce moteur.")})
-                        return self._envoyer(200, {"tache": _moteurs.launch_task(mo, voulue)})
-                    if action == "annuler":
-                        return self._envoyer(200, {"annule": _moteurs.cancel_task(mo.id)})
-                    if action == "regler":
-                        _llamacpp.apply_settings(mo, donnees)
-                        return self._envoyer(200, {"ok": True})
-                    if action == "telecharger":
-                        repo, fichier = str(donnees.get("repo", "")), str(donnees.get("fichier", ""))
-                        if not mo.telechargeable()["possible"]:
-                            return self._envoyer(400, {"erreur": mo.telechargeable()["raison"]})
-                        return self._envoyer(200, {"tache": _moteurs.launch_task(mo, "telecharger", lambda a, progression: mo.telecharger_modele(repo, fichier, progression))})
-                    if action == "supprimer":
-                        mo.supprimer_modele(str(donnees.get("nom", "")))
-                        return self._envoyer(200, {"ok": True})
-                except (ValueError, OSError) as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path in ("/api/outils-installer", "/api/outils-desinstaller"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Installer un programme se fait depuis la machine de Lutin (ou par un administrateur déclaré).")})
-                try:
-                    if self.path.endswith("installer") and not self.path.endswith("desinstaller"):
-                        _outils_externes.install(str(donnees.get("nom", "")))
-                    else:
-                        _outils_externes.uninstall(str(donnees.get("nom", "")))
-                    return self._envoyer(200, {"ok": True})
-                except ValueError as e:
-                    return self._envoyer(400, {"erreur": str(e)})
-            if self.path.startswith("/api/mcp-"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Brancher un connecteur lance un programme : ça se fait depuis la machine de Lutin (ou par un administrateur déclaré).")})
-                action = self.path[len("/api/mcp-"):]
-                if action == "ajouter":
-                    ident = _mcp.add(str(donnees.get("nom", "")), donnees.get("commande"), donnees.get("url", ""), donnees.get("env"), donnees.get("entetes"))
-                    return self._envoyer(200, {"id": ident})
-                if action == "catalogue-installer":
-                    return self._envoyer(200, _mcp_catalogue.install(str(donnees.get("id", "")), donnees.get("saisie") or {}))
-                if action == "demo":
-                    ident = _mcp.add(_t("Démonstration"), [sys.executable, "-m", "lutin.mcp_demo"], "", {"PYTHONPATH": str(Path(__file__).resolve().parent.parent)})
-                    return self._envoyer(200, {"id": ident})
-                ident = str(donnees.get("id", ""))
-                if action == "supprimer":
-                    _mcp.remove(ident)
-                    return self._envoyer(200, {"ok": True})
-                if action == "actualiser":
-                    return self._envoyer(200, {"outils": _mcp.refresh(ident)})
-                if action == "regler":
-                    _mcp.set_value(ident, donnees.get("actif"), donnees.get("lecture_seule"), donnees.get("outil"), donnees.get("autorise"), donnees.get("env"), donnees.get("entetes"))
-                    return self._envoyer(200, {"ok": True})
-            if self.path == "/api/mesurer-moteur":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                if _m.ACTIVE_TURNS:
-                    return self._envoyer(409, {"erreur": _t("Une réponse est en cours : attends sa fin avant de mesurer (la mesure occupe le moteur).")})
-                if str(donnees.get("moteur", "")) not in _moteurs.ENGINES:
-                    return self._envoyer(400, {"erreur": _t("Moteur inconnu.")})
-                mo = _moteurs.by_id(str(donnees["moteur"]))
-                modele = str(donnees.get("modele", ""))
-                return self._envoyer(200, _mesures.launch(_m.DATA, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memory_of_engine(mo.id, modele)))
-            if self.path in ("/api/exllamav3-verifier", "/api/lmstudio-verifier", "/api/colibri-verifier"):          # chercher les mises à jour des modèles téléchargés (ExLlamaV3), ou de nouveaux modèles qui tiennent sur cette machine
-                genre = self.path[len("/api/"):-len("-verifier")]
-                if not _geres.chosen(genre):
-                    return self._envoyer(400, {"erreur": _t("Ce serveur n'est pas le serveur choisi.")})
-                try:
-                    return self._envoyer(200, _geres.check(genre, str(donnees.get("portee"))))
-                except ValueError as e:
-                    return self._envoyer(502, {"erreur": str(e)})
-            if self.path in ("/api/exllamav3-telecharger", "/api/lmstudio-telecharger", "/api/colibri-preparer"):
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                genre = self.path[len("/api/"):].split("-")[0]
-                if not _geres.chosen(genre):
-                    return self._envoyer(400, {"erreur": _t("{} n'est pas le serveur choisi.").format(_geres.NAMES[genre])})
-                if genre == "exllamav3":
-                    return self._envoyer(200, _geres.download(genre, str(donnees.get("depot", "")), str(donnees.get("revision", ""))))
-                if genre == "lmstudio":
-                    nom = str(donnees.get("nom", ""))[:121]
-                    return self._envoyer(200, _moteurs.launch_task(_geres.engine(genre), "telecharger:" + nom))
-                return self._envoyer(200, _geres.download(genre, str(donnees.get("id", ""))))
-            if self.path == "/api/supprimer-modele":
-                return self._envoyer(200, _m.delete_model(str(donnees.get("modele", ""))))
-            if self.path == "/api/demarrer-ollama":
-                return self._envoyer(200, {"message": _m.start_ollama()})
-            if self.path == "/api/bench-moteurs":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                _bench_moteurs.launch(_m.settings()["modele"], str(donnees.get("mode", "rapide")), _m.DATA, _moteurs.CONTEXT["profil"]())
-                return self._envoyer(200, {"ok": True})
-            if self.path == "/api/decharger":                          # décharger une chose de la liste des ressources (modèle d'Ollama, serveur llama.cpp, ComfyUI)
-                return self._envoyer(200, _ressources.unload(donnees.get("id")))
-            if self.path == "/api/liberer-vram":
-                return self._envoyer(200, _m.free_vram(tout=True))
-            if self.path == "/api/resumer":
-                return self._resumer(donnees)
         except (ValueError, OSError, TypeError, subprocess.SubprocessError) as erreur:
             return self._envoyer(400, {"erreur": str(erreur)})
         return self._envoyer(404, {"erreur": "introuvable"})
 
     # ---- ce Lutin prête son moteur à une autre machine (voir lutin.machines) ----
-    @staticmethod
-    def _racines_travail():
-        """{id: chemin} des dossiers de travail, et l'identifiant du dossier actif (où les skills s'installent par défaut)."""
-        cfg = _m.read_config()
-        actif = _travaux.active(cfg)
-        return {t["id"]: t["chemin"] for t in _travaux.entries(cfg)}, (actif["id"] if actif else "")
 
-    def _skills_tiers_lire(self, chemin):
-        q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-        un = lambda cle, defaut="": (q.get(cle) or [defaut])[0]  # noqa: E731
-        try:
-            if chemin == "/api/skills-tiers":                     # tout ce que la page demande en arrivant
-                racines, actif = self._racines_travail()
-                return self._envoyer(200, {"sources": _skills.sources(), "github": _github.view(), "travaux": [{"id": i, "nom": Path(c).name or c} for i, c in racines.items()], "actif": actif,
-                                           "indexation": {d: dict(e) for d, e in _skills.INDEXING.items()}, "modifiable": self._configurateur()})
-            if chemin == "/api/skills-tiers-chercher":
-                depots = [d for d in un("depots").split(",") if d] or [s["depot"] for s in _skills.sources()]
-                connus = {s["depot"] for s in _skills.sources()}
-                if any(d not in connus for d in depots):
-                    return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
-                return self._envoyer(200, _skills.search(un("q"), depots, un("page", "1")))
-            if chemin == "/api/skills-tiers-depots":
-                return self._envoyer(200, {"depots": _skills.search_repos(un("q"))})
-            if chemin == "/api/skills-tiers-listes":                # les dépôts cités par les listes communautaires
-                return self._envoyer(200, {"depots": _skills.listed_repos(un("q"))})
-            if chemin == "/api/skills-tiers-fiche":
-                depot = "/".join(_skills.read_repo(un("depot")))
-                if depot not in {s["depot"] for s in _skills.sources()}:
-                    return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
-                return self._envoyer(200, _skills.card(depot, un("dir")))
-            if chemin == "/api/skills-tiers-installes":
-                racines, _ = self._racines_travail()
-                liste = _skills.installed(racines)
-                return self._envoyer(200, {"installes": _skills.available_updates(liste) if un("verifier") == "1" else liste})
-        except ValueError as e:
-            return self._envoyer(400, {"erreur": str(e)})          # jamais 5xx : une lecture qui échoue (limite de GitHub, réseau) est un refus expliqué, pas une panne de Lutin
-        return self._envoyer(404, {"erreur": "introuvable"})
-
-    def _skills_tiers_ecrire(self, chemin, donnees):
-        try:
-            if chemin == "/api/github-enregistrer":
-                return self._envoyer(200, _github.save(donnees.get("jeton")))
-            if chemin == "/api/github-tester":
-                return self._envoyer(200, _github.test_token(_skills.default_http))
-            if chemin == "/api/skills-tiers-source":
-                if donnees.get("retirer"):
-                    return self._envoyer(200, {"sources": _skills.remove_source(str(donnees.get("depot", "")))})
-                return self._envoyer(200, {"sources": _skills.add_source(donnees.get("depot"))})
-            racines, actif = self._racines_travail()
-            if chemin == "/api/skills-tiers-indexer":
-                depot = str(donnees.get("depot", ""))
-                if depot not in {s["depot"] for s in _skills.sources()}:
-                    return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
-                if not (_skills.INDEXING.get(depot) or {}).get("fini", True):
-                    return self._envoyer(200, {"deja": True})
-                threading.Thread(target=lambda: _skills.build_index(depot), daemon=True, name="skills-indexation").start()
-                return self._envoyer(200, {"ok": True})
-            travail = str(donnees.get("travail") or actif)
-            if travail not in racines:
-                return self._envoyer(400, {"erreur": _t("Choisis le dossier de travail où installer le skill (Réglages > Dossiers).")})
-            if chemin in ("/api/skills-tiers-installer", "/api/skills-tiers-maj"):
-                if chemin == "/api/skills-tiers-maj":
-                    s = next((x for x in _skills.installed({travail: racines[travail]}) if x["nom"] == str(donnees.get("nom", ""))), None)
-                    if s is None:
-                        return self._envoyer(400, {"erreur": _t("Ce skill n'a pas été installé par Lutin.")})
-                    depot, dossier, remplacer, nom = s["depot"], s["dir"], True, s["nom"]
-                else:
-                    depot, dossier, remplacer, nom = "/".join(_skills.read_repo(donnees.get("depot"))), str(donnees.get("dir", "")), False, ""
-                    if depot not in {x["depot"] for x in _skills.sources()}:
-                        return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
-                r = _skills.install(depot, dossier, racines[travail], danger_ok=bool(donnees.get("danger_ok")), licence_ok=bool(donnees.get("licence_ok")), remplacer=remplacer, nom=nom)
-                _m.log_event("Skill tiers installé : {} ({}, {}).".format(r["nom"], depot, dossier))
-                return self._envoyer(200, r)
-            if chemin == "/api/skills-tiers-retirer":
-                _skills.remove(racines[travail], str(donnees.get("nom", "")))
-                _m.log_event("Skill tiers retiré : {}.".format(str(donnees.get("nom", ""))[:60]))
-                return self._envoyer(200, {"ok": True})
-        except ValueError as e:
-            return self._envoyer(400, {"erreur": str(e)})          # jamais 5xx : une lecture qui échoue (limite de GitHub, réseau) est un refus expliqué, pas une panne de Lutin
-        return self._envoyer(404, {"erreur": "introuvable"})
-
-    def _modeles_serveur_gere(self, chemin):
-        """ExLlamaV3, LM Studio et Colibri : les mêmes routes (modèles, catalogue, quantifications), les mêmes réponses — la page Modèles est donc la même pour les trois (lutin.managed_models)."""
-        genre, route = MANAGED_MODEL_ROUTES[chemin.split("?")[0]]
-        q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-        try:
-            if route == "modeles":
-                return self._envoyer(200, _geres.models(genre, _m.settings().get("modele")))
-            if route == "catalogue":
-                return self._envoyer(200, _geres.catalog(genre, (q.get("q") or [""])[0], (q.get("tri") or ["recent"])[0], (q.get("communaute") or ["0"])[0] == "1", (q.get("page") or ["1"])[0]))
-            return self._envoyer(200, {"quantifications": _geres.quantizations(genre, (q.get("depot") or [""])[0])})
-        except _geres.NotChosen as e:
-            return self._envoyer(404, {"erreur": str(e)})
-        except ValueError as e:
-            return self._envoyer(502, {"erreur": str(e)})
 
     _catalogue_colibri = staticmethod(lambda mo, installes, q: _geres.colibri_catalog(mo, installes, q))
 
@@ -1586,52 +519,6 @@ class Handler(BaseHTTPRequestHandler):
         self._via_relais, self.path = nom, interne
         return self.do_GET() if methode == "GET" else self.do_POST()
 
-    def _vers_hote(self, methode):
-        """`/h/<machine>/<chemin>` : la page parle à une conversation menée sur l'autre machine ; on transmet sans rien garder ici (la conversation, ses fichiers et ses images restent chez elle)."""
-        if not self._authentifie():
-            return self._envoyer(401, {"erreur": "authentification requise"})
-        if methode == "POST" and not self._jeton_valide():
-            return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
-        reste = self.path[len("/h/"):]
-        ident, _, chemin = reste.partition("/")
-        chemin = "/" + chemin
-        m = _machines.find(ident) if _machines.RE_ID.match(ident) else None
-        if m is None:
-            return self._envoyer(404, {"erreur": _t("Machine inconnue.")})
-        if _machines.LAST_STATE.get(ident) not in ("joignable", "operationnel"):
-            return self._envoyer(503, {"erreur": _t("La machine « {} » ne répond pas : sa conversation reviendra quand elle sera de nouveau en ligne.").format(m["nom"])})
-        corps = None
-        if methode == "POST":
-            taille = self._taille_corps()
-            if taille > 64 * 1024 * 1024:
-                return self._envoyer(413, {"erreur": "message trop gros"})
-            corps = self.rfile.read(taille)
-        try:
-            rep = _machines.open_relay(m, methode, chemin, corps, self.headers.get("Content-Type") or "application/json", self.headers.get("X-Nom") or "")
-        except urllib.error.HTTPError as e:
-            try:
-                detail = json.loads(e.read(100_000).decode("utf-8", "replace")).get("erreur", "")
-            except (ValueError, OSError, AttributeError):
-                detail = ""
-            return self._envoyer(e.code if e.code in (400, 403, 404, 409, 413, 429) else 502, {"erreur": detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)})
-        except (ValueError, urllib.error.URLError, OSError):
-            _machines.report_failure(m)
-            return self._envoyer(502, {"erreur": _t("Impossible de joindre la machine « {} » : elle ne répond plus.").format(m["nom"])})
-        with rep:
-            self.send_response(rep.status)
-            for nom in _machines.RELAY_HEADERS:
-                if rep.headers.get(nom):
-                    self.send_header(nom, rep.headers[nom])
-            self.end_headers()
-            try:
-                while True:
-                    morceau = rep.read1(8192)
-                    if not morceau:
-                        break
-                    self.wfile.write(morceau)
-                    self.wfile.flush()
-            except (OSError, ValueError):
-                pass                                                 # la page est partie ou la machine s'est tue : le tour, lui, continue chez elle
 
     NOEUD_PLACES = threading.BoundedSemaphore(2)          # deux demandes de machines à la fois au plus : une seule carte graphique
     NOEUD_ACTIFS = {"n": 0}          # demandes d'autres machines en cours ici (montré dans l'état du nœud)
@@ -1682,69 +569,6 @@ class Handler(BaseHTTPRequestHandler):
             self.NOEUD_ACTIFS["n"] = max(0, self.NOEUD_ACTIFS["n"] - 1)
             self.NOEUD_PLACES.release()
 
-    def _machines(self, action, donnees):
-        """onglet Machines (configurateur seulement) : ajouter, retirer, choisir celle qui répond, prêter le moteur de cette machine."""
-        r = _m.settings()
-        if action == "add":
-            _machines.add(donnees.get("adresse"), donnees.get("code"), donnees.get("nom", ""), donnees.get("mac", ""))
-        elif action == "remove":
-            ident = str(donnees.get("id", ""))
-            _machines.remove(ident)
-            if r.get("machine") == ident:
-                _m.save_settings({"machine": ""})
-        elif action == "use":
-            _m.save_settings({"machine": str(donnees.get("id") or "")})
-        elif action == "mac":
-            _machines.set_mac(str(donnees.get("id", "")), donnees.get("mac"))
-        elif action == "noeud-activer":
-            _machines.node_enable(bool(donnees.get("actif")), niveau_local=_m.SECURITY.niveau == _sec.LOCAL)
-        elif action == "wake":
-            return _machines.wake(str(donnees.get("id", "")))
-        elif action == "shutdown":
-            return _machines.shut_down(str(donnees.get("id", "")), bool(donnees.get("annuler")))
-        elif action == "update":
-            return _machines.update_remote(str(donnees.get("id", "")))
-        elif action == "demander":
-            return _machines.request_right(str(donnees.get("id", "")), str(donnees.get("droit", "")))
-        elif action == "demande-repondre":          # le propriétaire de CETTE machine accepte ou refuse : depuis cette machine seulement
-            if not self._configurateur_strict():
-                raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
-            _machines.node_answer_request(str(donnees.get("machine", "")), str(donnees.get("droit", "")), bool(donnees.get("accepter")))
-        elif action in ("node-shutdown", "node-update", "node-pilot", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
-            if not self._configurateur_strict():
-                raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
-            if action == "node-shutdown":
-                _machines.node_allow_shutdown(bool(donnees.get("actif")))
-            elif action == "node-update":
-                _machines.node_allow_update(bool(donnees.get("actif")))
-            elif action == "node-pilot":
-                _machines.node_allow_control(bool(donnees.get("actif")))
-            elif action == "cancel-local-shutdown":
-                return {"annulee": _alimentation.cancel_shutdown(_machines.log_event)}
-            elif donnees.get("actif"):
-                _alimentation.install_startup()
-            else:
-                _alimentation.remove_startup()
-        elif action == "droit":                                    # ce que CETTE machine partage avec les autres : depuis cette machine seulement
-            if not self._configurateur_strict():
-                raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
-            _machines.node_right(str(donnees.get("droit", "")), bool(donnees.get("actif")))
-        elif action == "import-skills":
-            return _machines.import_skills(str(donnees.get("id", "")))
-        elif action == "import-memoire":
-            return _machines.import_memory(str(donnees.get("id", "")))
-        elif action == "noeud-code":
-            return _machines.node_new_code()
-        elif action == "noeud-revoquer":
-            _machines.node_revoke(str(donnees.get("nom", "")))
-        else:
-            raise ValueError(_t("Action inconnue."))
-        return {"ok": True}
-
-    @staticmethod
-    def _vue_machines():
-        r = _m.settings()
-        return {"noeud": _machines.node_view(), "machines": _machines.states(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITY.niveau == _sec.LOCAL, "demarrage": _alimentation.startup_state_memo(), "journal": _machines.read_log()}
 
     def _appairer(self, donnees):
         if _m.SECURITY.niveau == _sec.LOCAL:
@@ -1904,30 +728,3 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 break
 
-    def _resumer(self, donnees):
-        """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA (agent.handover_document, partagé avec /api/v1)."""
-        ident = str(donnees.get("conversation") or "")
-        if not ident:
-            return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
-        r = _m.settings()
-        conv = _m.conv_read(ident)                    # hors du « try » : une conversation inconnue est une demande invalide (400), pas une panne (500)
-        try:
-            return self._envoyer(200, {"texte": _m.handover_document(conv, r), "modele": r["modele"]})
-        except (OSError, ValueError) as erreur:
-            return self._envoyer(500, {"erreur": str(erreur)})
-
-    def _titre_ia(self, donnees):
-        """Propose un titre court (3-6 mots) pour la conversation, sans l'appliquer (agent.proposed_title, partagé avec /api/v1 : par le moteur en cours)."""
-        ident = str(donnees.get("conversation") or donnees.get("id") or "")
-        if not ident:
-            return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
-        try:
-            conv = _m.conv_read(ident)
-        except ValueError:
-            return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
-        try:
-            return self._envoyer(200, {"titre": _m.proposed_title(conv, _m.settings())})
-        except ValueError as erreur:          # the model answered nothing
-            return self._envoyer(500, {"erreur": str(erreur)})
-        except OSError as erreur:             # the engine does not answer
-            return self._envoyer(502, {"erreur": str(erreur)})

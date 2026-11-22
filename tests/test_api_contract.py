@@ -36,9 +36,9 @@ class Contract(unittest.TestCase):
     def test_the_reader_sees_the_contract(self):
         """Guards the reader itself: if the handler is reorganised and the reader stops seeing routes, the inventory must not shrink without notice."""
         current = api_inventory.inventory()
-        self.assertGreater(len(current["GET"]["exact"]), 40)
-        self.assertGreater(len(current["POST"]["exact"]), 80)
-        for method, route in (("GET", "/api/etat"), ("POST", "/api/chat"), ("POST", "/api/approuver"), ("POST", "/api/reglages"), ("POST", "/api/appairer")):
+        self.assertGreater(len(current["GET"]["exact"]), 5)          # since 1.0 (ADR 0022): the sign-in, the machine protocol and its relay, the phone icons
+        self.assertGreater(len(current["POST"]["exact"]), 15)
+        for method, route in (("GET", "/api/conversation"), ("POST", "/api/chat"), ("POST", "/api/approuver"), ("POST", "/api/appairer"), ("POST", "/api/noeud/chat")):
             self.assertIn(route, current[method]["exact"], route)
         self.assertIn("/api/noeud/relais/", current["GET"]["prefix"])
         for event in ("texte", "outil", "resultat", "approbation", "erreur", "fin"):

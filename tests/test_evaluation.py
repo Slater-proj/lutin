@@ -157,7 +157,7 @@ class LongConversationOnSmallWindow(unittest.TestCase):
         finally:
             M.REPONDEUR.clear()
             if cid:
-                M.post("/api/supprimer", {"id": cid})
+                M.appel("DELETE", "/conversations/" + cid)
 
     def measure(self, num_ctx, memory, faithful):
         model, where, precise, errors = self.run_project(num_ctx, memory, faithful)

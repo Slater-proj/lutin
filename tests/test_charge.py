@@ -1,5 +1,4 @@
 """Ne pas écraser le PC : cartes intégrées ignorées pour choisir les modèles, cœurs utilisés et durée de garde réglables, mêmes options pour toutes les requêtes."""
-import json
 import os
 import tempfile
 import unittest
@@ -87,12 +86,6 @@ class ReglagesDeCharge(unittest.TestCase):
         self.assertEqual(A.with_keep_alive({"model": "x"})["keep_alive"], "2m")
         A.save_settings({"garde_min": 0})
         self.assertEqual(A.with_keep_alive({"model": "x"})["keep_alive"], "0m", "0 : libéré dès la fin de la réponse")
-
-    def test_la_page_propose_les_reglages_et_les_profils(self):
-        page = A.web_page()
-        for attendu in ('id="iThreads"', 'id="iGarde"', 'id="selProfil"', "ETAT.cpus"):
-            self.assertIn(attendu, page)
-        self.assertEqual(json.loads(json.dumps({"cpus": os.cpu_count() or 1}))["cpus"], os.cpu_count() or 1)
 
 
 if __name__ == "__main__":

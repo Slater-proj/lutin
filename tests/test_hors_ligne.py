@@ -196,13 +196,15 @@ class Serveur(Base):
         return r.status, json.loads(r.read().decode("utf-8") or "{}")
 
     def test_bascule_par_l_api_et_visible_dans_l_etat(self):
-        self.assertFalse(self.appel("GET", "/api/etat")[1]["hors_ligne"])
-        self.assertEqual(self.appel("POST", "/api/hors-ligne", {"actif": True}), (200, {"hors_ligne": True}))
-        self.assertTrue(self.appel("GET", "/api/etat")[1]["hors_ligne"])
-        statut, d = self.appel("POST", "/api/installer-modele", {"modele": "qwen3:8b"})
-        self.assertEqual(statut, 400)
-        self.assertIn("hors ligne", d["erreur"])
-        self.assertEqual(self.appel("POST", "/api/hors-ligne", {"actif": False}), (200, {"hors_ligne": False}))
+        self.assertFalse(self.appel("GET", "/api/v1/status")[1]["offline"])
+        statut, d = self.appel("POST", "/api/v1/offline", {})
+        self.assertEqual((statut, d["active"]), (200, True))
+        self.assertTrue(self.appel("GET", "/api/v1/status")[1]["offline"])
+        statut, d = self.appel("POST", "/api/v1/models", {"name": "qwen3:8b"})
+        self.assertEqual(statut, 409)
+        self.assertIn("hors ligne", d["error"]["message"])
+        statut, d = self.appel("DELETE", "/api/v1/offline")
+        self.assertEqual((statut, d["active"]), (200, False))
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["hors_ligne"])
 
 

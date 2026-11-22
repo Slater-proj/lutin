@@ -1,5 +1,10 @@
 # Parity of the new interface with the old page
 
+> **1.0 (2026-11-22): the old page and its routes are removed** ([ADR 0022](../adr/0022-the-old-page-goes-at-1.0.md)). What follows is the
+> audit that allowed it. Code that only the old page used went with it; among it, features the new interface never took up: the hand-kept
+> model list (below, « Superseded »), the one-click presets of OpenAI-compatible servers, the speed advice of « Test my PC », the search of
+> model folders on other disks, the image tool state.
+
 Audit of 2026-11-17 (on `98ebd28`): every user-visible feature of the old page (`src/lutin/web/index.html`, 189 French routes) checked against the
 new interface (`frontend/src`) and `/api/v1`, by reading the code. Decided by the maintainer the same day: at 1.0 the new interface becomes the
 default at `/`, the old page stays reachable at `/ancienne/` during 1.x, and goes in 2.0. This list is what the new interface needs before that

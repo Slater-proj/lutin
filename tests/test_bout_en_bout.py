@@ -112,7 +112,7 @@ class BoutEnBout(unittest.TestCase):
         import urllib.error
         import urllib.request
         with self.assertRaises(urllib.error.HTTPError) as e:
-            urllib.request.urlopen(self.client.adresse + "/api/etat", timeout=10)
+            urllib.request.urlopen(self.client.adresse + "/api/v1/status", timeout=10)
         self.assertEqual(e.exception.code, 403)
 
     def test_chat_dans_le_terminal(self):
@@ -122,23 +122,23 @@ class BoutEnBout(unittest.TestCase):
 
     def test_la_conversation_est_enregistree_et_visible_depuis_l_api(self):
         self.commande("chat", "Une question pour l'historique")
-        etat = self.client.obtenir("/api/etat")
-        self.assertTrue(any("historique" in (c.get("titre") or "") for c in etat["conversations"]))
-        self.assertIn("qwen3:8b", etat["installes"])
-        self.assertEqual(etat["reglages"]["modele"], "qwen3:8b", "le modèle choisi à l'installation devient le modèle par défaut")
+        self.assertTrue(any("historique" in (c.get("title") or "") for c in self.client.obtenir("/conversations")["conversations"]))
+        self.assertIn("qwen3:8b", [m["name"] for m in self.client.obtenir("/models")["models"]])
+        self.assertEqual(self.client.obtenir("/settings")["model"], "qwen3:8b", "le modèle choisi à l'installation devient le modèle par défaut")
 
     def test_pin(self):
+        """At the level « local » no other device can reach Lutin: `lutin pin` says so instead of giving a code nobody could use."""
         code, sortie = self.commande("pin")
-        self.assertEqual(code, 0, sortie)
-        self.assertRegex(sortie, r"Code PIN : \d{6}")
+        self.assertEqual(code, 1, sortie)
+        self.assertIn("n'écoute que sur cette machine", sortie)
 
     def test_la_page_est_servie_et_contient_le_nom(self):
         import urllib.request
-        with urllib.request.urlopen(self.client.adresse + "/ancienne/", timeout=10) as r:
+        with urllib.request.urlopen(self.client.adresse + "/", timeout=10) as r:
             page = r.read().decode("utf-8")
         self.assertIn("<title>Lutin</title>", page)
         self.assertNotIn("__TOKEN__", page, "le marqueur est remplacé par le vrai jeton")
-        self.assertRegex(page, r"TOKEN = '[0-9a-f]{32}'")
+        self.assertRegex(page, r'<meta name="lutin-token" content="[0-9a-f]{32}"')
         self.assertNotIn(self.client.jeton, page, "le jeton de la console n'est jamais dans la page")
 
     def test_la_page_s_execute_dans_un_navigateur_sans_erreur_javascript(self):

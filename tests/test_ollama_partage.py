@@ -214,20 +214,6 @@ class ModelesRetrouves(unittest.TestCase):
         engines.CONTEXT.update(self.avant[1])
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_le_dernier_dossier_vu_est_retenu_et_signale_quand_ollama_ne_voit_rien(self):
-        from lutin import diagnostic, locations
-        self.assertEqual(locations.seen_folder(), "")
-        locations.remember_seen_folder(str(self.tmp / "inexistant"))
-        self.assertEqual(locations.seen_folder(), "", "un dossier sans modèles n'est pas retenu")
-        locations.remember_seen_folder(str(self.models))
-        self.assertEqual(locations.seen_folder(), str(self.models))
-        self.assertIsNone(locations.models_elsewhere(["qwen3:8b"]), "Ollama voit ses modèles : rien à dire")
-        ailleurs = locations.models_elsewhere([])
-        self.assertEqual(ailleurs, (str(self.models), 1))
-        problemes = diagnostic.diagnose(True, True, [], {}, docker=False, modeles_ailleurs=ailleurs)
-        self.assertEqual([p["code"] for p in problemes], ["modeles_ailleurs"])
-        self.assertIn("ne sont pas perdus", problemes[0]["texte"])
-        self.assertEqual(problemes[0]["action"]["type"], "redemarrer_ollama")
 
     def test_ollama_relance_par_lutin_retrouve_le_dossier_habituel(self):
         from lutin import locations

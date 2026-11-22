@@ -9,7 +9,7 @@ from pathlib import Path
 import context  # noqa: F401
 from lutin import core as _m  # noqa: E402,F401  (avant le dialogue : import circulaire sinon)
 from lutin import agent  # noqa: E402,F401  (enregistre les moteurs)
-from lutin import locations, engines, ollama_shared_models, ollama_registry  # noqa: E402
+from lutin import engines, ollama_shared_models, ollama_registry  # noqa: E402
 from lutin import llamacpp_engine as ml  # noqa: E402
 
 
@@ -140,28 +140,6 @@ class DansLlamaCpp(unittest.TestCase):
         ml.configure("llamacpp", "http://127.0.0.1:9999")
         with self.assertRaises(ml.EngineError):
             self.m.telecharger_ollama("qwen3:8b", lambda *a: None)
-
-
-class RetrouverMesModeles(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="lutin-retrouver-"))
-        self.addCleanup(shutil.rmtree, self.tmp, True)
-
-    def test_un_ancien_dossier_sur_un_autre_disque_est_trouve(self):
-        ancien = self.tmp / "E" / "IA" / "Ollama" / "models"
-        manif = ancien / "manifests" / "registry.ollama.ai" / "library" / "qwen3" / "8b"
-        manif.parent.mkdir(parents=True)
-        manif.write_text(json.dumps({"layers": [{"mediaType": ollama_shared_models.MODEL_TYPE, "digest": EMP_GGUF, "size": len(GGUF)}]}), encoding="utf-8")
-        (ancien / "blobs").mkdir()
-        (ancien / "blobs" / ("sha256-" + EMP_GGUF.split(":")[1])).write_bytes(GGUF)
-        vide = self.tmp / "C" / "Users" / "x" / ".ollama" / "models"
-        (vide / "manifests").mkdir(parents=True)
-        vrai = locations.roots_to_visit
-        locations.roots_to_visit = lambda: [self.tmp / "E", self.tmp / "D"]
-        self.addCleanup(setattr, locations, "racines_a_visiter", vrai)
-        trouves = locations.find_models_folders(connus=[str(vide)])
-        self.assertEqual([t["chemin"] for t in trouves], [str(self.tmp / "E" / "IA" / "Ollama" / "models")], "le dossier vide n'est pas proposé")
-        self.assertEqual(trouves[0]["modeles"], 1)
 
 
 if __name__ == "__main__":

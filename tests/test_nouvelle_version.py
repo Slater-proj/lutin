@@ -134,17 +134,17 @@ class Serveur(unittest.TestCase):
         updates.version_file(DOSSIERS).unlink(missing_ok=True)
 
     def test_l_etat_annonce_la_version_et_on_peut_l_ignorer(self):
-        self.assertIsNone(requete("GET", "/api/etat")[1]["nouvelle_version"])
+        self.assertIsNone(requete("GET", "/api/v1/status")[1]["new_version"])
         updates.check_lutin(DOSSIERS, http=faux_github("99.0.0"))
-        n = requete("GET", "/api/etat")[1]["nouvelle_version"]
-        self.assertEqual((n["version"], n["actuelle"]), ("99.0.0", A.VERSION))
-        self.assertEqual(requete("POST", "/api/version-ignorer", {"version": "99.0.0"}), (200, {"ok": True}))
-        self.assertIsNone(requete("GET", "/api/etat")[1]["nouvelle_version"])
+        n = requete("GET", "/api/v1/status")[1]["new_version"]
+        self.assertEqual(n["version"], "99.0.0")
+        self.assertEqual(requete("POST", "/api/v1/lutin/ignored-version", {"version": "99.0.0"}), (200, {"new_version": None}))
+        self.assertIsNone(requete("GET", "/api/v1/status")[1]["new_version"])
 
     def test_la_page_contient_le_bandeau(self):
-        page = A.web_page()
-        self.assertIn('id="bandeauVersion"', page)
-        self.assertIn("/api/version-ignorer", page)
+        bandeaux = (Path(__file__).resolve().parent.parent / "frontend" / "src" / "components" / "LutinBanners.svelte").read_text(encoding="utf-8")
+        self.assertIn("new_version", bandeaux)
+        self.assertIn("/lutin/ignored-version", bandeaux)
 
 
 if __name__ == "__main__":

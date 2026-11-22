@@ -147,7 +147,9 @@ def _check_right(handler, right):
     if not handler._jeton_valide():
         raise ApiError(403, "page_token", _t("Jeton de page invalide : recharge la page."))
     if right == CONFIGURATOR and not handler._configurateur():
-        raise ApiError(403, "configurator", _t("Réservé à qui peut configurer Lutin (cette machine, ou l'administration à distance si elle est ouverte)."))
+        from . import access as _access
+        how = _t(" Dans Docker : ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (ou, derrière un proxy, ton identifiant dans LUTIN_ADMINS), puis redémarre-le.") if _access.in_docker() else ""
+        raise ApiError(403, "configurator", _t("Réservé à qui peut configurer Lutin (cette machine, ou l'administration à distance si elle est ouverte).") + how)          # in Docker the browser is never « this machine »: say how to open it
     if right == LOCAL and not handler._configurateur_strict():
         raise ApiError(403, "local_only", _t("Possible seulement depuis cette machine."))
 

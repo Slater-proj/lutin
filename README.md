@@ -22,8 +22,8 @@ folder you choose, **always with your approval**. In English and French, from th
 </p>
 
 > **Version 1.0 is in preparation.** The new interface is the default at `/`: the five areas below, on a versioned API (`/api/v1`), in
-> both languages, checked in a real browser and by automatic accessibility tests. The previous page stays at `/ancienne/` during the 1.x
-> versions and goes in 2.0. Tested on Windows and Linux; macOS, AMD and Intel cards are not verified yet:
+> both languages, checked in a real browser and by automatic accessibility tests. The previous page and its routes are gone
+> ([ADR 0022](docs/adr/0022-the-old-page-goes-at-1.0.md)). Tested on Windows and Linux; macOS, AMD and Intel cards are not verified yet:
 > [what is verified and what is not](docs/DECISIONS.md#known-but-not-verified).
 
 ## Why Lutin
@@ -103,7 +103,7 @@ to date, it changes nothing; otherwise it updates without touching your settings
 
 | Command | Role |
 |---|---|
-| `lutin` | starts Lutin and opens it in the browser (the previous page stays at `/ancienne/` during 1.x) |
+| `lutin` | starts Lutin and opens it in the browser |
 | `lutin chat` | chat in the terminal; `lutin chat "question"` for a direct answer |
 | `lutin models` | the models recommended for your machine, install, remove, update |
 | `lutin bench [model]` | measure a model here: speed, tools, code, French, instructions |

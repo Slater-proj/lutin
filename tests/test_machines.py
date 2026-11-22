@@ -248,10 +248,8 @@ class Etats(Base):
         with mock.patch.object(machines, "watch", lambda attente=False: None):          # « sans personne pour la sonder » : aucune sonde ne part en arrière-plan pendant le constat
             self.assertEqual(machines.remote_models(), [])
             self.assertEqual(machines.remote_conversations(), [])
-            self.assertEqual(machines.offline_names(), [machines.find(m["id"])["nom"]])
         machines.PROBES[m["id"]] = (machines.time.monotonic(), {}, "")          # elle répond de nouveau
         self.assertEqual(len(machines.remote_models()), 1)
-        self.assertEqual(machines.offline_names(), [])
 
     def test_la_veille_sonde_les_machines_sans_la_page_machines(self):
         m = self.jumeler()
@@ -425,12 +423,14 @@ class Reglage(Base):
             storage._save_settings({"machine": "a" * 32})
 
     def test_la_page_machines(self):
-        self.jumeler()
-        import lutin.server as srv
-        vue = srv.Handler._vue_machines()
-        self.assertTrue(vue["noeud"]["actif"])
-        self.assertEqual(vue["machines"][0]["etat"], "operationnel")
-        self.assertNotIn("jeton", json.dumps(vue))
+        m = self.jumeler()
+        machines.LAST_STATE[m["id"]] = "operationnel"
+        statut, corps = self.http("GET", "/api/v1/machines", None, {"X-Token": A.TOKEN})
+        self.assertEqual(statut, 200, corps)
+        vue = json.loads(corps)
+        self.assertIn(vue["machines"][0]["state"], ("unknown", "operational"), "its last known state: the list never waits for the network")
+        self.assertTrue(json.loads(self.http("GET", "/api/v1/node", None, {"X-Token": A.TOKEN})[1])["lending"])
+        self.assertNotIn(machines.read()[0]["jeton"], corps, "never the node token")
         self.assertTrue(engines is not None)
 
 
@@ -575,9 +575,9 @@ class Relais(Base):
     def test_depuis_cette_page_les_octets_passent_et_rien_n_est_garde_ici(self):
         m, conv = self.preparer()
         machines.LAST_STATE[m["id"]] = "operationnel"
-        statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
+        statut, corps = self.http("GET", "/api/v1/machines/{}/conversations/{}".format(m["id"], conv["id"]), None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 200, corps)
-        self.assertEqual(json.loads(corps)["titre"], "Sur l'hôte")
+        self.assertEqual(json.loads(corps)["title"], "Sur l'hôte")
 
     def test_le_tour_en_flux_traverse_la_page_et_les_erreurs_de_l_hote_aussi(self):
         m, conv = self.preparer()
@@ -587,24 +587,24 @@ class Relais(Base):
             emit({"type": "texte", "texte": "voilà"})
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
         with mock.patch("lutin.server._m.turn", faux_tour):
-            statut, corps = self.http("POST", "/h/{}/api/chat".format(m["id"]), {"message": "salut", "conversation": conv["id"]}, {"X-Token": A.TOKEN})
+            statut, corps = self.http("POST", "/api/v1/machines/{}/conversations/{}/turns".format(m["id"], conv["id"]), {"message": "salut"}, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 200, corps)
         evenements = [json.loads(l) for l in corps.splitlines() if l.strip()]
-        self.assertEqual([e["type"] for e in evenements], ["debut", "texte", "fin"])
-        statut, corps = self.http("POST", "/h/{}/api/image".format(m["id"]), None, {"X-Token": A.TOKEN})
+        self.assertEqual([e["type"] for e in evenements], ["start", "text", "end"])
+        statut, corps = self.http("POST", "/api/v1/machines/{}/images".format(m["id"]), None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 400, "l'erreur de l'hôte est rendue telle quelle, pas déguisée en panne")
         machines.node_allow_control(False)
-        statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
+        statut, corps = self.http("GET", "/api/v1/machines/{}/conversations/{}".format(m["id"], conv["id"]), None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 403)
-        self.assertIn("conversations pilotées", json.loads(corps)["erreur"])
+        self.assertIn("conversations pilotées", json.loads(corps)["error"]["message"])
 
     def test_une_machine_qui_ne_repond_pas_donne_un_message_clair(self):
         m, conv = self.preparer()
         machines.LAST_STATE[m["id"]] = "injoignable"
-        statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
+        statut, corps = self.http("GET", "/api/v1/machines/{}/conversations/{}".format(m["id"], conv["id"]), None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 503)
-        self.assertIn("ne répond pas", json.loads(corps)["erreur"])
-        self.assertEqual(self.http("GET", "/h/{}/api/conversation?id={}".format("0" * 32, conv["id"]))[0], 404)
+        self.assertIn("ne répond pas", json.loads(corps)["error"]["message"])
+        self.assertEqual(self.http("GET", "/api/v1/machines/{}/conversations/{}".format("0" * 32, conv["id"]), None, {"X-Token": A.TOKEN})[0], 404)
 
     def test_les_conversations_proposees_exigent_le_droit_de_l_hote(self):
         m, conv = self.preparer(piloter=False)
@@ -629,11 +629,12 @@ class Relais(Base):
 
 class MesuresApi(Base):
     def test_la_page_lit_le_classement_et_refuse_ce_qui_n_existe_pas(self):
-        statut, corps = self.http("GET", "/api/mesures-moteurs", None, {"X-Token": A.TOKEN})
+        statut, corps = self.http("GET", "/api/v1/engines/measures", None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 200, corps)
         vue = json.loads(corps)
-        self.assertEqual(sorted(vue), ["candidats", "classement", "etat", "nombre"])
-        self.assertEqual(self.http("POST", "/api/mesurer-moteur", {"moteur": "inconnu", "modele": "x"}, {"X-Token": A.TOKEN})[0], 400)
+        self.assertEqual(sorted(vue), ["candidates", "count", "error", "measuring", "ranking", "running"])
+        self.assertEqual(self.http("POST", "/api/v1/engines/inconnu/measure", {"model": "x"}, {"X-Token": A.TOKEN})[0], 404)
+        self.assertEqual(self.http("POST", "/api/v1/engines/ollama/measure", {"model": "x", "mode": "danse"}, {"X-Token": A.TOKEN})[0], 400)
 
 
 if __name__ == "__main__":

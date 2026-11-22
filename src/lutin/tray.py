@@ -102,7 +102,7 @@ def address_opening(dossiers, cfg):
     if cfg.get("securite", {}).get("niveau") == "reseau":
         try:
             from . import client
-            return base + "#pin=" + client.LocalClient(dossiers["donnees"]).envoyer("/api/nouveau-pin", {})["pin"]
+            return base + "#pin=" + client.LocalClient(dossiers["donnees"]).envoyer("/devices/pairing-code", {})["code"]
         except Exception:  # noqa: BLE001 — le serveur démarre peut-être encore : la page de connexion demandera le code
             pass
     return base

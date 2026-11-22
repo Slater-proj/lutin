@@ -197,11 +197,9 @@ class Programmes(unittest.TestCase):
 
 class Page(Base):
     def test_les_routes_repondent(self):
-        from lutin import server
-        self.assertTrue(hasattr(server, "_ressources"))
-        src = Path(server.__file__).read_text(encoding="utf-8")
-        self.assertIn('"/api/ressources"', src)
-        self.assertIn('"/api/decharger"', src)
+        from lutin import api_v1
+        routes = {(r["method"], r["path"]) for r in api_v1.table()}
+        self.assertTrue({("GET", "/api/v1/models/loaded"), ("POST", "/api/v1/health/unload"), ("GET", "/api/v1/health")} <= routes, "what is loaded, and unloading it")
 
 
 if __name__ == "__main__":

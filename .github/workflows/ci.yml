@@ -187,15 +187,15 @@ jobs:
         run: |
           T=$(docker exec lutin-ci python3 -c "import json;print(json.load(open('/data/donnees/console.json'))['jeton'])")
           API() { docker exec -i lutin-ci curl -fsS -H "X-Token: $T" "$@"; }
-          API http://127.0.0.1:8777/api/etat | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['reglages']['mode']=='polyvalent', d['reglages']['mode']"
-          API -X POST -H "Content-Type: application/json" -d '{"mode":"recherche","copie_conversations":true}' http://127.0.0.1:8777/api/reglages | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['mode']=='recherche' and d['copie_conversations'] is True"
-          API -X POST -H "X-Nom: note.txt" --data-binary 'bonjour, une note' http://127.0.0.1:8777/api/document | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['nom']=='note.txt' and d['caracteres']==17, d"
-          API http://127.0.0.1:8777/api/sante-systeme | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['niveau'] in ('ok','attention','critique')"
-          API http://127.0.0.1:8777/api/travaux | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['liste'], d"
-          API "http://127.0.0.1:8777/api/dossiers?chemin=/workspace" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['chemin'].endswith('workspace'), d"
+          API http://127.0.0.1:8777/api/v1/settings | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['mode']=='general', d['mode']"
+          API -X PATCH -H "Content-Type: application/json" -d '{"mode":"research","conversation_backup":true}' http://127.0.0.1:8777/api/v1/settings | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['mode']=='research' and d['conversation_backup'] is True, d"
+          API -X POST -H "X-Name: note.txt" --data-binary 'bonjour, une note' http://127.0.0.1:8777/api/v1/attachments | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['name']=='note.txt' and d['characters']==17, d"
+          API http://127.0.0.1:8777/api/v1/health | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['level'] in ('ok','warning','critical'), d['level']"
+          API http://127.0.0.1:8777/api/v1/projects | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['projects'], d"
+          API "http://127.0.0.1:8777/api/v1/projects/folders?path=/workspace" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['path'].endswith('workspace'), d"
           docker exec lutin-ci test -d /data/donnees/pieces
-          API http://127.0.0.1:8777/api/moteurs | python3 -c "import sys,json; d=json.load(sys.stdin); m={x['id']:x for x in d['moteurs']}; assert m['ollama']['actions']['installer']['possible'] and m['llamacpp']['actions']['installer']['possible'], 'les moteurs doivent pouvoir s installer depuis la page'"
-          API http://127.0.0.1:8777/api/etat | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['premier_lancement']['pret'] is False and d['premier_lancement']['recommande'], d['premier_lancement']"
+          API http://127.0.0.1:8777/api/v1/engines | python3 -c "import sys,json; d=json.load(sys.stdin); m={x['id']:x for x in d['engines']}; assert m['ollama']['actions']['install']['possible'] and m['llamacpp']['actions']['install']['possible'], 'les moteurs doivent pouvoir s installer depuis la page'"
+          API http://127.0.0.1:8777/api/v1/setup | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['needed'] is True, d"
           docker rm -f lutin-ci
       - name: L'image légère (même image) démarre
         run: |

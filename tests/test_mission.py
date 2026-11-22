@@ -205,7 +205,6 @@ class Mission(unittest.TestCase):
         m = mission.create("Jeu", "Crée un petit jeu.", "principal", 2, False, c["id"])
         self.assertTrue(m["lie"] and m["conv"] == c["id"])
         self.assertEqual(mission.find_for_conversation(c["id"])["id"], m["id"])
-        self.assertEqual(mission.by_conversation()[c["id"]]["etat"], "en_cours")
         self.assertTrue(mission.one_step())                                          # sans cases cochées : à blanc, rien n'est écrit
         self.assertFalse((self.dossier / "jeu.txt").exists())
         self.assertFalse(mission.find(m["id"])["autonome"])

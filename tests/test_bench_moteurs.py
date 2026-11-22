@@ -335,10 +335,11 @@ class Branchement(unittest.TestCase):
         self.assertIn("--sortie", r.stdout)
 
     def test_les_routes_et_la_page(self):
-        src = (RACINE / "src" / "lutin" / "server.py").read_text(encoding="utf-8")
-        self.assertEqual(src.count('"/api/bench-moteurs"'), 2)
-        page = (RACINE / "src" / "lutin" / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("carteBancMoteurs", page)
+        from lutin import api_v1
+        routes = {(r["method"], r["path"]) for r in api_v1.table()}
+        self.assertTrue({("GET", "/api/v1/engines/comparison"), ("POST", "/api/v1/engines/comparison")} <= routes)
+        ecrans = RACINE / "frontend" / "src"
+        self.assertTrue(any("/engines/comparison" in f.read_text(encoding="utf-8") for f in ecrans.rglob("*.svelte")), "the interface shows the comparison")
 
 
 if __name__ == "__main__":

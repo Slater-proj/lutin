@@ -343,7 +343,8 @@ results: [{title, url, extract, date, source, domain}]}`, never sent to the mode
 1. Route table and dispatcher in the server (declared rights, error codes), serving the existing French routes first: no behaviour change, proven by the two contract tests.
 2. `/api/v1` routes added to the table, one area at a time, each with contract tests on its fields (request, answer, errors).
    Order follows the screens of the new interface: status and settings, conversations and the stream, models and engines, then the rest.
-3. The old routes are removed when the old page is.
+3. The old routes are removed when the old page is: done at 1.0 (ADR 0022), but for the sign-in, the protocol between machines and the eleven
+   routes of its relay, reached only through `/api/noeud/relais`.
 
 ## Open points
 

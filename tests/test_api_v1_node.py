@@ -93,8 +93,6 @@ class Node(unittest.TestCase):
             self.assertIn("réseau", answer["error"]["message"])
             self.assertFalse(machines.node_active())
             self.assertEqual(call("PATCH", "/api/v1/node", {"lending": False})[0], 200, "turning it off is always possible")
-            status, answer = V.call("POST", "/api/machines-noeud-activer", V.OWNER, {"actif": True})
-            self.assertEqual(status, 400, "the old route answers as before")
 
     def test_the_pairing_code_needs_lending(self):
         status, answer = call("POST", "/api/v1/node/pairing-code")
