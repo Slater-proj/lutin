@@ -246,7 +246,17 @@
   }
 
   .measures {
-    gap: var(--space-5);
+    gap: var(--space-4);
+  }
+
+  /* each measure in a block of its own, like the speed test above them and the blocks of Settings */
+  .bench,
+  .per-engine,
+  .comparison {
+    padding: var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
   }
 
   h2,
