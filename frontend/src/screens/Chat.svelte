@@ -916,7 +916,7 @@
       {/if}
     </header>
     {#if toolsOpen && conversation && !where}
-      <ConversationTools conversation={conversation.id} title={conversation.title || t("chat.untitled")} messages={conversation.messages} canConfigure={!!status?.access.can_configure} />
+      <ConversationTools conversation={conversation.id} title={conversation.title || t("chat.untitled")} messages={conversation.messages} canConfigure={!!status?.access.can_configure} onchanged={reloadConversation} />
     {/if}
     {#if mission}
       <p class="mission-banner" role="status">{t("tools.mission", mission.name, t(("missions.state." + mission.state) as "missions.state.running"))} <a href="#/agents">{t("tools.mission_open")}</a></p>

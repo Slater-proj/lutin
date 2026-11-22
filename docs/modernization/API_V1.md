@@ -321,7 +321,7 @@ description}]}` (the `.claude/commands` of the work folder); `GET /project-comma
 
 ## Created files and locations
 
-`GET /created-files` (configurator): `{files: [{id, kind, name, path, size_bytes, date, conversation, conversation_exists}], total_bytes}`;
+`GET /created-files` (configurator), `?conversation=<id>` for the files of one conversation: `{files: [{id, kind, name, path, size_bytes, date, conversation, conversation_exists}], total_bytes}`;
 `POST /created-files/delete {ids}`: `{deleted, freed_bytes, skipped}`; `POST /created-files/{id}/open-folder` (`409 cannot_open`). `GET
 /locations` (configurator): `{locations: [{key, name, path, explanation, exists, size_bytes, disk: {free, total, root}}], data_detail}`.
 

@@ -1287,19 +1287,25 @@ class Chat(unittest.TestCase):
         """PARITY.md item 12: the tools of a conversation (memory mode and sheet, handover, Markdown export), the banner of its mission, and the project's
         Git with the actions log. Hermetic: the model's handover and the seeding of the sheet, the missions, Git and the log are replaced."""
         p = self.page
-        from lutin import change_review, mission as missions, progress_sheet
+        from lutin import change_review, mission as missions, produced_files, progress_sheet
         c = T.A.conv_new()
         c["titre"] = "Facturation"
         c["messages"] = [{"role": "user", "content": "Réécrire la facturation."}, {"role": "assistant", "content": "D'accord, je commence."}]
         T.A.conv_write(c)
         self.addCleanup(lambda: (progress_sheet.delete(c["id"]), T.A.conv_delete(c["id"])))
-        committed = []
+        committed, opened = [], []
         for patch in (mock.patch.object(T.A, "handover_document", lambda conversation, settings: "## Objectif\nRéécrire la facturation."),
                       mock.patch.object(missions, "state", lambda: {"liste": [{"id": "m1", "nom": "Facturation", "etat": "en_cours", "conv": c["id"]}]}),
                       mock.patch.object(change_review, "git_state", lambda: {"dispo": True, "branche": "main", "total": 1, "modifies": [{"chemin": "a.py", "etat": " M"}]}),
                       mock.patch.object(change_review, "git_message_of", lambda files: {"message": "fix: billing"}),
                       mock.patch.object(change_review, "git_commit", lambda message, files: committed.append((message, files)) or {"ok": True, "sortie": "1 file changed"}),
-                      mock.patch.object(T.A, "read_log", lambda n: [{"ts": "2026-11-18T10:00:00", "outil": "ecrire", "cible": "a.py", "issue": "ok", "accord": "manuel"}])):
+                      mock.patch.object(T.A, "read_log", lambda n: [{"ts": "2026-11-18T10:00:00", "outil": "ecrire", "cible": "a.py", "issue": "ok", "accord": "manuel"}]),
+                      mock.patch.object(produced_files, "entries", lambda: {"total": 3000, "liste": [
+                          {"id": "f1", "genre": "fichier", "nom": "devis.pdf", "chemin": "C:/w/devis.pdf", "taille": 2000, "date": 1795000000, "conversation": c["id"], "conversation_existe": True},
+                          {"id": "f2", "genre": "fichier", "nom": "autre.pdf", "chemin": "C:/w/autre.pdf", "taille": 1000, "date": 1795000000, "conversation": "other", "conversation_existe": True}]}),
+                      mock.patch.object(produced_files, "folders_conversation", lambda ident: [{"chemin": "C:/w/facturation", "role": "travail"}]),
+                      mock.patch.object(produced_files, "opening_possible", lambda: True),
+                      mock.patch.object(produced_files, "open_folder_conversation", lambda ident, path: opened.append(path) or {"ok": True})):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/chat/%s'; location.reload()" % c["id"])
@@ -1309,6 +1315,14 @@ class Chat(unittest.TestCase):
         self.press("document.querySelector('.tools-button')")
         p.attendre("!!document.querySelector('.conversation-tools .modes h3')")
         self.assertFalse(p.evaluer("!!document.querySelector('.conversation-tools input[type=radio]')"), "no mode to choose: the progress sheet for every conversation (ADR 0019)")
+        # its own files and folders, as the « ⋯ » menu of the old page had them (maintainer, 2026-11-22); the button of a folder says what it does
+        p.attendre("document.querySelectorAll('.conversation-tools .files li').length === 1")
+        self.assertIn("devis.pdf", p.evaluer("document.querySelector('.conversation-tools .files').innerText"), "only the files of this conversation")
+        self.assertNotIn("autre.pdf", p.evaluer("document.querySelector('.conversation-tools').innerText"))
+        self.assertFalse(p.evaluer("[...document.querySelectorAll('.conversation-tools .button')].some(b => b.innerText === 'Cette conversation')"), "no button inside carries the name of the panel")
+        self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Ouvrir le dossier')")
+        p.attendre("document.querySelector('.conversation-tools')?.innerText.includes(\"Ouvert dans l'explorateur\")")
+        self.assertEqual(opened, ["C:/w/facturation"])
         self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Modifier la fiche')")
         p.attendre("!!document.querySelector('#sheet-text')")
         p.evaluer("(() => { const box = document.querySelector('#sheet-text'); box.value = '## Objectif\\n- Réécrire la facturation\\n## Décisions\\n- Garder l\\'API'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")

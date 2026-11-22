@@ -30,6 +30,16 @@ class CreatedFiles(unittest.TestCase):
             self.assertEqual(V.call("POST", "/api/v1/created-files/f1/open-folder", V.OWNER, {})[1], {"opened": True})
         self.assertEqual((removed, opened), ([["f1"]], ["f1"]))
 
+    def test_the_files_of_one_conversation(self):
+        """The panel « This conversation » of the Chat lists what this conversation made, as the « ⋯ » menu of the old page did."""
+        listed = {"total": 3072, "liste": [{"id": "f1", "genre": "image", "nom": "chat.png", "chemin": "C:/data/chat.png", "taille": 2048, "date": 1700000000, "conversation": "c1", "conversation_existe": True},
+                                           {"id": "f2", "genre": "fichier", "nom": "devis.pdf", "chemin": "D:/w/devis.pdf", "taille": 1024, "date": 1700000100, "conversation": "c2", "conversation_existe": True}]}
+        with mock.patch.object(produced_files, "entries", lambda: listed):
+            answer = V.call("GET", "/api/v1/created-files?conversation=c2", V.OWNER)[1]
+            self.assertEqual(([f["id"] for f in answer["files"]], answer["total_bytes"]), (["f2"], 1024))
+            self.assertEqual(V.call("GET", "/api/v1/created-files?conversation=nowhere", V.OWNER)[1], {"files": [], "total_bytes": 0})
+            self.assertEqual(len(V.call("GET", "/api/v1/created-files", V.OWNER)[1]["files"]), 2, "without the filter, every file")
+
     def test_the_locations_say_their_size_and_their_disk(self):
         seen = {"lignes": [{"cle": "donnees", "nom": "Données", "chemin": "C:/data", "explication": "Conversations…", "existe": True, "taille": 10 ** 6, "disque": {"libre": 5, "total": 10, "racine": "C:\\"}},
                            {"cle": "travail:1", "nom": "Dossier de travail : x", "chemin": "D:/x", "explication": "…", "existe": True, "taille": None, "disque": None}],

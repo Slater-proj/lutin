@@ -4227,10 +4227,13 @@ def web_search_preview(request):
 @route("GET", "/created-files", CONFIGURATOR)
 def created_files(request):
     """Every file Lutin created, the newest first: `{files: [{id, kind, name, path, size_bytes, date, conversation, conversation_exists}],
-    total_bytes}`."""
+    total_bytes}`. `?conversation=<id>`: only the files of that conversation (its panel « This conversation »), `total_bytes` theirs."""
     seen = _produced.entries()
+    wanted = request.query.get("conversation", "")
+    kept = [f for f in seen["liste"] if not wanted or f["conversation"] == wanted]
     return {"files": [{"id": f["id"], "kind": f["genre"], "name": f["nom"], "path": f["chemin"], "size_bytes": f["taille"], "date": f["date"], "conversation": f["conversation"] or None,
-                       "conversation_exists": bool(f["conversation_existe"])} for f in seen["liste"]], "total_bytes": seen["total"]}
+                       "conversation_exists": bool(f["conversation_existe"])} for f in kept],
+            "total_bytes": seen["total"] if not wanted else sum(int(f["taille"] or 0) for f in kept)}
 
 
 @route("POST", "/created-files/delete", CONFIGURATOR)
