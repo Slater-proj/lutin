@@ -13,6 +13,7 @@ import re
 import time
 import urllib.parse
 
+from . import kv_cache
 from . import updates
 from .i18n import t as _t
 
@@ -24,6 +25,7 @@ RE_BPW = re.compile(r"^(\d+(?:\.\d+)?)bpw")
 RE_PARAMS = re.compile(r"(?<![\w.])(\d{1,4}(?:\.\d+)?)\s?[bB](?![a-zA-Z])")
 CACHE = {}          # url -> (instant, valeur) : ni la liste ni les branches ne bougent en quelques minutes
 CACHE_DURATION = 300
+KV = {}          # (dépôt, révision) -> mémoire de conversation lue dans son config.json
 
 
 def _json(url, http):
@@ -90,6 +92,23 @@ def search(q="", tri="recent", communaute=False, page=1, http=updates.http_get, 
                        "capacites": _capabilities(m), "licence": next((t.split(":", 1)[1] for t in tags if t.startswith("license:")), ""), "base": base,
                        "estimation_go": estimate_gb(ident.split("/")[-1], bpw)})
     return {"modeles": sortie[:PER_PAGE * page], "suite": len(sortie) > PER_PAGE * page}
+
+
+def kv_of(depot, revision="main", http=updates.http_get):
+    """La mémoire de conversation du modèle (Mo pour 1 000 jetons, en 16 bits) d'après le config.json de cette révision du dépôt, ou None si Hugging Face ne le donne pas
+    (fichier absent, dépôt fermé, pas de réseau) : le verdict garde alors l'estimation prudente. Une architecture ne change pas : un chiffre lu est gardé pour la session."""
+    if not RE_REPO.match(str(depot or "")):
+        return None
+    cle = (str(depot), str(revision or "main"))
+    if cle in KV:
+        return KV[cle]
+    try:
+        valeur = kv_cache.mb_per_1k(_json("https://huggingface.co/" + urllib.parse.quote(cle[0], safe="/") + "/resolve/" + urllib.parse.quote(cle[1], safe="") + "/config.json", http))
+    except ValueError:
+        return None
+    if valeur:
+        KV[cle] = valeur
+    return valeur
 
 
 def branches_of(depot, http=updates.http_get):

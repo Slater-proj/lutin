@@ -65,14 +65,16 @@ def evaluer(m, profil, ctx_voulu=0, experts_en_ram=True):
 CARTE_RESERVE_GO = 1.0          # ce que le bureau et les autres programmes gardent sur la carte graphique
 
 
-def evaluer_carte_seule(go, profil, ctx):
+def evaluer_carte_seule(go, profil, ctx, kv_mo_1k=None):
     """Le verdict pour un moteur qui ne déborde JAMAIS en mémoire vive et réserve tout de suite le cache de la fenêtre de conversation (ExLlamaV3 :
     TabbyAPI réserve `cache_size`, compressé en Q8). Le jugement commun disait « Juste » d'un modèle qui ne tient qu'en débordant : chargé, il échouait
-    sur « Insufficient VRAM in split for model and cache » (mainteneur, RTX 4090, 2026-11-21). Ici : poids + cache de `ctx` jetons + marge, sur la carte seule."""
+    sur « Insufficient VRAM in split for model and cache » (mainteneur, RTX 4090, 2026-11-21). Ici : poids + cache de `ctx` jetons + marge, sur la carte seule.
+    `kv_mo_1k` : la mémoire de conversation du modèle lue dans son config.json (lutin.kv_cache) ; sans elle, l'estimation prudente KV_MO_PAR_DEFAUT."""
+    connu = {"kv_mo_1k": kv_mo_1k} if kv_mo_1k else {}
     g = profil.gpu_principal() if profil is not None else None
     if not go or g is None or not g.vram_go:
-        return evaluer({"go": go}, profil, experts_en_ram=False) if profil is not None and go else None
-    besoin = model_selection.required_memory_gb(dict(pseudo_modele({"go": go}), go=go), max(4096, int(ctx or 0)))
+        return evaluer(dict({"go": go}, **connu), profil, experts_en_ram=False) if profil is not None and go else None
+    besoin = model_selection.required_memory_gb(dict(pseudo_modele({"go": go}), go=go, **connu), max(4096, int(ctx or 0)))
     utilisable = g.vram_go - CARTE_RESERVE_GO
     if besoin > utilisable:
         return {"niveau": "trop_gros", "texte": _t("Ne tient pas avec ce moteur : tout doit tenir dans la carte graphique, environ {} Go avec {} jetons de conversation, et ta carte en a {} d'utilisables. Prends une quantification plus légère (moins de bpw) ou réduis la fenêtre de contexte (Réglages > Conversation).").format(round(besoin, 1), int(ctx), round(utilisable, 1))}

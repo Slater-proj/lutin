@@ -8,7 +8,7 @@ from lutin import core as _m  # noqa: E402,F401  (before the others: circular im
 from lutin import managed_models as MM  # noqa: E402
 
 
-def judge(gb):
+def judge(gb, kv=None):
     """A card of 24 GB: up to 8 GB ideal, up to 18 good, up to 22 borderline, above too big."""
     level = "ideal" if gb <= 8 else "bien" if gb <= 18 else "limite" if gb <= 22 else "trop_gros"
     return {"niveau": level, "texte": "x"}
@@ -40,7 +40,8 @@ class Recommended(unittest.TestCase):
         self.disk = []
         patches = (mock.patch.object(MM, "_require", return_value=mock.Mock()),
                    mock.patch.object(MM, "_on_disk", side_effect=lambda kind, mo: (self.disk, True, "/models", search, quants)),
-                   mock.patch.object(MM, "_judge", return_value=judge))
+                   mock.patch.object(MM, "_judge", return_value=judge),
+                   mock.patch.object(MM, "_kv_of_repo", return_value=None))          # the config.json of each repository is not read either
         for patch in patches:
             patch.start()
             self.addCleanup(patch.stop)
@@ -63,11 +64,11 @@ class Recommended(unittest.TestCase):
         self.assertEqual(got, {"o/Mid-27B-exl3": True, "o/Small-8B-exl3": False})
 
     def test_nothing_fits_is_an_empty_list(self):
-        with mock.patch.object(MM, "_judge", return_value=lambda gb: {"niveau": "trop_gros", "texte": "x"}):
+        with mock.patch.object(MM, "_judge", return_value=lambda gb, kv=None: {"niveau": "trop_gros", "texte": "x"}):
             self.assertEqual(MM.recommended("exllamav3"), [])
 
     def test_a_machine_that_is_not_detected_recommends_nothing_rather_than_guess(self):
-        with mock.patch.object(MM, "_judge", return_value=lambda gb: None):
+        with mock.patch.object(MM, "_judge", return_value=lambda gb, kv=None: None):
             self.assertEqual(MM.recommended("exllamav3"), [])
 
     def test_at_most_five_models(self):
@@ -109,6 +110,27 @@ class CarteSeule(unittest.TestCase):
         with mock.patch.object(model_fit, "profil_pret", lambda *a: self.profile()), mock.patch.object(managed_models, "_context_size", lambda: 32768):
             self.assertEqual(managed_models._judge("exllamav3")(22.8)["niveau"], "trop_gros")
             self.assertNotEqual(managed_models._judge("lmstudio")(22.8)["niveau"], "trop_gros", "LM Studio (llama.cpp) can put part of a model in memory")
+
+    def test_the_cache_of_the_model_itself_is_counted_when_its_config_says_it(self):
+        """Maintainer (2026-11-21): « Juste » was too kind to a 27-32B on ExLlamaV3. Every model was counted 120 MB per 1,000 tokens; a 32B with 64 layers,
+        8 KV heads of 128 asks 262 (lutin.kv_cache): with 36,864 tokens of window, 4.7 GB of cache instead of 2.2."""
+        from lutin import model_fit
+        guessed = model_fit.evaluer_carte_seule(17.0, self.profile(), 36864)
+        exact = model_fit.evaluer_carte_seule(17.0, self.profile(), 36864, 262)
+        self.assertIn(guessed["niveau"], ("bien", "ideal"))
+        self.assertEqual(exact["niveau"], "limite", exact["texte"])
+        self.assertEqual(model_fit.evaluer_carte_seule(17.0, self.profile(), 36864, 64)["niveau"], guessed["niveau"], "a small cache keeps the verdict")
+
+    def test_the_quantisations_of_a_repository_are_judged_with_its_cache(self):
+        from lutin import managed_models, model_fit
+        asked = []
+        with mock.patch.object(model_fit, "profil_pret", lambda *a: self.profile()), mock.patch.object(managed_models, "_context_size", lambda: 36864), \
+                mock.patch.object(managed_models, "_require", return_value=mock.Mock()), \
+                mock.patch.object(managed_models, "_on_disk", side_effect=lambda kind, mo: ([], True, "/m", None, lambda repo: [{"revision": "4.0bpw", "go": 17.0}])), \
+                mock.patch.object(managed_models._exl_cat, "kv_of", lambda depot, revision="main": asked.append((depot, revision)) or 262):
+            got = managed_models.quantizations("exllamav3", "o/Big-32B-exl3")
+        self.assertEqual(asked, [("o/Big-32B-exl3", "4.0bpw")], "the config.json of a quantisation's own branch")
+        self.assertEqual(got[0]["adequation"]["niveau"], "limite")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ The answers keep the shape of the old page (French keys); /api/v1 translates the
 use, and ValueError (a message for the person) when the catalogue cannot be read.
 """
 import concurrent.futures
+from pathlib import Path
 
 from . import engines as _engines
 from . import exllamav3_catalog as _exl_cat
@@ -46,16 +47,37 @@ def _judge(kind=""):
     its verdict counts that (model_fit.evaluer_carte_seule), the others' the common way."""
     profile = _fit.profil_pret()
     if profile is None:
-        return lambda gb: None
+        return lambda gb, kv=None: None
     if kind == "exllamav3":
         ctx = _context_size()
-        return lambda gb: _fit.evaluer_carte_seule(gb, profile, ctx)
-    return lambda gb: _fit.evaluer({"go": gb}, profile)
+        return lambda gb, kv=None: _fit.evaluer_carte_seule(gb, profile, ctx, kv)
+    return lambda gb, kv=None: _fit.evaluer(dict({"go": gb}, **({"kv_mo_1k": kv} if kv else {})), profile)
 
 
 def judge(kind):
-    """The verdict function of a server (a size in GB -> {niveau, texte}), for the model sources."""
+    """The verdict function of a server (a size in GB, and the model's cache in MB per 1,000 tokens when known -> {niveau, texte}), for the model sources."""
     return _judge(kind)
+
+
+KV_BUDGET_S = 4.0          # a search waits this long at most for the config.json of its models; those not read by then keep the cautious estimate
+
+
+def _kv_of_repo(repo, revisions=(), base=""):
+    """The cache of a repository's model, from the config.json of one of its quantisations, of its main branch, or of the model it was made from. None if none says."""
+    for depot, revision in [(repo, r) for r in revisions[:1]] + [(repo, "main")] + ([(base, "main")] if base else []):
+        kv = _exl_cat.kv_of(depot, revision)
+        if kv:
+            return kv
+    return None
+
+
+def _kv_of_found(found):
+    """{repository: cache} for the models of a search, read in parallel within KV_BUDGET_S."""
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=6)
+    jobs = {pool.submit(_kv_of_repo, m["id"], (), m.get("base", "")): m["id"] for m in found}
+    done, _ = concurrent.futures.wait(jobs, timeout=KV_BUDGET_S)
+    pool.shutdown(wait=False, cancel_futures=True)
+    return {jobs[j]: j.result() for j in done if not j.exception()}
 
 
 def _context_size():
@@ -86,7 +108,13 @@ def models(kind, current_model):
     mo = _require(kind)
     installed, present, folder, _, _ = _on_disk(kind, mo)
     judge = _judge(kind)
-    return {"modeles": [dict(x, adequation=judge(x["taille_go"]) if x.get("taille_go") else None, utilise=(x["nom"] == current_model) if kind != "colibri" else True) for x in installed],
+
+    def kv(x):
+        if kind != "exllamav3":
+            return None
+        from . import kv_cache
+        return kv_cache.of_folder(Path(folder) / x["nom"])
+    return {"modeles": [dict(x, adequation=judge(x["taille_go"], kv(x)) if x.get("taille_go") else None, utilise=(x["nom"] == current_model) if kind != "colibri" else True) for x in installed],
             "installe": present, "dossier": folder, "actif": bool(mo.modeles()["actif"]) if present else False, "maj": kind == "exllamav3", "nom": NAMES[kind],
             "statut": mo.statut().get("detail", "") if present else "", "demarrer": mo.actions().get("demarrer") if present else None}
 
@@ -101,8 +129,9 @@ def catalog(kind, words="", order="recent", community=False, page=1):
     judge, on_disk = _judge(kind), {}
     for x in installed:
         on_disk.setdefault(x.get("depot", "") or x["nom"], []).append(x.get("revision") or "main")
+    caches = _kv_of_found([m for m in found["modeles"] if m.get("estimation_go")]) if kind == "exllamav3" else {}
     for m in found["modeles"]:
-        m["adequation"] = judge(m["estimation_go"]) if m.get("estimation_go") else None
+        m["adequation"] = judge(m["estimation_go"], caches.get(m["id"])) if m.get("estimation_go") else None
         m["installes"] = on_disk.get(m["id"], [])
     return found
 
@@ -129,8 +158,9 @@ def quantizations(kind, repo):
         raise ValueError(_t("Ce serveur n'a pas de quantifications à choisir."))
     judge, on_disk = _judge(kind), {x.get("revision") or "main" for x in installed if x.get("depot") == repo}
     found = quants(repo)
+    kv = _kv_of_repo(repo, [x["revision"] for x in found]) if kind == "exllamav3" and found else None
     for x in found:
-        x["adequation"] = judge(x["go"]) if x.get("go") else None
+        x["adequation"] = judge(x["go"], kv) if x.get("go") else None
         x["installe"] = x["revision"] in on_disk
     return found
 
@@ -165,7 +195,8 @@ def recommended(kind):
             found = [q for q in quants(m["id"]) if q.get("go")]
         except ValueError:
             return None          # a repository that cannot be read is left out, the others still count
-        fitting = [(q, judge(q["go"])) for q in found]
+        kv = _kv_of_repo(m["id"], [q["revision"] for q in found], m.get("base", "")) if kind == "exllamav3" and found else None
+        fitting = [(q, judge(q["go"], kv)) for q in found]
         fitting = [(q, v) for q, v in fitting if v is not None and v["niveau"] in GOOD]
         if not fitting:
             return None
