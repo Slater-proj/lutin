@@ -381,6 +381,31 @@ class Chat(unittest.TestCase):
         self.assertTrue(p.evaluer("[...document.querySelectorAll('.thread details summary')].some(s => s.innerText.includes('modifier'))"), "the tool call stays visible in the stored conversation")
         self.assertEqual(p.erreurs, [])
 
+    def test_3_and_a_page_opened_again_answers_the_card_that_waits(self):
+        """A page reloaded while a card waits did not receive it: it said so and could only stop the answer (review of plan step 7, maintainer: in 1.0).
+        It reads the card again, shows it, and the answer given there reaches the turn, which goes on to its end."""
+        p = self.page
+        target = T.PROJET / "appli" / "moteur" / "code.py"
+        before = target.read_text(encoding="utf-8")
+        back = p.evaluer("location.hash")          # the tests after this one go on in the conversation open now: this one runs in its own
+        own = T.appel("POST", "/conversations", {}, attendu=201)["id"]
+        p.evaluer("location.hash = '#/chat/%s'; location.reload()" % own)
+        p.attendre("location.hash === '#/chat/%s' && !!document.querySelector('#message') && !!document.querySelector('.composer button[type=submit]')" % own)
+        T.SCENARIO[:] = [[T.appel_outil("modifier", chemin="appli/moteur/code.py", ancien="return 1", nouveau="return 2")], [{"content": "Left as it was, after the reload."}]]
+        self.write("Change the file, I will reload")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre("!!document.querySelector('.card .button.danger') && location.hash.startsWith('#/chat/')")
+        p.evaluer("location.reload()")
+        p.attendre("!!document.querySelector('.card .button.danger') && document.querySelector('.card').innerText.includes('return 2')")
+        self.assertFalse(p.evaluer("!!document.querySelector('.elsewhere')"), "the card is shown, not the notice that it cannot be")
+        p.evaluer("document.querySelector('.card .button.danger').click()")
+        p.attendre(TEXT + ".includes('Left as it was, after the reload.')")
+        p.attendre("!document.querySelector('.card') && !!document.querySelector('.composer button[type=submit]')")
+        self.assertEqual(target.read_text(encoding="utf-8"), before, "refused on the page opened again: the file is untouched")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = %r; location.reload()" % back)
+        p.attendre("location.hash === %r && document.querySelectorAll('.thread .mine').length > 0" % back)
+
     def test_3h_a_command_is_allowed_for_this_conversation_and_not_asked_again(self):
         p = self.page
         from lutin import approval_rules

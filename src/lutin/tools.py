@@ -380,6 +380,7 @@ class PendingApproval:
         self.ok = None
         self.reactiver = False          # « Accepter et réactiver l'accord automatique » : l'utilisateur accepte aussi le risque du contenu web pour la suite de la demande
         self.retenir = "once"          # « once », « chat » (le reste de cette conversation) ou « always » (une règle) : voir approval_rules
+        self.carte = {}          # l'évènement « approbation » envoyé à la page : une page rouverte pendant l'attente le relit (GET /conversations/{id}/approvals)
         PendingApproval.EN_COURS[self.id] = self
 
     def attendre(self, delai=900, stop=None):
@@ -389,6 +390,11 @@ class PendingApproval:
             self.evenement.wait(0.5)
         PendingApproval.EN_COURS.pop(self.id, None)
         return bool(self.ok) and not (stop and stop.is_set())
+
+
+def pending_for(conv):
+    """Les cartes d'accord qui attendent une réponse dans cette conversation, les plus anciennes d'abord (évènements « approbation » de la page)."""
+    return [dict(a.carte) for a in list(PendingApproval.EN_COURS.values()) if a.conv == conv and a.carte and not a.evenement.is_set()]
 
 
 def answer_pending(ident, ok, reactiver=False, retenir="once"):

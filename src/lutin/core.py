@@ -326,6 +326,7 @@ from .tools import (  # noqa: F401  (déplacé dans tools.py : moteur ré-export
     rel,
     replace_once,
     answer_pending,
+    pending_for,
     back_up,
     file_sha,
     kill_tree,

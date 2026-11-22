@@ -16,7 +16,7 @@
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
   import { t, type MessageKey } from "../lib/messages";
   import { byUse } from "../lib/model_card";
-  import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
+  import { applyEvent, approvalOf, elsewhereNotice, newTurn, storedToItems, type Approval, type Item, type LiveTurn, type Sent } from "../lib/turn";
   import ConversationTools from "../components/ConversationTools.svelte";
   import { COMMANDS, MODE_NAMES, onOff, parse, suggest as suggestCommands, type Parsed } from "../lib/slash";
   import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status, TurnState } from "../lib/types";
@@ -92,6 +92,7 @@
   let elsewhere = $state(false); // an answer is being written in this conversation, but not by this page (it was reloaded, or another device sent it)
   let elsewhereTurn = $state<TurnState | undefined>(undefined); // where that turn is, when the server says it: waiting for an approval this page cannot show, stalled, being stopped
   let watcher: ReturnType<typeof setInterval> | undefined;
+  let waitingCards = $state<Approval[]>([]); // the cards that answer waits for, read again: a page opened while one waits can answer it (review of plan step 7)
   const busy = $derived(live !== null || elsewhere);
 
   function stopWatching(): void {
@@ -99,12 +100,20 @@
     watcher = undefined;
     elsewhere = false;
     elsewhereTurn = undefined;
+    waitingCards = [];
   }
 
   async function runningElsewhere(id: string): Promise<boolean> {
     const current = await api<Status>("GET", "/status").catch(() => null);
     elsewhereTurn = current?.turns?.find((turn) => turn.conversation === id);
-    return current?.active_turns.includes(id) ?? false;
+    const running = current?.active_turns.includes(id) ?? false;
+    if (running && !where && elsewhereTurn?.state === "waiting_approval") {
+      const read = await api<{ approvals: Parameters<typeof approvalOf>[0][] }>("GET", `/conversations/${encodeURIComponent(id)}/approvals`).catch(() => null);
+      if (read && conversation?.id === id) waitingCards = read.approvals.map(approvalOf);
+    } else {
+      waitingCards = [];
+    }
+    return running;
   }
 
   /** After opening a conversation whose answer is still being written: wait for its end, then read what was stored. */
@@ -427,11 +436,12 @@
   }
 
   async function answerApproval(approved: boolean, remember: "once" | "chat" | "always" = "once", restore = false): Promise<void> {
-    const approval = live?.approval;
+    const approval = live?.approval ?? waitingCards[0];
     if (!approval) return;
     await guarded(async () => {
       await api("POST", approvalPath(where, approval.id), { approved, remember, ...(restore ? { restore_auto_approval: true } : {}) });
-      if (live) live = { ...live, approval: null };
+      if (live?.approval) live = { ...live, approval: null };
+      waitingCards = waitingCards.filter((card) => card.id !== approval.id);
     });
   }
 
@@ -790,6 +800,25 @@
   });
 </script>
 
+{#snippet approvalCard(approval: Approval, suspended: boolean)}
+  <div class="card" role="group" aria-label={t("approval.heading")}>
+    <p class="card-head">{t("approval.heading")}</p>
+    <p class="card-title">{approval.title}</p>
+    {#if approval.detail}<p class="pre">{approval.detail}</p>{/if}
+    {#if approval.diff}<pre>{approval.diff}</pre>{/if}
+    {#if approval.reason}<p class="hint">{approval.reason}</p>{/if}
+    <div class="actions">
+      <button type="button" class="button primary" onclick={() => answerApproval(true)}>{approval.canRemember && !where ? t("approval.once") : t("approval.approve")}</button>
+      {#if approval.canRemember && !where}
+        <button type="button" class="button" onclick={() => answerApproval(true, "chat")}>{t("approval.chat")}</button>
+        <button type="button" class="button" onclick={() => answerApproval(true, "always")}>{t("approval.always")}</button>
+      {/if}
+      {#if suspended}<button type="button" class="button" onclick={() => answerApproval(true, "once", true)}>{t("approval.restore")}</button>{/if}
+      <button type="button" class="button danger" onclick={() => answerApproval(false)}>{t("approval.refuse")}</button>
+    </div>
+  </div>
+{/snippet}
+
 <div class="chat" class:list-open={listOpen}>
   <aside class="list" aria-label={t("chat.conversations")}>
     <div class="list-head">
@@ -944,7 +973,7 @@
         <Thread {items} pending={shownPending} live={shownLive} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate}
           onpin={busy || where ? undefined : pinMessage} onverify={status?.offline ? undefined : verifyAnswer} machine={where} conversation={conversation?.id ?? ""}
           canOpen={!where && !!status?.can_open_files} canDelete={!where && !!status?.access.can_configure} onproduced={reloadConversation} modelLoaded={inMemory?.known ? inMemory.loaded : null} />
-        {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
+        {#if elsewhere && !waitingCards.length}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
         {#if live !== null && !liveHere}<p class="elsewhere" role="status">{t("chat.answer_in_other")}</p>{/if}
       {/if}
     </div>
@@ -966,22 +995,9 @@
       {/if}
       {#if shownLive?.autoApprovalSuspended}<p class="hint">{t("approval.suspended", shownLive.autoApprovalSuspended)}</p>{/if}
       {#if shownLive?.approval}
-        <div class="card" role="group" aria-label={t("approval.heading")}>
-          <p class="card-head">{t("approval.heading")}</p>
-          <p class="card-title">{shownLive.approval.title}</p>
-          {#if shownLive.approval.detail}<p class="pre">{shownLive.approval.detail}</p>{/if}
-          {#if shownLive.approval.diff}<pre>{shownLive.approval.diff}</pre>{/if}
-          {#if shownLive.approval.reason}<p class="hint">{shownLive.approval.reason}</p>{/if}
-          <div class="actions">
-            <button type="button" class="button primary" onclick={() => answerApproval(true)}>{shownLive.approval.canRemember && !where ? t("approval.once") : t("approval.approve")}</button>
-            {#if shownLive.approval.canRemember && !where}
-              <button type="button" class="button" onclick={() => answerApproval(true, "chat")}>{t("approval.chat")}</button>
-              <button type="button" class="button" onclick={() => answerApproval(true, "always")}>{t("approval.always")}</button>
-            {/if}
-            {#if shownLive.autoApprovalSuspended}<button type="button" class="button" onclick={() => answerApproval(true, "once", true)}>{t("approval.restore")}</button>{/if}
-            <button type="button" class="button danger" onclick={() => answerApproval(false)}>{t("approval.refuse")}</button>
-          </div>
-        </div>
+        {@render approvalCard(shownLive.approval, !!shownLive.autoApprovalSuspended)}
+      {:else if elsewhere && waitingCards.length}
+        {@render approvalCard(waitingCards[0], !!waitingCards[0].suspended)}
       {/if}
       {#if conversation && !where}
         <Changes conversation={conversation.id} tick={changesTick} onundone={reloadConversation} />

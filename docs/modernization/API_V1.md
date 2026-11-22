@@ -140,6 +140,7 @@ Not in v1 yet: the settings of an engine (address, key, folders, variant) and th
 ## Approval rules
 
 `GET /api/v1/approval-rules` answers `{rules, project_rules, hardline}`; `POST` (`{"effect": "deny" | "ask" | "allow", "command"}`) and `DELETE /{id}` need the right `configurator`. See [ADR 0009](../adr/0009-approval-rules.md). The event `approval_request` carries `can_remember` for a command, and `POST /api/v1/approvals/{id}` takes `remember`: `once`, `chat` or `always` (`always` needs the right `configurator`).
+A page opened again while a card waits (a reload, another device) reads the cards of the conversation with `GET /api/v1/conversations/{id}/approvals`: `{approvals: [...]}`, each the `approval_request` event the stream sent, and answers them the same way.
 
 ## Projects
 

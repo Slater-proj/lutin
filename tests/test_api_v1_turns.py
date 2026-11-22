@@ -94,6 +94,22 @@ class Stream(unittest.TestCase):
         self.assertEqual((T.PROJET / "appli" / "moteur" / "code.py").read_text(encoding="utf-8"), "def f():\n    return 1\n", "refused: the file is untouched")
         self.assertEqual(events[-1]["type"], "end")
 
+    def test_a_page_opened_again_reads_the_card_that_waits(self):
+        """A page reloaded while a card waits did not receive it: it could only stop the answer (review of plan step 7). It reads it now, the same card as
+        the stream's, and answers it; once answered, nothing waits."""
+        conversation, seen = new_conversation(), []
+        call = T.appel_outil("modifier", chemin="appli/moteur/code.py", ancien="return 1", nouveau="return 2")
+
+        def read_again(event):
+            seen.append(api("GET", "/api/v1/conversations/%s/approvals" % conversation))
+            return False
+        status, _, events = turn(conversation, {"message": "Change it"}, [[call], [{"content": "Understood."}]], approve=read_again)
+        self.assertEqual(status, 200)
+        streamed = of_type(events, "approval_request")[0]
+        self.assertEqual(seen[0], (200, {"approvals": [streamed]}), "the card read again is the one the stream sent")
+        self.assertEqual(api("GET", "/api/v1/conversations/%s/approvals" % conversation), (200, {"approvals": []}), "answered: nothing waits")
+        self.assertEqual(api("GET", "/api/v1/conversations/%s/approvals" % ("0" * 8))[0], 404)
+
     def test_a_failure_during_the_turn_is_an_error_event_with_a_code(self):
         status, _, events = turn(new_conversation(), {"message": "Hello"}, [[{"error": "model exploded"}]] * 6)
         self.assertEqual(status, 200)

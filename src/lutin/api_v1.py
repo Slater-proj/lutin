@@ -4344,6 +4344,14 @@ def background_job_report(request):
 
 
 # ------------------------------------------------------------------------------------------------------------- approvals
+@route("GET", "/conversations/{id}/approvals", SESSION)
+def pending_approvals(request):
+    """The approval cards this conversation waits for, as the stream sent them (`approval_request` events): `{approvals: [...]}`. A page opened again while
+    a card waits shows it and answers with POST /approvals/{id}; before, only the page that sent the message could, and a reloaded page could only stop."""
+    _read(request.params["id"])
+    return {"approvals": [event(_m.translate_event(card)) for card in _m.pending_for(request.params["id"])]}
+
+
 @route("POST", "/approvals/{id}", SESSION)
 def answer_approval(request):
     """Answers a pending action: {"approved": true}. `restore_auto_approval` re-enables the automatic approvals suspended after a web read, for this request only.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { lineParser } from "./stream";
 import { catalogue, translate } from "./messages";
-import { applyEvent, elsewhereNotice, newTurn, storedToItems, withoutProduced, type LiveTurn } from "./turn";
+import { applyEvent, approvalOf, elsewhereNotice, newTurn, storedToItems, withoutProduced, type LiveTurn } from "./turn";
 import type { TurnEvent } from "./types";
 
 function play(events: TurnEvent[]): LiveTurn {
@@ -40,7 +40,7 @@ describe("the turn being written", () => {
       { type: "tool_call", name: "modifier", arguments: { chemin: "a.py" } },
       { type: "approval_request", id: "x1", title: "Change a.py", detail: "", diff: "-1\n+2" },
     ]);
-    expect(asked.approval).toEqual({ id: "x1", title: "Change a.py", detail: "", diff: "-1\n+2", reason: "", canRemember: false });
+    expect(asked.approval).toEqual({ id: "x1", title: "Change a.py", detail: "", diff: "-1\n+2", reason: "", canRemember: false, suspended: false });
     const answered = applyEvent(asked, { type: "tool_result", name: "modifier", text: "refused" });
     expect(answered.approval).toBeNull();
     expect(answered.blocks).toEqual([{ kind: "tool", name: "modifier", arguments: { chemin: "a.py" }, result: "refused", produced: { media: [], files: [] } }]);
@@ -129,5 +129,13 @@ describe("the texts", () => {
   it("fill their marks in order", () => {
     expect(translate("en", "chat.tokens", 1300, 24576)).toBe("Context: 1300 of 24576 tokens");
     expect(translate("fr", "chat.tokens", 1300, 24576)).toBe("Contexte : 1300 jetons sur 24576");
+  });
+});
+
+describe("a card read again", () => {
+  it("is the card of the stream, with whether the automatic approval was suspended", () => {
+    // a page opened again while a card waits reads it from GET /conversations/{id}/approvals (review of plan step 7)
+    expect(approvalOf({ id: "a1", title: "Run npm test", detail: "", diff: "", reason: "Web content was read", can_remember: true, auto_approval_suspended: true }))
+      .toEqual({ id: "a1", title: "Run npm test", detail: "", diff: "", reason: "Web content was read", canRemember: true, suspended: true });
   });
 });

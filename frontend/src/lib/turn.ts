@@ -31,6 +31,12 @@ export interface Approval {
   diff: string;
   reason: string;
   canRemember: boolean; // a command: the « yes » can be kept for this conversation, or always
+  suspended?: boolean; // read again after a reload: the automatic approval was suspended (a web read), so the card offers to restore it
+}
+
+/** The card of an `approval_request` event: the one the stream sends, and the one a page opened again reads (GET /conversations/{id}/approvals). */
+export function approvalOf(event: { id: string; title: string; detail: string; diff: string; reason?: string; can_remember?: boolean; auto_approval_suspended?: boolean }): Approval {
+  return { id: event.id, title: event.title, detail: event.detail, diff: event.diff, reason: event.reason ?? "", canRemember: event.can_remember === true, suspended: event.auto_approval_suspended === true };
 }
 
 /** The answer being written. */
@@ -99,7 +105,7 @@ export function applyEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
     case "tool_result":
       return { ...turn, approval: null, blocks: withResult(turn.blocks, event.name, event.text, produced(event.media, event.media_files, event.attached_files)) };
     case "approval_request":
-      return { ...turn, approval: { id: event.id, title: event.title, detail: event.detail, diff: event.diff, reason: event.reason ?? "", canRemember: event.can_remember === true } };
+      return { ...turn, approval: approvalOf(event) };
     case "auto_approval_suspended":
       return { ...turn, autoApprovalSuspended: event.reason };
     case "auto_approval_restored":

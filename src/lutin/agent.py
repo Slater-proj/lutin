@@ -1627,8 +1627,9 @@ def _run_turn(conv, texte, emit, r, stop, remplacer_depuis, identite, lecture_se
             return False
         a = _m.PendingApproval(titre, detail, diff, conv["id"])
         suspendu = bool(ctx.get("suspension_signalee"))
+        a.carte = {"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu, "retenir": bool(sujet.get("retenir"))}
         with _etat_tour.waiting(conv["id"], titre):          # dit AVANT la carte : quand la page la reçoit, le tour est déjà « en attente d'un accord »
-            emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu, "retenir": bool(sujet.get("retenir"))})
+            emit(dict(a.carte, type="approbation"))          # le type écrit ici aussi : la lecture de la source (tests/test_api_v1_turns.py) le voit
             ok = a.attendre(stop=stop)
         if stop.is_set():
             raise _m.TurnStopped()
