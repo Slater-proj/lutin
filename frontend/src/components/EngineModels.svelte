@@ -474,6 +474,10 @@
     min-width: 0;
   }
 
+  .search {
+    align-items: end; /* the fields under their labels, the button and the boxes on the line of the fields */
+  }
+
   .cards {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr));

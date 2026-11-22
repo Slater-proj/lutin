@@ -46,6 +46,17 @@ a {
   outline-offset: 2px;
 }
 
+/* The fields every screen shares, at no specificity (:where): a component that draws its own keeps it, one that forgot (the search of the Models
+   screen was the browser's small field) looks like the others. */
+:where(input:not([type]), input[type="text"], input[type="search"], input[type="number"], input[type="url"], input[type="password"],
+  input[type="email"], input[type="time"], input[type="date"], select) {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+
 pre,
 code {
   font-family: var(--font-mono);
