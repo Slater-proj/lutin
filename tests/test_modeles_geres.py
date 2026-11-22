@@ -55,7 +55,7 @@ class CatalogueGguf(unittest.TestCase):
         self.assertGreater(r["modeles"][0]["estimation_go"], 5, "8B à environ 4,85 bits")
 
     def test_les_fichiers_sont_regroupes_par_quantification_sans_les_projecteurs_d_images(self):
-        arbre = [fichier("Qwen3-8B-Q8_0.gguf", 8.7), fichier("Qwen3-8B-Q4_K_M.gguf", 5.0), fichier("mmproj-Qwen3-8B-F16.gguf", 1.2), fichier("README.md", 0.00001),
+        arbre = [fichier("Qwen3-8B-Q8_0.gguf", 8.7), fichier("Qwen3-8B-Q4_K_M.gguf", 5.0), fichier("mmproj-Qwen3-8B-F16.gguf", 1.2), fichier("Qwen3-8B.imatrix.gguf", 0.4), fichier("README.md", 0.00001),
                  fichier("Gros-Q4_K_M-00001-of-00002.gguf", 20), fichier("Gros-Q4_K_M-00002-of-00002.gguf", 18), {"type": "directory", "path": "sous-dossier"}]
         q = LC.quantizations("lmstudio-community/Qwen3-8B-GGUF", faux_hf(arbre))
         self.assertEqual([(x["revision"], x["go"], x["fichiers"]) for x in q], [("Q8_0", 8.7, 1), ("Q4_K_M", 43.0, 3)])

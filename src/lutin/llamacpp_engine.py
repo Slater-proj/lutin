@@ -1280,7 +1280,7 @@ class LlamaCppEngine(OpenAIEngine):
         return [{"id": m.get("id", ""), "telechargements": int(m.get("downloads") or 0), "likes": int(m.get("likes") or 0)} for m in lus if RE_REPO.match(str(m.get("id", "")))]
 
     def fichiers_du_depot(self, repo, http_json=None):
-        """Les fichiers .gguf d'un dépôt (hors morceaux d'un modèle coupé et hors projecteurs d'images), avec leur taille."""
+        """Les fichiers .gguf d'un dépôt (hors morceaux d'un modèle coupé, projecteurs d'images et matrice d'importance « .imatrix.gguf »), avec leur taille."""
         if not RE_REPO.match(str(repo or "")):
             raise EngineError(_t("Nom de dépôt invalide (attendu : auteur/nom)."))
         try:
@@ -1292,7 +1292,7 @@ class LlamaCppEngine(OpenAIEngine):
         sortie = []
         for f in lus:
             chemin = str(f.get("path", ""))
-            if f.get("type") == "file" and RE_FILE.match(chemin) and not RE_SHARD.search(chemin) and "mmproj" not in chemin.lower():
+            if f.get("type") == "file" and RE_FILE.match(chemin) and not RE_SHARD.search(chemin) and "mmproj" not in chemin.lower() and "imatrix" not in chemin.lower():
                 sortie.append({"fichier": chemin, "taille": int((f.get("lfs") or {}).get("size") or f.get("size") or 0)})
         return sorted(sortie, key=lambda x: x["taille"])
 

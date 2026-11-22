@@ -266,7 +266,7 @@ class Modeles(Base):
         with self.assertRaises(ml.EngineError):
             self.m.chercher_modeles("   ")
         arbre = [{"type": "file", "path": "Q4_K_M.gguf", "lfs": {"size": 2_500_000_000}}, {"type": "file", "path": "Q8_0.gguf", "size": 4_000_000_000},
-                 {"type": "file", "path": "mmproj-F16.gguf", "size": 5}, {"type": "file", "path": "gros-00001-of-00002.gguf", "size": 9}, {"type": "file", "path": "README.md", "size": 1}, {"type": "directory", "path": "x"}]
+                 {"type": "file", "path": "mmproj-F16.gguf", "size": 5}, {"type": "file", "path": "gros-00001-of-00002.gguf", "size": 9}, {"type": "file", "path": "Qwen3-4B.imatrix.gguf", "size": 4}, {"type": "file", "path": "README.md", "size": 1}, {"type": "directory", "path": "x"}]
         self.assertEqual([f["fichier"] for f in self.m.fichiers_du_depot("unsloth/Qwen3-4B-GGUF", http_json=lambda url: arbre)], ["Q4_K_M.gguf", "Q8_0.gguf"])
         with self.assertRaises(ml.EngineError):
             self.m.fichiers_du_depot("../x")

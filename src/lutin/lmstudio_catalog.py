@@ -27,8 +27,8 @@ def quantizations(depot, http=updates.http_get):
     groupes = {}
     for f in fichiers if isinstance(fichiers, list) else []:
         nom = str(f.get("path", ""))
-        if f.get("type") != "file" or not nom.lower().endswith(".gguf") or "mmproj" in nom.lower():
-            continue
+        if f.get("type") != "file" or not nom.lower().endswith(".gguf") or "mmproj" in nom.lower() or "imatrix" in nom.lower():
+            continue          # ni les projecteurs d'images, ni la matrice d'importance (« .imatrix.gguf ») des dépôts i1 : ce ne sont pas des modèles
         m = RE_QUANT.search(nom)
         quant = m.group(1).upper() if m else nom[:-5]
         g = groupes.setdefault(quant, {"revision": quant, "fichiers": 0, "octets": 0})
