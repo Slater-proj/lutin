@@ -2270,6 +2270,7 @@ def _run_calls(conv, r, emit, ctx, stop, appels, outils, garde):
             garde.refuser(nom, args)
         else:
             garde.noter_resultat(nom, args, resultat)          # un résultat qui change n'est pas une boucle
+            resultat = garde.noter_erreur(nom, resultat)          # the same tool failing again and again, whatever its arguments: told to change its approach
         _observatoire.record("outil", conv["id"], outil=nom, duree_ms=int((time.monotonic() - debut_outil) * 1000), ok=not str(resultat).startswith(("Erreur", "Interrompu")), modele=r["modele"],
                             detail=str(resultat)[:100] if str(resultat).startswith("Erreur") else "")
         medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation
@@ -2349,7 +2350,10 @@ def agent_loop(conv, r, emit, ctx, stop):
             if forcer_fin:
                 break
             forcer_fin = True
-            emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : je lui demande de conclure avec ce qu'il a déjà obtenu.").format(_boucles.GIVE_UP_THRESHOLD)})
+            if garde.raison == "errors":
+                emit({"type": "info", "texte": _t("↻ Le modèle échoue encore et encore avec le même outil ({} fois de suite) : je lui demande de conclure avec ce qu'il a déjà obtenu.").format(_boucles.ERRORS_GIVE_UP)})
+            else:
+                emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : je lui demande de conclure avec ce qu'il a déjà obtenu.").format(_boucles.GIVE_UP_THRESHOLD)})
             continue
     else:
         emit({"type": "info", "texte": "Beaucoup d'étapes d'outils dans ce tour : écris « continue » pour que je poursuive."})

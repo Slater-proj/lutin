@@ -78,6 +78,32 @@ class Boucles(unittest.TestCase):
         self.assertFalse(loop_detection.repeated_text(""))
         self.assertFalse(loop_detection.repeated_text(None))
 
+    def test_une_recherche_reformulee_est_la_meme_recherche(self):
+        """Plan step 7: a small model rephrases the same search (order, case, accents, short words); it gets the same results, so it is the same call."""
+        g = loop_detection.Guard()
+        for requete in ("couleur robots Marly", "Marly : la COULEUR des robots", "robots marly couleur"):
+            n = self.appeler(g, "chercher", {"motif": requete}, "rien trouvé")
+        self.assertEqual(n, 3, "the third rephrasing is refused like a third identical call")
+        self.assertEqual(self.appeler(g, "chercher", {"motif": "taille des robots"}, "rien trouvé"), 1, "other words: another search")
+        self.assertNotEqual(loop_detection.fingerprint("lire", {"chemin": "A.txt"}), loop_detection.fingerprint("lire", {"chemin": "a.txt"}), "only searches are judged on their words")
+
+    def test_le_meme_outil_qui_echoue_encore_et_encore(self):
+        """Plan step 7: the same tool failing with different arguments (one wrong path after another) is a loop too: advice from the third error in a row,
+        the turn concluded at the sixth; a success in between resets the count."""
+        g = loop_detection.Guard()
+        resultats = [g.noter_erreur("lire", "Erreur : fichier introuvable (x%d.txt)" % i) for i in range(5)]
+        self.assertNotIn("de suite", resultats[1])
+        self.assertIn("vient d'échouer 3 fois de suite", resultats[2])
+        self.assertTrue(resultats[2].startswith("Erreur : fichier introuvable (x2.txt)"), "the error itself comes first")
+        self.assertFalse(g.abandon)
+        self.assertEqual(g.noter_erreur("lire", "contenu du fichier"), "contenu du fichier", "a success is given as it is")
+        self.assertNotIn("de suite", g.noter_erreur("lire", "Erreur : encore"), "and resets the count")
+        for _ in range(5):
+            g.noter_erreur("modifier", "Erreur : texte introuvable")
+        self.assertFalse(g.abandon)
+        g.noter_erreur("modifier", "Erreur : texte introuvable")
+        self.assertEqual((g.abandon, g.raison), (True, "errors"))
+
 
 if __name__ == "__main__":
     unittest.main()

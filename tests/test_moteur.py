@@ -1243,10 +1243,28 @@ class Assistant(unittest.TestCase):
         self.assertFalse(any("fenêtre de contexte (" in e.get("texte", "") and e["type"] == "erreur" for e in ev), "la fenêtre n'est pas pleine : on n'accuse pas la conversation")
 
     def test_dernier_tour_sans_outils(self):
-        ev = chat("Fais le tour", reponses=[[appel_outil("lister", dossier="docs/sous%d" % i)] for i in range(A.MAX_TURNS - 1)] + [[{"content": "Synthèse finale."}]])          # des appels qui varient : ce n'est pas une boucle
+        dossiers = [PROJET / "docs" / ("sous%d" % i) for i in range(A.MAX_TURNS - 1)]
+        for d in dossiers:
+            d.mkdir(parents=True, exist_ok=True)          # calls that succeed: a tool failing again and again is a loop of its own (loop_detection.ERRORS_GIVE_UP)
+        try:
+            ev = chat("Fais le tour", reponses=[[appel_outil("lister", dossier="docs/sous%d" % i)] for i in range(A.MAX_TURNS - 1)] + [[{"content": "Synthèse finale."}]])          # des appels qui varient : ce n'est pas une boucle
+        finally:
+            for d in dossiers:
+                d.rmdir()
         self.assertEqual(texte_de(ev), "Synthèse finale.")
         self.assertNotIn("tools", RECUES[-1], "au dernier tour, plus d'outils : le modèle doit répondre")
         self.assertIn("Réponds maintenant", RECUES[-1]["messages"][-1]["content"])
+
+    def test_le_meme_outil_qui_echoue_trois_fois_recoit_l_ordre_de_changer_d_approche(self):
+        """Plan step 7: one wrong path after another is a loop as well; at the third error in a row of the same tool, the model is told to change its approach."""
+        ev = chat("Lis le fichier", reponses=[[appel_outil("lire", chemin="docs/absent%d.md" % i)] for i in range(3)] + [[{"content": "Je ne trouve pas ce fichier."}]])
+        resultats = [e["texte"] for e in ev if e["type"] == "resultat"]
+        self.assertEqual(len(resultats), 3)
+        self.assertNotIn("de suite", resultats[1])
+        self.assertIn("vient d'échouer 3 fois de suite", resultats[2])
+        outils = [m["content"] for m in RECUES[-1]["messages"] if m.get("role") == "tool"]
+        self.assertIn("change d'approche", outils[-1], "the model reads the advice")
+        self.assertEqual(texte_de(ev), "Je ne trouve pas ce fichier.")
 
     def test_ollama_absent_et_erreur_claire(self):
         ancien = A.OLLAMA

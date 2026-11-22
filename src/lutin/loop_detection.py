@@ -16,6 +16,9 @@ GIVE_UP_THRESHOLD = 5                  # au cinquième, le tour s'arrête
 SIMILARITY_THRESHOLD = 0.8             # part de mots communs au-delà de laquelle deux réponses sont « la même »
 MIN_LENGTH = 60                  # une réponse plus courte (« Oui. ») ne compte pas
 MAY_REPEAT = {"taches", "suivi", "memoriser"}          # ces outils se rappellent légitimement avec les mêmes arguments
+SEARCHES = {"chercher", "trouver", "rappeler", "web_chercher"}          # plan step 7: the same words in another order or case are the same search
+ERRORS_THRESHOLD = 3           # the same tool failing this many times in a row, whatever its arguments: the model is told to change its approach
+ERRORS_GIVE_UP = 6             # ... and at this many, the turn is brought to a conclusion
 
 
 REPEAT_WINDOW = 160           # caractères de la fin du texte qu'on cherche plus haut
@@ -47,6 +50,13 @@ def similarity(a, b):
 
 
 def fingerprint(nom, args):
+    """What makes two calls « the same call ». A search is judged on its words (accents, case, order and short words left aside): a small model that
+    rephrases « Marly robots colour » into « colour of the robots, Marly » asks the same thing and gets the same results."""
+    if nom in SEARCHES and isinstance(args, dict):
+        words = sorted(set().union(*(useful_words(v) for v in args.values() if isinstance(v, str))) or [])
+        others = {k: v for k, v in args.items() if not isinstance(v, str)}
+        if words:
+            return nom + " " + " ".join(words) + json.dumps(others, sort_keys=True, default=str)
     try:
         return nom + json.dumps(args, sort_keys=True, ensure_ascii=False, default=str)
     except (TypeError, ValueError):
@@ -60,7 +70,9 @@ class Guard:
     def __init__(self):
         self.vus = {}              # empreinte de l'appel -> nombre d'appels qui ont redonné le résultat précédent (+ 1)
         self.dernier = {}          # empreinte de l'appel -> empreinte du dernier résultat
+        self.erreurs = {}          # tool -> how many of its calls in a row ended with an error
         self.abandon = False
+        self.raison = ""           # why the turn is brought to an end: "same_call" or "errors"
 
     def compter(self, nom, args):
         """Renvoie le nombre d'appels identiques (même résultat) déjà faits dans ce tour, celui-ci compris."""
@@ -73,7 +85,20 @@ class Guard:
         cle = fingerprint(nom, args)
         self.vus[cle] = self.vus.get(cle, 0) + 1
         if self.vus[cle] >= GIVE_UP_THRESHOLD:
-            self.abandon = True
+            self.abandon, self.raison = True, self.raison or "same_call"
+
+    def noter_erreur(self, nom, resultat):
+        """The result of a call, with advice added when the same tool has failed ERRORS_THRESHOLD times in a row, even with other arguments (a model
+        that tries one wrong path after another, or an edit whose old text it never quotes right). A success resets the count. Returns the result to give."""
+        if not str(resultat).startswith("Erreur"):
+            self.erreurs.pop(nom, None)
+            return resultat
+        n = self.erreurs[nom] = self.erreurs.get(nom, 0) + 1
+        if n >= ERRORS_GIVE_UP:
+            self.abandon, self.raison = True, self.raison or "errors"
+        if n < ERRORS_THRESHOLD:
+            return resultat
+        return str(resultat) + "\n\n" + _t("L'outil « {} » vient d'échouer {} fois de suite. Ne réessaie pas de la même façon : relis l'erreur, vérifie avec un autre outil (lister, lire, chercher), change d'approche, ou dis à l'utilisateur ce qui te bloque.").format(nom, n)
 
     def noter_resultat(self, nom, args, resultat):
         """À appeler après l'exécution : un résultat identique au précédent compte comme une répétition, un résultat différent remet le compte à un."""
@@ -84,7 +109,7 @@ class Guard:
         self.vus[cle] = self.vus.get(cle, 0) + 1 if self.dernier.get(cle) == signature else 1
         self.dernier[cle] = signature
         if self.vus[cle] >= GIVE_UP_THRESHOLD:
-            self.abandon = True
+            self.abandon, self.raison = True, self.raison or "same_call"
 
     @staticmethod
     def message(n):
