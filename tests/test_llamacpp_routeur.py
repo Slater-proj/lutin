@@ -216,6 +216,45 @@ class ClesEtReglages(Base):
         self.assertNotIn("--load-mode", self.lancements()[1])
         self.assertIn("load-mode = none", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99, "chargement_direct": True}))
 
+    def test_le_cache_de_conversation_est_en_8_bits_comme_avec_ollama(self):
+        """Maintainer (2026-11-22): « the same model as Ollama, and ExLlamaV3 or llama.cpp says not enough memory ». Ollama and TabbyAPI got a cache in 8 bits from Lutin,
+        llama.cpp kept 16: twice the memory for the same window (9.4 GB instead of 4.7 for a 32B at 36,864 tokens)."""
+        ml.regler("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE + " -fa,   --flash-attn [on|off|auto] -ctk,  --cache-type-k type -ctv,  --cache-type-v type"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertEqual((c[c.index("-fa") + 1], c[c.index("-ctk") + 1], c[c.index("-ctv") + 1]), ("on", "q8_0", "q8_0"), "the values' cache in 8 bits needs flash attention")
+        self.m.arreter()
+        self.aide = AIDE_COMPLETE + " -fa, --flash-attn -ctk, --cache-type-k -ctv, --cache-type-v"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertEqual(self.lancements()[1][self.lancements()[1].index("-fa") + 1], "-ctk", "an older server takes -fa alone")
+        self.m.arreter()
+        ml.regler("llamacpp", variante_installee="vulkan")
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("-ctk", self.lancements()[2], "flash attention is not sure everywhere: left as it was outside CUDA and Metal")
+        self.m.arreter()
+        ml.regler("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("-ctk", self.lancements()[3], "a server that does not know the options")
+        preset = ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99, "cache_8_bits": True})
+        self.assertIn("cache-type-v = q8_0", preset)
+        self.assertIn("flash-attn = on", preset)
+        self.assertNotIn("cache-type", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99}))
+
+    def test_un_serveur_qui_refuse_le_cache_en_8_bits_repart_comme_avant(self):
+        """Some models or cards refuse flash attention: llama-server stops at once. A model that does not start at all would be worse than the memory it saves."""
+        ml.regler("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE + " -fa,   --flash-attn [on|off|auto] -ctk,  --cache-type-k type -ctv,  --cache-type-v type"
+        self.addCleanup(ml.SERVEUR.pop, "cache_8_refuse", None)
+        with mock.patch.dict(os.environ, {"LUTIN_FAUX_SANS_FA": "1"}):
+            r = self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertTrue(r["message"]["content"].startswith("réponse de un"))
+        self.assertEqual([("-ctk" in c) for c in self.lancements()], [True, False], "tried in 8 bits, then started as before")
+        self.m.arreter()
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("-ctk", self.lancements()[2], "not tried again in the same session")
+
     def test_des_experts_imposes_ne_laissent_pas_fit_renoncer(self):
         """`--fit` renonce quand des placements de tenseurs sont déjà donnés (c'est ce que fait --n-cpu-moe) : avec les experts imposés, toutes les couches vont
         sur la carte (-ngl 99) et --fit n'est pas demandé."""

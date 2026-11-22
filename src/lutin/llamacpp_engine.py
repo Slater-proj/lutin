@@ -311,6 +311,8 @@ def texte_preset(modeles, ctx, reglages):
         lignes.append("load-mode = none")          # llama.cpp 1.0 : `no-mmap` n'existe plus
     if reglages.get("cache_ram") is not None:
         lignes.append("cache-ram = {}".format(int(reglages["cache_ram"])))
+    if reglages.get("cache_8_bits"):
+        lignes += ["flash-attn = on", "cache-type-k = q8_0", "cache-type-v = q8_0"]
     for nom, fichier, projecteur in modeles:
         if not RE_NOM_PRESET.match(str(nom)):
             continue
@@ -522,6 +524,15 @@ def sans_projection(aide):
     if "--load-mode" in aide:
         return ["--load-mode", "none"]
     return []
+
+
+def cache_compresse(aide, variante):
+    """Le cache de conversation en 8 bits (`-ctk q8_0 -ctv q8_0`), comme Lutin le demande à Ollama (OLLAMA_KV_CACHE_TYPE) et à TabbyAPI (cache_mode Q8) : la moitié
+    de la mémoire pour la même fenêtre. Sans lui, llama.cpp réservait 9,4 Go de cache pour un 32B à 36 864 jetons, Ollama 4,7. Le cache des valeurs compressé
+    exige l'attention « flash » : demandée avec, et seulement sur une carte où elle est sûre (CUDA, Metal). [] si le serveur ne connaît pas ces options."""
+    if variante not in ("cuda", "metal") or not all(o in aide for o in ("--cache-type-k", "--cache-type-v", "--flash-attn")):
+        return []
+    return (["-fa", "on"] if "[on|off|auto]" in aide else ["-fa"]) + ["-ctk", "q8_0", "-ctv", "q8_0"]
 
 
 def sans_ajustement(machine):
@@ -1008,6 +1019,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
                     commande += ["-ngl", "99"]          # tout le modèle sur la carte ; s'il est trop gros pour elle, `--fit` (ci-dessus) répartit les couches avec le processeur
                 if gpu and not moe:          # aussi avec `--fit` : un modèle « limite » pour la carte (22 Go sur 24) était gardé EN ENTIER en mémoire vive par-dessus ses couches sur la carte
                     commande += sans_projection(aide)          # le fichier n'est pas laissé en mémoire vive une fois ses poids passés dans la carte (sinon : 22 Go en VRAM ET 22 Go en RAM, et un PC qui sature)
+                commande += [] if SERVEUR.get("cache_8_refuse") else cache_compresse(aide, variante)
             journal = self.dossier() / "serveur.log"
             journal.parent.mkdir(parents=True, exist_ok=True)
             sortie = open(journal, "wb")
@@ -1017,13 +1029,18 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 raise ErreurMoteur(_t("Impossible de lancer llama-server : {}").format(e))
             finally:
                 sortie.close()          # le processus garde sa propre copie du fichier journal
-            SERVEUR.update({"modele": ROUTEUR if routeur else modele, "ctx": ctx})
+            SERVEUR.update({"modele": ROUTEUR if routeur else modele, "ctx": ctx, "cache_8": "-ctk" in commande or "cache-type-k = q8_0" in (texte if routeur else "")})
         lance = SERVEUR["proc"]
         fin = time.time() + attente
         while time.time() < fin:
             if lance is None or SERVEUR["proc"] is not lance:
                 raise ErreurMoteur(_t("Le serveur llama.cpp a été arrêté ou remplacé pendant son démarrage : relance la demande."))
             if lance.poll() is not None:
+                if SERVEUR.get("cache_8") and not SERVEUR.get("cache_8_refuse"):
+                    SERVEUR["cache_8_refuse"] = True          # a model or a card that refuses flash attention: started as before, for the rest of the session
+                    from . import core as _m
+                    _m.journaliser("llama-server s'est arrêté au démarrage avec le cache en 8 bits ({}) : relancé sans.".format(self._fin_du_journal()))
+                    return self.demarrer(modele, ctx, attente, propres)
                 fin = self._fin_du_journal()
                 raise ErreurMoteur(_t("llama-server s'est arrêté au démarrage : {}").format(fin) + aide_bibliotheque(fin))
             if self._pret():
@@ -1050,7 +1067,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
         gpu = variante in ("cuda", "vulkan", "metal")
         reglages = {"cache_ram": cache, "fils": fils, "n_cpu_moe": moe, "ngl": 99 if tout_sur_la_carte else 0,
                     "sans_mmap": bool(gpu and not moe and self.option_possible("--no-mmap")),
-                    "chargement_direct": bool(gpu and not moe and not self.option_possible("--no-mmap") and self.option_possible("--load-mode"))}
+                    "chargement_direct": bool(gpu and not moe and not self.option_possible("--no-mmap") and self.option_possible("--load-mode")),
+                    "cache_8_bits": not SERVEUR.get("cache_8_refuse") and variante in ("cuda", "metal") and all(self.option_possible(o) for o in ("--cache-type-k", "--cache-type-v", "--flash-attn"))}
         return tuple(n for n, _, _ in modeles), texte_preset(modeles, ctx, reglages)
 
     def _pret(self):

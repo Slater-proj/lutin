@@ -8,6 +8,9 @@ port = int(args[args.index("--port") + 1])
 import os
 if os.environ.get("LUTIN_FAUX_ARGS"):
     open(os.environ["LUTIN_FAUX_ARGS"], "a", encoding="utf-8").write(json.dumps(args) + chr(10))
+if os.environ.get("LUTIN_FAUX_SANS_FA") and "-ctk" in args:
+    print("flash_attn requested but not supported by this model")
+    sys.exit(1)          # a model or a card that refuses flash attention
 ROUTEUR = "--models-preset" in args
 if ROUTEUR:
     NOMS = [l.strip()[1:-1] for l in open(args[args.index("--models-preset") + 1], encoding="utf-8") if l.strip().startswith("[") and l.strip() != "[*]"]
