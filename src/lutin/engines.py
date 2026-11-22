@@ -79,6 +79,11 @@ class Moteur:
         """Vrai si `en_memoire` sait dire « chargé » de « pas chargé » : sinon son None veut dire « le moteur ne le dit pas », et la page n'affiche rien plutôt que de se tromper."""
         return False
 
+    def cache_reserve(self, modele, ctx):
+        """Octets que le moteur réserve sur la carte, au chargement, pour le cache d'une fenêtre de `ctx` jetons, quand il ne sait pas déborder sur le processeur (le garde-fou
+        les compte avec les poids). 0 : le moteur ne réserve rien de tel, ou il déborde au lieu d'échouer."""
+        return 0
+
     def chat(self, corps, delai=60):
         """Une réponse complète (sans flux) : renvoie le dictionnaire de la réponse, au format d'Ollama."""
         raise NotImplementedError

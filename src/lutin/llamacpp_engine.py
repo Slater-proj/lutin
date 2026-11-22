@@ -1412,6 +1412,15 @@ class MoteurExterne(MoteurOpenAI):
             return None          # arrêté, ou « aucun modèle chargé » (TabbyAPI répond alors par une erreur)
         return {"taille": 0, "vram": 0} if str(charge.get("id") or "") == str(modele) else None
 
+    def cache_reserve(self, modele, ctx):
+        """TabbyAPI réserve `cache_size` en Q8 dès le chargement, sur la carte seule : sans ce compte, le garde-fou laissait charger un 27B de 16,5 Go dans 18 Go libres,
+        et TabbyAPI répondait « Insufficient VRAM in split for model and cache »."""
+        if not self.exllamav3_choisi() or not modele or not ctx or Path(str(modele)).name != str(modele):
+            return 0
+        from . import exllamav3, kv_cache, model_fit
+        kv = kv_cache.of_folder(exllamav3.folder_models(self._dossiers()) / str(modele)) or model_fit.KV_MO_PAR_DEFAUT
+        return int(kv * (int(ctx) / 1000) / 1024 * 0.5 * 1024 ** 3)
+
     def port_exllamav3(self):
         from . import exllamav3
         try:

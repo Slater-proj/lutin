@@ -240,10 +240,20 @@ def _unload_before_loading(r):
     return ((r or {}).get("moteur") or "ollama") == "ollama"
 
 
+def _cache_reserve(r, charge):
+    """What the chosen engine reserves for the conversation cache when it loads the model and cannot spill (ExLlamaV3); 0 once the model is loaded."""
+    if charge is not None:
+        return 0
+    try:
+        return int(_m.moteur_local(r).cache_reserve(r.get("modele"), int(r.get("num_ctx") or 0)) or 0)
+    except Exception:  # noqa: BLE001  (an estimate: never an error more)
+        return 0
+
+
 def health_state(r=None):
     r = r or _m.reglages()
     charge = _m.ps_modele(r["modele"])
-    besoin = 0 if _model_on_another_machine(r) else model_size(r["modele"], charge)
+    besoin = 0 if _model_on_another_machine(r) else model_size(r["modele"], charge) + _cache_reserve(r, charge)
     etat = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
     try:
         from . import store
@@ -272,7 +282,7 @@ def _blockers(r, emit, conv_id=""):
         return []          # le modèle tourne sur une autre machine : rien ne manque ici
     moteur = (r or {}).get("moteur") or "ollama"
     charge = _m.ps_modele(r["modele"])
-    besoin = model_size(r["modele"], charge)
+    besoin = model_size(r["modele"], charge) + _cache_reserve(r, charge)
     sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _unload_before_loading(r))
     if charge is None and any(i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram") for i in sante["items"]):
         # only Ollama's models were unloaded before: a llama.cpp model of 20 GB kept the card while ExLlamaV3 waited for room nothing would give back

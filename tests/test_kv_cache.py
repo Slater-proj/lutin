@@ -68,5 +68,24 @@ class FromFolder(unittest.TestCase):
         self.assertIsNone(kv_cache.of_folder(folder))
 
 
+class TheGuardCountsIt(unittest.TestCase):
+    def test_exllamav3_reserves_the_cache_of_its_window_before_the_model_loads(self):
+        """TabbyAPI reserves the whole cache at load, on the card alone: the guard let a 27B of 16.5 GB load into 18 GB free, and TabbyAPI failed."""
+        from unittest import mock
+        from lutin import core as _m, engines, exllamav3, health
+        models = Path(tempfile.mkdtemp(prefix="lutin-kv-exl-"))
+        (models / "Big-32B").mkdir()
+        (models / "Big-32B" / "config.json").write_text(json.dumps(DENSE_32B), encoding="utf-8")
+        exl = engines.ENGINES["exllamav3"]
+        with mock.patch.object(exllamav3, "folder_models", lambda dossiers=None: models):
+            self.assertEqual(round(exl.cache_reserve("Big-32B", 36864) / 1024 ** 3, 1), 4.7, "262 MB per 1,000 tokens at 16 bits, in Q8, for 36,864 tokens")
+            self.assertEqual(round(exl.cache_reserve("Other", 36864) / 1024 ** 3, 1), 2.2, "no config.json: the cautious estimate")
+            self.assertEqual(exl.cache_reserve("../Big-32B", 36864), 0, "a name outside the models' folder is not read")
+            self.assertEqual(engines.ENGINES["llamacpp"].cache_reserve("Big-32B", 36864), 0, "llama.cpp spills to the processor instead of failing")
+            r = dict(_m.reglages(), moteur="exllamav3", modele="Big-32B", num_ctx=36864)
+            self.assertGreater(health._cache_reserve(r, None), 4 * 1024 ** 3)
+            self.assertEqual(health._cache_reserve(r, {"taille": 0, "vram": 0}), 0, "once loaded, nothing more is reserved")
+
+
 if __name__ == "__main__":
     unittest.main()
