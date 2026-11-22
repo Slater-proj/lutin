@@ -112,6 +112,9 @@ Optional addons (Telegram, email, X, ComfyUI, background work) are **off by defa
 Lutin only reads and modifies the **workspace folder** of the conversation. Several folders are possible; only one is active at a time (if an answer is working in a folder, you cannot switch before it ends, nor start one in another).
 
 - A folder must exist, must not be the root of a disk, nor **contain or be inside Lutin's folders** (configuration, data, memory, cache).
+- The file tools stay inside it. A **command** runs with your own rights and **without an operating-system sandbox**: once approved, it can reach
+  what you can reach. Read it before you approve it; the commands that destroy or take over a machine are always asked, whatever the automatic
+  approvals say, and that answer is never remembered.
 - **Adding or removing** a folder can only be done from this machine: at the « this machine only » level, or with `lutin workspaces`. A paired device (network level) or a proxy identity can **choose** an already declared folder, never add one: otherwise a remote access could declare `/` or `C:\`.
 
 ## What only this machine can change

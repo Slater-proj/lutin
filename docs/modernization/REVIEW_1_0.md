@@ -70,9 +70,28 @@ whole step in 1.0 (2026-11-22, evening). This first part was written that evenin
 - **The page's entry of a turn** (`server.Handler._chat`): the seat is freed in a `finally`, an unknown mode is refused before the stream starts,
   a page that stops reading does not stop the turn (the conversation is written at its end). No change.
 
+## Tool calls, their errors and approvals in other assistants (item 1)
+
+Study made on 2026-11-22, in the manner of ATOMIC_AGENT.md: what each does, what Lutin takes, leaves, and why. **Sources and their limits**: public
+documentation only, read through search summaries; no source file of these projects was read nor run. The pages: OpenHands
+(`openhands.llm.fn_call_converter`, docs.all-hands.dev), Continue (docs.continue.dev, agent « how it works » and model capabilities), Cline
+(docs.cline.bot auto-approve and YOLO mode, release blog 3.35), Goose (block.github.io/goose, permission modes and tool permissions), Codex CLI
+(developers.openai.com/codex, agent approvals and sandboxing), Claude Code (code.claude.com/docs/en/permissions), the Anthropic API
+(platform.claude.com, « Handle tool calls ») and the OpenAI API (function calling, structured outputs). Some of these pages disagree with older
+copies of themselves (Continue's fallback, OpenAI's strict mode with parallel calls): the newest official page was taken.
+
+| Area | Others | Lutin | Verdict |
+|---|---|---|---|
+| A model without native tools | OpenHands writes the tools into the system prompt, adds examples to the first message, and reads calls in function tags, stopping at the closing tag; Continue does the same in XML, marked experimental and « may not work as well », 7B–13B models said to struggle; Cline sends native tools since 3.35 and keeps the text format only for models without them | answers in text only; a call that a tooled model writes as text is read (`extract_text_calls`); a template that refuses tools gets a flattened request | **to measure** (proposal 8a): the two who do it warn that small models do it badly, which is the case it would serve. No change without a measure on the bench |
+| A malformed call | Anthropic and OpenAI offer a strict schema (`strict: true`) that the server enforces; Atomic Agent a GBNF grammar | `check_arguments`: a missing or unreadable argument is not run, the model gets what to correct with the expected form; `normalize_arguments` repairs a bare string, `key=value`, a neighbour name | kept. A grammar on llama-server is the strict mode of a local engine: 1.x, with the bench |
+| A tool that fails | Anthropic: `tool_result` with `is_error: true` and the message, so the model retries with a corrected input; its tool runner turns an exception into such a result | the result starts with « Erreur : » and says what went wrong; after 3 errors of the same tool in a row, advice; after 6, the turn concludes (f23bbf7) | kept: Ollama's and OpenAI's messages have no error field, the text prefix carries it to every engine. Taken from Anthropic: the error says what to correct (already so) |
+| Parallel calls | OpenAI: several calls per answer by default, `parallel_tool_calls: false` for one | every call of an answer is run in order; neighbouring reads are read at the same time (`grouped_reads`) | kept |
+| Approvals, levels | Codex: sandbox modes (read-only, workspace-write) × approval policy (on-request…), network off in the workspace sandbox; Goose: auto, smart approve (read-only allowed, state changes ask, an LLM judges unknown tools), approve, chat (no tool); Cline: auto-approve per tool, YOLO for everything | reads never ask; writes and commands ask unless the switch of the conversation says otherwise; dry run; missions refuse what is not granted; read-only scheduled tasks | kept. Left: a global YOLO switch (one conversation at a time is the rule here) and an LLM that judges risk (a small local model judging its own calls is no guard) |
+| Approvals, rules | Claude Code: deny → ask → allow, the first match wins, a bare tool name removes the tool; Goose: per tool always allow / ask / never | `approval_rules`: deny > ask > allow, a hardline list never remembered, project rules can only ask or deny, « once / this chat / always » | kept: the same precedence. Lutin's project rules cannot grant, which Claude Code's project settings can |
+| Sandbox | Codex runs commands in an OS sandbox; Atomic Agent says it is not one | no OS sandbox: paths checked against the working folder, a validator without shell, a copy before every edit, the strict offline net | left for 1.0: an OS sandbox differs on each system. Now said plainly in docs/SECURITY.md (« Workspace folders ») |
+
 ## Left (the rest of step 7)
 
-- Item 1: write down how the other assistants handle the tool-call protocol, its errors and the approvals, as ATOMIC_AGENT.md does.
 - Item 2: proposal 8, « UnTooled »: a model without tool support today answers in text only; describing the tools in the prompt and reading a
   JSON answer would give it the tools. To measure with the bench before deciding (ADR 0007).
 - Item 2: proposal 8, the one-line catalogue of the tools on a 4,096-token window (today: a core of tools with full schemas).
