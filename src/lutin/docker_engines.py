@@ -129,7 +129,7 @@ def path_ollama():
 def external_ollama(env=None):
     """OLLAMA_URL désigne-t-il un autre conteneur (profil Compose « ollama ») ? Alors Lutin n'installe ni ne lance rien."""
     adresse = ((os.environ if env is None else env).get("OLLAMA_URL") or "").strip()
-    return bool(adresse) and not engines.est_local(adresse)
+    return bool(adresse) and not engines.is_local(adresse)
 
 
 # --------------------------------------------------------------------------- installation d'Ollama

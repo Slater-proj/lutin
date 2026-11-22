@@ -255,7 +255,7 @@ def status(request):
         "version": _m.VERSION,
         "new_version": _new_version(),          # a newer Lutin announced by the launch check, for the banner (null: none, or ignored)
         "restart": {"needed": bool(_access.restart_needed()), "possible": bool(_access.can_restart())},          # a change waits for the next start
-        "language": _i18n.langue(),
+        "language": _i18n.language(),
         "access": {"level": ACCESS_LEVELS.get(_m.SECURITE.niveau, _m.SECURITE.niveau), "can_configure": bool(request.handler._configurateur())},
         "offline": bool(_offline.is_active()),
         "engine": {"id": engine.id, "name": engine.nom, "running": bool(state["actif"])},
@@ -316,7 +316,7 @@ def _settings(stored):
 @route("GET", "/language", SESSION)
 def language(request):
     """The language of the page and of the messages: `language` is the one in use, `choice` what was chosen (`fr`, `en`, or `auto` to follow the system)."""
-    return {"language": _i18n.langue(), "choice": _i18n.langue_configuree() or "auto"}
+    return {"language": _i18n.language(), "choice": _i18n.configured_language() or "auto"}
 
 
 @route("PATCH", "/language", SESSION)
@@ -325,8 +325,8 @@ def set_language(request):
     value = request.body.get("language")
     if value not in ("fr", "en", "auto"):
         raise ApiError(400, "invalid_request", _t("Langue inconnue (fr, en ou auto)."))
-    _i18n.definir(value)
-    return {"language": _i18n.langue(), "choice": _i18n.langue_configuree() or "auto"}
+    _i18n.save_language(value)
+    return {"language": _i18n.language(), "choice": _i18n.configured_language() or "auto"}
 
 
 @route("GET", "/settings", SESSION)
@@ -2036,7 +2036,7 @@ def pairing_code(request):
     if not view["pairing_possible"]:
         raise ApiError(409, "local_only", _t("Lutin n'écoute que sur cette machine : ouvre d'abord l'accès au réseau (Accès), puis redémarre-le."))
     from . import qr as _qr
-    matrix = _qr.matrice(view["address"])
+    matrix = _qr.matrix(view["address"])
     return 201, {"code": _m.APPAREILS.nouveau_pin(), "valid_seconds": _sec.DURATION_PIN_S, "address": view["address"],
                  "qr": {"size": len(matrix), "rows": ["".join(map(str, row)) for row in matrix]}}
 
@@ -4256,7 +4256,7 @@ def locations_used(request):
     """Every folder Lutin uses (configuration, data, memory, cache, Ollama's models, the work folders): `{locations: [{key, name, path, explanation,
     exists, size_bytes, disk: {free, total, root}}], data_detail: [{name, size_bytes}]}` (the biggest subfolders of the data)."""
     from . import locations as _locations
-    seen = _locations.lister()
+    seen = _locations.list_locations()
     return {"locations": [{"key": line["cle"], "name": line["nom"], "path": line["chemin"], "explanation": line["explication"], "exists": bool(line["existe"]), "size_bytes": line["taille"],
                            "disk": line["disque"] and {"free": line["disque"]["libre"], "total": line["disque"]["total"], "root": line["disque"]["racine"]}} for line in seen["lignes"]],
             "data_detail": [{"name": d["nom"], "size_bytes": d["taille"]} for d in seen["donnees_detail"]]}

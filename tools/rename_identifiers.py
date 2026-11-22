@@ -204,7 +204,7 @@ def dynamic_import_of(node, target):
 
 def outside_uses(edits, tree, target, mapping, aliases, imported, chain):
     """In another file: `from .target import old`, `alias.old`, and the uses of a name imported without a new local name."""
-    wanted = {local: mapping[orig] for local, orig in imported.items() if orig in mapping}
+    wanted = {local: mapping[orig] for local, orig in imported.items() if orig in mapping and local == orig}   # `import old as _x`: the uses keep `_x`
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr in mapping and (
                 (isinstance(node.value, ast.Name) and node.value.id in aliases) or (isinstance(node.value, ast.Attribute) and node.value.attr in chain)

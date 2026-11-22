@@ -48,7 +48,7 @@ class Contract(unittest.TestCase):
         source = ROOT / "tests" / "fixtures"          # any folder: the stream events are searched in its *.py files
         sample = Path(context.tempfile.mkdtemp(prefix="lutin-api-")) / "server.py"
         sample.write_text(
-            "class Gestionnaire:\n"
+            "class Handler:\n"
             "    def do_GET(self):\n"
             "        chemin = self.path.split('?')[0]\n"
             "        if chemin == '/api/a' or chemin in ('/api/b', '/c'):\n            pass\n"

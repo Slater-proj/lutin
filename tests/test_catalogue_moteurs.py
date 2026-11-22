@@ -72,24 +72,24 @@ class Enveloppe(unittest.TestCase):
         cm.PUBLIC_KEYS.update(self.ancien)
 
     def test_catalogue_bien_signe_accepte(self):
-        e = cm.signer(minimal(), GRAINE_TEST, CLE_TEST)
+        e = cm.sign(minimal(), GRAINE_TEST, CLE_TEST)
         self.assertEqual(cm.check(json.loads(json.dumps(e)))["moteurs"][0]["id"], "demo")
 
     def test_une_virgule_modifiee_est_refusee(self):
-        e = cm.signer(minimal(), GRAINE_TEST, CLE_TEST)
+        e = cm.sign(minimal(), GRAINE_TEST, CLE_TEST)
         e["catalogue"]["moteurs"][0]["adresse_defaut"] = "http://127.0.0.1:9001/v1"
-        with self.assertRaisesRegex(cm.ErreurCatalogue, "signature invalide"):
+        with self.assertRaisesRegex(cm.CatalogueError, "signature invalide"):
             cm.check(e)
 
     def test_cle_inconnue_signature_absente_ou_illisible(self):
-        e = cm.signer(minimal(), GRAINE_TEST, CLE_TEST)
+        e = cm.sign(minimal(), GRAINE_TEST, CLE_TEST)
         for abime in (dict(e, cle="inconnue"), dict(e, signature="!!pas du base64!!"), dict(e, signature=""), {k: v for k, v in e.items() if k != "signature"}, {"catalogue": minimal()}, [], None):
-            with self.assertRaises(cm.ErreurCatalogue):
+            with self.assertRaises(cm.CatalogueError):
                 cm.check(abime)
 
     def test_signe_par_une_autre_cle_refuse(self):
-        e = cm.signer(minimal(), bytes([7]) * 32, CLE_TEST)          # la clé nommée n'est pas celle qui a signé
-        with self.assertRaisesRegex(cm.ErreurCatalogue, "signature invalide"):
+        e = cm.sign(minimal(), bytes([7]) * 32, CLE_TEST)          # la clé nommée n'est pas celle qui a signé
+        with self.assertRaisesRegex(cm.CatalogueError, "signature invalide"):
             cm.check(e)
 
     def test_le_schema_est_strict_meme_bien_signe(self):
@@ -103,8 +103,8 @@ class Enveloppe(unittest.TestCase):
         c["moteurs"].append(copy.deepcopy(c["moteurs"][0]))          # identifiant en double
         mauvais.append(c)
         for catalogue in mauvais:
-            with self.assertRaises(cm.ErreurCatalogue, msg=str(catalogue)[:120]):
-                cm.check(cm.signer(catalogue, GRAINE_TEST, CLE_TEST))
+            with self.assertRaises(cm.CatalogueError, msg=str(catalogue)[:120]):
+                cm.check(cm.sign(catalogue, GRAINE_TEST, CLE_TEST))
 
 
 class Livre(unittest.TestCase):
@@ -148,24 +148,24 @@ class Lecture(unittest.TestCase):
         return f
 
     def test_hors_ligne_le_catalogue_livre_suffit(self):
-        self.assertEqual(cm.charger(self.dossier / "absent.json")["version"], cm.read_file(cm.SHIPPED_FILE)["version"])
-        self.assertEqual(cm.charger(None)["version"], cm.read_file(cm.SHIPPED_FILE)["version"])
+        self.assertEqual(cm.load(self.dossier / "absent.json")["version"], cm.read_file(cm.SHIPPED_FILE)["version"])
+        self.assertEqual(cm.load(None)["version"], cm.read_file(cm.SHIPPED_FILE)["version"])
 
     def test_le_cache_en_ligne_plus_recent_et_bien_signe_est_pris(self):
-        plus_recent = cm.signer(minimal(version=99, moteurs=minimal()["moteurs"]), GRAINE_TEST, CLE_TEST)
-        self.assertEqual(cm.charger(self._ecrire("c.json", plus_recent))["version"], 99)
+        plus_recent = cm.sign(minimal(version=99, moteurs=minimal()["moteurs"]), GRAINE_TEST, CLE_TEST)
+        self.assertEqual(cm.load(self._ecrire("c.json", plus_recent))["version"], 99)
 
     def test_un_cache_falsifie_ou_ancien_est_ignore(self):
         livre = cm.read_file(cm.SHIPPED_FILE)["version"]
-        e = cm.signer(minimal(version=99), GRAINE_TEST, CLE_TEST)
+        e = cm.sign(minimal(version=99), GRAINE_TEST, CLE_TEST)
         e["catalogue"]["version"] = 100          # modifié après signature
-        self.assertEqual(cm.charger(self._ecrire("f.json", e))["version"], livre)
-        self.assertEqual(cm.charger(self._ecrire("v.json", cm.signer(minimal(version=0), GRAINE_TEST, CLE_TEST)))["version"], livre)          # plus ancien
+        self.assertEqual(cm.load(self._ecrire("f.json", e))["version"], livre)
+        self.assertEqual(cm.load(self._ecrire("v.json", cm.sign(minimal(version=0), GRAINE_TEST, CLE_TEST)))["version"], livre)          # plus ancien
         (self.dossier / "x.json").write_text("{pas du json", encoding="utf-8")
-        self.assertEqual(cm.charger(self.dossier / "x.json")["version"], livre)
+        self.assertEqual(cm.load(self.dossier / "x.json")["version"], livre)
 
     def test_telechargement_ne_garde_que_le_valide(self):
-        bon = json.dumps(cm.signer(minimal(version=50), GRAINE_TEST, CLE_TEST)).encode()
+        bon = json.dumps(cm.sign(minimal(version=50), GRAINE_TEST, CLE_TEST)).encode()
         falsifie = json.loads(bon)
         falsifie["catalogue"]["moteurs"][0]["nom"] = "Pirate"
         cache = self.dossier / "dl.json"
@@ -180,14 +180,14 @@ class Lecture(unittest.TestCase):
         self.assertEqual(cm.download("https://x/m.json", cache, coupe), "echec")
         self.assertEqual(cm.download("", cache, coupe), "absent")
         self.assertEqual(cm.download("https://x/m.json", cache, lambda u, h: (200, {}, bon)), "maj")
-        self.assertEqual(cm.charger(cache)["version"], 50)
+        self.assertEqual(cm.load(cache)["version"], 50)
 
     def test_un_moteur_s_ajoute_par_une_ligne_sans_toucher_au_code(self):
         """Critère de la feuille de route : le moteur apparaît dans les préréglages, avec son adresse, uniquement parce qu'il est dans le catalogue."""
         c = copy.deepcopy(minimal(version=77))
         c["moteurs"].append({"id": "nouveau-moteur", "nom": "Nouveau moteur", "genre": "openai", "adresse_defaut": "http://127.0.0.1:5555/v1", "description": {"fr": "Un autre serveur."}})
-        cache = self._ecrire("n.json", cm.signer(c, GRAINE_TEST, CLE_TEST))
-        vus = {x["id"]: x for x in (cm.vue(m) for m in cm.charger(cache)["moteurs"])}
+        cache = self._ecrire("n.json", cm.sign(c, GRAINE_TEST, CLE_TEST))
+        vus = {x["id"]: x for x in (cm.view(m) for m in cm.load(cache)["moteurs"])}
         self.assertEqual(vus["nouveau-moteur"]["adresse"], "http://127.0.0.1:5555/v1")
         self.assertEqual(vus["nouveau-moteur"]["description"], "Un autre serveur.")
 

@@ -31,7 +31,7 @@ def http_sans_api(url, entetes=None):
 
 class SansApi(unittest.TestCase):
     def test_colibri_lit_sa_version_sur_la_page_quand_l_api_refuse(self):
-        self.assertEqual(colibri.derniere_version(http_sans_api), "2.1.0")
+        self.assertEqual(colibri.latest_version(http_sans_api), "2.1.0")
 
     def test_exllamav3_et_tabbyapi_aussi(self):
         self.assertEqual(exllamav3.derniere_version_lib(http_sans_api), "2.1.0")
@@ -41,7 +41,7 @@ class SansApi(unittest.TestCase):
         def mort(url, entetes=None):
             return (403, {}, b"") if "api.github.com" in url else (404, {}, b"")
         with self.assertRaises(ValueError) as e:
-            colibri.derniere_version(mort)
+            colibri.latest_version(mort)
         self.assertIn("403", str(e.exception))
         self.assertIn("limite", str(e.exception))
 

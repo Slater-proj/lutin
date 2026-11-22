@@ -216,7 +216,7 @@ def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, 
         partiel = base / "tabby.partiel"
         shutil.rmtree(partiel, ignore_errors=True)
         try:
-            colibri.extraire(archive, partiel)
+            colibri.extract(archive, partiel)
             racine = next((p for p in [partiel, *partiel.iterdir()] if p.is_dir() and (p / "main.py").is_file() and (p / "pyproject.toml").is_file()), None)
             if racine is None:
                 raise ValueError(_t("TabbyAPI est introuvable dans l'archive."))

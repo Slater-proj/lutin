@@ -3,7 +3,7 @@ from pathlib import Path
 from . import offline as _hl
 from . import i18n as _i18n
 from .i18n import t as _t
-from .i18n import traduire as _tr
+from .i18n import translate as _tr
 import ctypes
 import os
 import secrets
@@ -150,7 +150,7 @@ def model_size(nom, charge=None):
 
 
 def gb(octets):
-    return "{:.1f} {}".format(octets / GB, "GB" if _i18n.langue() == "en" else "Go")
+    return "{:.1f} {}".format(octets / GB, "GB" if _i18n.language() == "en" else "Go")
 
 
 def threshold_level(libre, seuil_attention, seuil_critique):

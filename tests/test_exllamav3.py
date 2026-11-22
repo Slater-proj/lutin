@@ -289,7 +289,7 @@ class Compatibilite(unittest.TestCase):
         self.assertTrue(cm.compatibility({"plateformes": ["windows", "linux", "macos"]}, "macos", True, [])[0], "sans exigence : toujours proposé")
 
     def test_le_catalogue_livre_filtre_exllamav3_et_garde_les_autres(self):
-        fiches = {m["id"]: cm.vue(m) for m in cm.charger(None)["moteurs"] if m.get("type", "externe") == "externe"}
+        fiches = {m["id"]: cm.view(m) for m in cm.load(None)["moteurs"] if m.get("type", "externe") == "externe"}
         self.assertIn("exllamav3", fiches)
         self.assertEqual(fiches["exllamav3"]["materiel"], ["nvidia"])
         self.assertFalse(fiches["exllamav3"]["docker"])
@@ -299,7 +299,7 @@ class Compatibilite(unittest.TestCase):
     def test_un_catalogue_avec_un_materiel_inconnu_est_refuse(self):
         base = {"id": "x", "nom": "X", "genre": "openai", "description": "d", "type": "externe"}
         for mauvais in ({"materiel": ["quantique"]}, {"materiel": []}, {"materiel": "nvidia"}, {"docker": "oui"}):
-            with self.assertRaises(cm.ErreurCatalogue, msg=str(mauvais)):
+            with self.assertRaises(cm.CatalogueError, msg=str(mauvais)):
                 cm.validate({"version": 1, "moteurs": [dict(base, **mauvais)]})
         cm.validate({"version": 1, "moteurs": [dict(base, materiel=["nvidia"], docker=False)]})
 

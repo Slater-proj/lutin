@@ -841,7 +841,7 @@ class Chat(unittest.TestCase):
         p = self.page
         from lutin import security as S
         config = Path(tempfile.mkdtemp(prefix="lutin-access-")) / "config.json"
-        spare = S.Appareils()
+        spare = S.Devices()
         for patch in (mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(config)}), mock.patch.object(T.A, "APPAREILS", spare)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -1507,7 +1507,7 @@ class Chat(unittest.TestCase):
                                             {"id": "f2", "genre": "fichier", "nom": "notes.md", "chemin": "C:/data/notes.md", "taille": 1024, "date": 1700000100, "conversation": "", "conversation_existe": False}]}
         seen = {"lignes": [{"cle": "donnees", "nom": "Données", "chemin": "C:/data", "explication": "Conversations.", "existe": True, "taille": 10 ** 6, "disque": {"libre": 5 * 10 ** 9, "total": 10 ** 10, "racine": "C:\\"}}],
                 "donnees_detail": []}
-        for patch in (mock.patch.object(locations, "lister", lambda: seen), mock.patch.object(produced_files, "entries", lambda: listed),
+        for patch in (mock.patch.object(locations, "list_locations", lambda: seen), mock.patch.object(produced_files, "entries", lambda: listed),
                       mock.patch.object(produced_files, "remove_selection", lambda ids: removed.append(ids) or {"supprimes": len(ids), "libere": 2048, "ignores": []})):
             patch.start()
             self.addCleanup(patch.stop)
@@ -2388,7 +2388,7 @@ class Chat(unittest.TestCase):
     def test_5l_a_device_is_paired_with_a_code_shown_on_the_page_and_removed(self):
         p = self.page
         from lutin import security as S
-        spare = S.Appareils()
+        spare = S.Devices()
         patch = mock.patch.object(T.A, "APPAREILS", spare)          # the test server is at the level « this machine only »: the page reaches it without a session
         patch.start()
         self.addCleanup(patch.stop)

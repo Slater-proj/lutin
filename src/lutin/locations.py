@@ -14,7 +14,7 @@ from . import core as _m
 from . import health as _s
 from .i18n import t as _t
 
-DELAI_MESURE = 2.0
+MEASURE_TIMEOUT = 2.0
 
 
 def docker():
@@ -100,20 +100,20 @@ def models_elsewhere(installes):
         n = len(ollama_shared_models.read_shared(d))
         if n:
             return (d, n)
-    if time.time() - _RECHERCHE["t"] > 300:          # jamais retenu : on cherche dans les emplacements usuels, sans insister, en arrière-plan (un disque réseau lent ne doit pas bloquer la page)
-        _RECHERCHE["t"] = time.time()
+    if time.time() - _SEARCH["t"] > 300:          # jamais retenu : on cherche dans les emplacements usuels, sans insister, en arrière-plan (un disque réseau lent ne doit pas bloquer la page)
+        _SEARCH["t"] = time.time()
         actuel = os.path.normcase(str(models_folder()))
 
         def chercher():
-            _RECHERCHE["v"] = [x for x in find_models_folders(connus=[os.environ.get("OLLAMA_MODELS", "")]) if os.path.normcase(x["chemin"]) != actuel]
+            _SEARCH["v"] = [x for x in find_models_folders(connus=[os.environ.get("OLLAMA_MODELS", "")]) if os.path.normcase(x["chemin"]) != actuel]
         threading.Thread(target=chercher, daemon=True, name="recherche-modeles").start()
-    return (_RECHERCHE["v"][0]["chemin"], _RECHERCHE["v"][0]["modeles"]) if _RECHERCHE["v"] else None
+    return (_SEARCH["v"][0]["chemin"], _SEARCH["v"][0]["modeles"]) if _SEARCH["v"] else None
 
 
 RE_FROM = re.compile(r"^FROM\s+(.+)$", re.M)
 RE_BLOB = re.compile(r"^(.*)[\\/]blobs[\\/][^\\/]+$")
-_RECHERCHE = {"t": 0.0, "v": []}
-_REEL = {"t": 0.0, "v": "", "nom": ""}
+_SEARCH = {"t": 0.0, "v": []}
+_REAL = {"t": 0.0, "v": "", "nom": ""}
 
 
 def from_modelfile(texte):
@@ -128,8 +128,8 @@ def from_modelfile(texte):
 def folder_reported_by_ollama(maintenant=time.time):
     """Le dossier des modèles tel qu'Ollama LUI-MÊME l'utilise : on le lui demande (Modelfile d'un modèle installé), sans deviner d'après des variables qui ne sont pas forcément celles
     du serveur Ollama (le réglage de l'application Ollama, par exemple, n'est pas visible de Lutin). Gardé une minute. '' si Ollama est éteint ou n'a aucun modèle."""
-    if maintenant() - _REEL["t"] < 60:
-        return _REEL["v"]
+    if maintenant() - _REAL["t"] < 60:
+        return _REAL["v"]
     trouve = ""
     try:
         o = _m.etat_ollama()
@@ -144,7 +144,7 @@ def folder_reported_by_ollama(maintenant=time.time):
                     break
     except (OSError, ValueError, KeyError):
         trouve = ""
-    _REEL.update(t=maintenant(), v=trouve)
+    _REAL.update(t=maintenant(), v=trouve)
     if trouve:
         remember_seen_folder(trouve)
     return trouve
@@ -182,48 +182,48 @@ def set_models_folder(chemin):
         from . import setup_wizard
         setup_wizard.set_variables_user({"OLLAMA_MODELS": str(p)}, "windows")
     _s.forget_measures("disques")
-    _REEL["t"] = 0.0                                                      # l'avis d'Ollama sera redemandé (il ne changera qu'à son redémarrage)
+    _REAL["t"] = 0.0                                                      # l'avis d'Ollama sera redemandé (il ne changera qu'à son redémarrage)
     return p
 
 
-def taille(chemin):
+def size_of(chemin):
     try:
-        return _s.folder_size(chemin, DELAI_MESURE) if Path(chemin).is_dir() else 0
+        return _s.folder_size(chemin, MEASURE_TIMEOUT) if Path(chemin).is_dir() else 0
     except OSError:
         return None
 
 
-def ligne(cle, nom, chemin, explication, **plus):
+def location_row(cle, nom, chemin, explication, **plus):
     chemin = Path(chemin)
     disque = _s.disk_space(chemin)
-    return dict({"cle": cle, "nom": nom, "chemin": str(chemin), "explication": explication, "existe": chemin.exists(), "taille": taille(chemin) if plus.pop("mesurer", True) else None,
+    return dict({"cle": cle, "nom": nom, "chemin": str(chemin), "explication": explication, "existe": chemin.exists(), "taille": size_of(chemin) if plus.pop("mesurer", True) else None,
                  "disque": {"libre": disque["libre"], "total": disque["total"], "racine": disque["racine"]} if disque else None}, **plus)
 
 
-def lister():
+def list_locations():
     """Tous les emplacements utilisés : [{cle, nom, chemin, explication, existe, taille, disque}], et le détail du dossier de données."""
     from . import config
     d = config.folders()
     cfg_fichier = _m.chemin_config()
-    lignes = [ligne("programme", _t("Programme"), Path(sys.prefix), _t("Lutin et son Python (supprimés par la désinstallation)."))]
-    lignes.append(ligne("config", _t("Configuration de Lutin"), cfg_fichier.parent if cfg_fichier else d["config"], _t("config.json : niveau d'accès, dossiers de travail, langue.")))
-    lignes.append(ligne("donnees", _t("Données"), _m.DONNEES, _t("Conversations, images et fichiers joints, sauvegardes avant import, journal, réglages.")))
-    lignes.append(ligne("memoire", _t("Mémoire"), _m.MEMOIRE, _t("Contexte du projet et notes de l'assistant.")))
-    lignes.append(ligne("cache", _t("Cache (fichiers temporaires)"), d["cache"], _t("Catalogue et numéro de version récupérés en ligne (sans risque à supprimer).")))
+    lignes = [location_row("programme", _t("Programme"), Path(sys.prefix), _t("Lutin et son Python (supprimés par la désinstallation)."))]
+    lignes.append(location_row("config", _t("Configuration de Lutin"), cfg_fichier.parent if cfg_fichier else d["config"], _t("config.json : niveau d'accès, dossiers de travail, langue.")))
+    lignes.append(location_row("donnees", _t("Données"), _m.DONNEES, _t("Conversations, images et fichiers joints, sauvegardes avant import, journal, réglages.")))
+    lignes.append(location_row("memoire", _t("Mémoire"), _m.MEMOIRE, _t("Contexte du projet et notes de l'assistant.")))
+    lignes.append(location_row("cache", _t("Cache (fichiers temporaires)"), d["cache"], _t("Catalogue et numéro de version récupérés en ligne (sans risque à supprimer).")))
     o = _m.etat_ollama()
-    modeles = ligne("modeles", _t("Modèles d'Ollama"), models_folder(), _t("Les modèles téléchargés : c'est en général le plus gros."), mesurer=False,
+    modeles = location_row("modeles", _t("Modèles d'Ollama"), models_folder(), _t("Les modèles téléchargés : c'est en général le plus gros."), mesurer=False,
                     modifiable=not docker(), source="ollama" if folder_reported_by_ollama() else ("OLLAMA_MODELS" if os.environ.get("OLLAMA_MODELS") else ("config" if read_models_config() else "defaut")))
     if o["actif"] and o.get("tailles"):
         modeles["taille"] = sum(o["tailles"].values())                      # la somme annoncée par Ollama : exacte et instantanée
     else:
-        modeles["taille"] = taille(models_folder())
+        modeles["taille"] = size_of(models_folder())
     lignes.append(modeles)
     for t in (_m.works_state().get("liste") or []):
-        lignes.append(ligne("travail:" + t["id"], _t("Dossier de travail : {}").format(t["nom"]), t["chemin"], _t("Les fichiers que Lutin peut lire et, avec ton accord, modifier."), mesurer=False))
+        lignes.append(location_row("travail:" + t["id"], _t("Dossier de travail : {}").format(t["nom"]), t["chemin"], _t("Les fichiers que Lutin peut lire et, avec ton accord, modifier."), mesurer=False))
     detail = []
     try:
         for sous in sorted(p for p in Path(_m.DONNEES).iterdir() if p.is_dir()):
-            detail.append({"nom": sous.name, "taille": taille(sous)})
+            detail.append({"nom": sous.name, "taille": size_of(sous)})
     except OSError:
         pass
     return {"lignes": lignes, "donnees_detail": sorted(detail, key=lambda x: -(x["taille"] or 0))[:8]}

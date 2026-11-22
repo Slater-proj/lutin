@@ -74,7 +74,7 @@ class Parcours(unittest.TestCase):
     def lancer(self, e, disque=DISQUE_LARGE, **options):
         options.setdefault("travail", self.travail)
         with mock.patch.object(setup_wizard, "set_variables_user"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=disque):
-            return setup_wizard.executer(self.cfg, self.d, e, options, profil=GROS)
+            return setup_wizard.run(self.cfg, self.d, e, options, profil=GROS)
 
     def test_mode_automatique_installe_le_polyvalent_seulement(self):
         e, sortie = es(oui=True)
@@ -332,7 +332,7 @@ class DejaInstalle(unittest.TestCase):
 
     def lancer(self, e, **options):
         with mock.patch.object(setup_wizard, "set_variables_user"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
-            return setup_wizard.executer(config.load(self.d), self.d, e, options, profil=GROS)
+            return setup_wizard.run(config.load(self.d), self.d, e, options, profil=GROS)
 
     def test_ne_change_rien(self):
         INSTALLES["qwen3:8b"] = "d"

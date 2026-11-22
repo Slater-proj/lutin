@@ -11,7 +11,7 @@ from pathlib import Path
 from . import bench, model_catalog, config, offline, i18n, hardware, ollama_client, security, model_selection
 from .i18n import t as _t
 
-GO = 1024 ** 3
+GB = 1024 ** 3
 _launch = subprocess.run          # un seul point d'entrée pour les commandes système : les tests le remplacent (patcher subprocess.run lui-même gênerait les autres threads)
 
 
@@ -55,13 +55,13 @@ def choose_language(es, options, cfg):
     """Première question de l'installation : la langue (français ou anglais). Posée seulement si rien ne l'a déjà fixée (option, variable LUTIN_LANGUE, réglage existant) et jamais avec --yes."""
     voulue = options.get("langue")
     if not voulue:
-        if es.oui or cfg.get("langue") in i18n.LANGUES or os.environ.get("LUTIN_LANGUE", "").strip().lower() in i18n.LANGUES:
+        if es.oui or cfg.get("langue") in i18n.LANGUAGES or os.environ.get("LUTIN_LANGUE", "").strip().lower() in i18n.LANGUAGES:
             return
         es.dire("\nLangue / Language :\n  1. Français\n  2. English")
-        r = es.demander("1 / 2", "2" if i18n.langue_systeme() == "en" else "1").lower()
+        r = es.demander("1 / 2", "2" if i18n.system_language() == "en" else "1").lower()
         voulue = "en" if r in ("2", "en", "english", "anglais") else "fr"
     cfg["langue"] = None if voulue == "auto" else voulue
-    i18n.forcer(cfg["langue"])
+    i18n.force(cfg["langue"])
 
 
 def choose_security(es, options):
@@ -73,7 +73,7 @@ def choose_security(es, options):
             es.dire("  {}. {} : {}".format(num, _t(titre), _t(detail)))
         r = es.demander(_t("Ton choix"), "1")
         niveau = next((n for n, (num, _, _) in LEVELS_TEXT.items() if num == r or n == r), security.LOCAL)
-    sec = security.Securite(niveau=niveau, port=int(options.get("port") or 8777), ecoute=str(options.get("ecoute") or ""))
+    sec = security.Security(niveau=niveau, port=int(options.get("port") or 8777), ecoute=str(options.get("ecoute") or ""))
     if niveau == security.RESEAU:
         es.dire("\n" + _t(WARNING_NETWORK))
     if niveau == security.PROXY:
@@ -83,7 +83,7 @@ def choose_security(es, options):
         sec.proxy_ips = list(ips)
         if not es.oui and not es.confirmer(_t("J'ai compris les risques et je veux continuer"), False):
             es.dire(_t("Retour au niveau « cette machine seulement »."))
-            return security.Securite(port=sec.port)
+            return security.Security(port=sec.port)
     problemes = sec.valider()
     if problemes:
         raise ValueError(_t("Sécurité : ") + " ; ".join(problemes))
@@ -107,7 +107,7 @@ def choose_locations(es, options, profil, besoin_go):
     return em
 
 
-def afficher_choix(es, choix, coches, profil):
+def show_choices(es, choix, coches, profil):
     es.dire(_t("\nModèles adaptés à ta machine ({}) :").format(profil.resume()))
     es.dire(_t("(un modèle peut servir à plusieurs rôles ; la taille est celle du téléchargement)\n"))
     ordre = [r for r in model_catalog.ROLES if choix.get(r)]
@@ -127,7 +127,7 @@ def choose_roles(es, options, choix, profil):
         return []
     if options.get("roles") is not None:
         return [r for r in options["roles"] if r in choix and choix[r]]
-    ordre = afficher_choix(es, choix, coches, profil)
+    ordre = show_choices(es, choix, coches, profil)
     if es.oui:
         return coches
     defaut = " ".join(str(ordre.index(r) + 1) for r in coches)
@@ -150,7 +150,7 @@ def bar(es):
     return progression
 
 
-def installer_ollama_si_besoin(es, profil, cfg, options, cache):
+def install_ollama_if_needed(es, profil, cfg, options, cache):
     if options.get("sans_ollama"):
         return True
     o = ollama_client.Ollama()
@@ -190,7 +190,7 @@ def set_variables_user(variables, systeme, lanceur=hardware.launch):
             lanceur(["powershell", "-NoProfile", "-Command", "[Environment]::SetEnvironmentVariable('{}', '{}', 'User')".format(k, str(v).replace("'", "''"))], 20)
 
 
-CLES_RECONFIGURATION = ("niveau", "port", "url", "proxy_ips", "travail", "dossier_modeles", "roles")
+RECONFIGURATION_KEYS = ("niveau", "port", "url", "proxy_ips", "travail", "dossier_modeles", "roles")
 
 
 def installed_already(cfg, dossiers, es, ollama=None):
@@ -221,11 +221,11 @@ def installed_already(cfg, dossiers, es, ollama=None):
     return cfg
 
 
-def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
+def run(cfg, dossiers, es, options=None, profil=None, ollama=None):
     """Le parcours complet. Renvoie la configuration finale (déjà enregistrée).
     Si Lutin est déjà installé, il ne fait rien (sauf `reconfigurer`, ou une option qui demande un changement) ; ce qui est déjà téléchargé n'est jamais retéléchargé."""
     options = options or {}
-    if cfg.get("installe") and not (options.get("reconfigurer") or any(options.get(k) not in (None, False) for k in CLES_RECONFIGURATION)):
+    if cfg.get("installe") and not (options.get("reconfigurer") or any(options.get(k) not in (None, False) for k in RECONFIGURATION_KEYS)):
         return installed_already(cfg, dossiers, es, ollama)
     choose_language(es, options, cfg)
     profil = profil or hardware.detecter()
@@ -255,7 +255,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     Path(cfg["emplacements"]["travail"]).mkdir(parents=True, exist_ok=True)
     cible = Path(cfg["emplacements"]["modeles"] or Path.home())
     try:
-        libre = shutil.disk_usage(cible if cible.exists() else Path(cible.anchor or ".")).free / GO
+        libre = shutil.disk_usage(cible if cible.exists() else Path(cible.anchor or ".")).free / GB
     except OSError:
         libre = 0
     if total:
@@ -267,7 +267,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
             liste = []
 
     if liste or not options.get("sans_ollama"):
-        if installer_ollama_si_besoin(es, profil, cfg, options, dossiers["cache"]) and liste:
+        if install_ollama_if_needed(es, profil, cfg, options, dossiers["cache"]) and liste:
             variables = ollama_client.variables_server(profil, cfg["emplacements"]["modeles"])
             if cfg["emplacements"]["modeles"]:
                 set_variables_user({"OLLAMA_MODELS": cfg["emplacements"]["modeles"]}, profil.systeme)

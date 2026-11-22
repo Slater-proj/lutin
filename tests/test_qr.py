@@ -11,7 +11,7 @@ def relire(m):
     """Lit le code : format, démasquage, zigzag, désentrelacement, contrôle de la correction d'erreur, puis le texte."""
     n = len(m)
     version = (n - 17) // 4
-    base, reserve = qr._fonctions(version)
+    base, reserve = qr._functions(version)
     bits_format = sum(m[8][n - 1 - i] << i for i in range(8)) | sum(m[n - 15 + i][8] << i for i in range(8, 15))
     masque = None
     for k in range(8):
@@ -26,7 +26,7 @@ def relire(m):
             for dc in (0, 1):
                 col = c - dc
                 if not reserve[r][col]:
-                    bits.append(m[r][col] ^ (1 if qr.MASQUES[masque](r, col) else 0))
+                    bits.append(m[r][col] ^ (1 if qr.MASKS[masque](r, col) else 0))
         haut, c = not haut, c - 2
     mots = [int("".join(map(str, bits[i:i + 8])), 2) for i in range(0, len(bits) - 7, 8)]
     _, ec, groupes = qr.VERSIONS[version]
@@ -64,18 +64,18 @@ class CodeQr(unittest.TestCase):
         for longueur in range(1, 214):
             texte = ("pin=%d;" % longueur) + "x" * longueur
             texte = texte[:longueur] if len(texte.encode()) > longueur else texte
-            self.assertEqual(relire(qr.matrice(texte)), texte, longueur)
+            self.assertEqual(relire(qr.matrix(texte)), texte, longueur)
 
     def test_les_huit_masques_sont_relus(self):
         for masque in range(8):
-            self.assertEqual(relire(qr.matrice_avec_masque("http://192.168.1.50:8777/#pin=123456", masque)), "http://192.168.1.50:8777/#pin=123456")
+            self.assertEqual(relire(qr.matrix_with_mask("http://192.168.1.50:8777/#pin=123456", masque)), "http://192.168.1.50:8777/#pin=123456")
 
     def test_accents_et_symboles(self):
         for texte in ("é à ü – 日本", "Lutin ✔"):
-            self.assertEqual(relire(qr.matrice(texte)), texte)
+            self.assertEqual(relire(qr.matrix(texte)), texte)
 
     def test_forme_de_la_norme(self):
-        m = qr.matrice("http://192.168.1.50:8777/#pin=123456")
+        m = qr.matrix("http://192.168.1.50:8777/#pin=123456")
         self.assertEqual((len(m), {len(l) for l in m}), (29, {29}), "version 3")
         for (r0, c0) in ((0, 0), (0, 22), (22, 0)):                          # trois repères de position
             self.assertEqual([m[r0][c0 + i] for i in range(7)], [1] * 7)
@@ -87,13 +87,13 @@ class CodeQr(unittest.TestCase):
         self.assertEqual(m[22][22], 1, "motif d'alignement (centre)")
 
     def test_une_valeur_connue_ne_change_pas(self):
-        m = qr.matrice("http://192.168.1.50:8777/#pin=123456")
+        m = qr.matrix("http://192.168.1.50:8777/#pin=123456")
         self.assertEqual(hashlib.sha256("".join("".join(map(str, l)) for l in m).encode()).hexdigest(), "af257280aa67efb57220c554096ee9225cdfb51cf23881d1a09a894bf22a5187")
 
     def test_trop_long(self):
-        qr.matrice("x" * 213)
-        with self.assertRaises(qr.TropLong):
-            qr.matrice("x" * 214)
+        qr.matrix("x" * 213)
+        with self.assertRaises(qr.TooLong):
+            qr.matrix("x" * 214)
 
 
 if __name__ == "__main__":

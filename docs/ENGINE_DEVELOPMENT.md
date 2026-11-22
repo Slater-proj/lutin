@@ -8,7 +8,7 @@ No code. Add one entry to `tools/moteurs.source.json` (id, name, `"genre": "open
 
 ## 2. Lutin must install, start or update the engine itself
 
-Write a subclass of `OpenAIEngine` (`src/lutin/openai_engine.py`) for OpenAI-style servers, or of `Moteur` (`src/lutin/engines.py`) otherwise, and register it next to the others in `agent.py`. The model is `MoteurLlamaCpp` in `llamacpp_engine.py`. What it must provide:
+Write a subclass of `OpenAIEngine` (`src/lutin/openai_engine.py`) for OpenAI-style servers, or of `Engine` (`src/lutin/engines.py`) otherwise, and register it next to the others in `agent.py`. The model is `MoteurLlamaCpp` in `llamacpp_engine.py`. What it must provide:
 
 - `actif`, `modeles`, `chat`, `chat_flux`: talk, in Ollama's message format (translation happens at the engine's borders).
 - `statut`, `actions` (install, uninstall, start, stop, update, each with `possible` and a `raison` when not possible), `faire`: the Settings card is built from these.

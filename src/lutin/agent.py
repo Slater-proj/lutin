@@ -612,7 +612,7 @@ class _FluxOllama:
                 continue
 
 
-class MoteurOllama(_moteurs.Moteur):
+class MoteurOllama(_moteurs.Engine):
     """Ollama : le moteur d'origine de Lutin. Il enveloppe les fonctions de ce module (ollama_json, etat_ollama, capacites, ps_modele) : rien de ce qui marchait ne change."""
     id = _moteurs.OLLAMA
     nom = "Ollama"
@@ -859,7 +859,7 @@ def etat_moteur():
 def moteur_local(r=None):
     """Le moteur de CETTE machine (celui des réglages), jamais une machine prêtée : c'est lui qu'on mesure, qu'on décharge, dont on lit la mémoire."""
     r = r if r is not None else _m.reglages()
-    return _moteurs.par_id(r.get("moteur") or _moteurs.OLLAMA)
+    return _moteurs.by_id(r.get("moteur") or _moteurs.OLLAMA)
 
 
 def client_banc(r=None):
@@ -872,7 +872,7 @@ def client_banc(r=None):
 def moteur_actuel(r=None):
     """Le moteur choisi dans les réglages (Ollama par défaut, et si le réglage est inconnu)."""
     r = r if r is not None else _m.reglages()
-    local = _moteurs.par_id(r.get("moteur") or _moteurs.OLLAMA)
+    local = _moteurs.by_id(r.get("moteur") or _moteurs.OLLAMA)
     if r.get("machine"):          # une machine est choisie : ses demandes de conversation partent chez elle quand elle est opérationnelle, sinon ce moteur répond (en silence)
         from . import machines
         return machines.acheminer(local, r)
@@ -2039,7 +2039,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
         try:
             corps_t = dict(corps_t, messages=_images.for_model(corps_t["messages"], caps is None or "vision" in caps))
             moteur_choisi = moteur_actuel(r)
-            with _moteurs.FluxInterruptible(lambda: moteur_choisi.chat_flux(corps_t, 900), stop) as flux:          # le moteur choisi (engines.py) ; Arrêter coupe même un modèle qui charge ou qui se fige
+            with _moteurs.InterruptibleStream(lambda: moteur_choisi.chat_flux(corps_t, 900), stop) as flux:          # le moteur choisi (engines.py) ; Arrêter coupe même un modèle qui charge ou qui se fige
                 for e in flux:
                     if stop.is_set():
                         if contenu.strip():

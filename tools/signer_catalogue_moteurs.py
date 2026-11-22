@@ -21,7 +21,7 @@ SOURCE = RACINE / "tools" / "moteurs.source.json"
 
 def signer_fichier(source, destination, cle, graine):
     catalogue = cm.validate(json.loads(Path(source).read_text(encoding="utf-8")))
-    enveloppe = cm.signer(catalogue, bytes.fromhex(Path(graine).read_text(encoding="utf-8").strip()), cle)
+    enveloppe = cm.sign(catalogue, bytes.fromhex(Path(graine).read_text(encoding="utf-8").strip()), cle)
     cm.check(enveloppe)          # on ne publie jamais un fichier que Lutin refuserait
     Path(destination).write_text(json.dumps(enveloppe, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
     return enveloppe

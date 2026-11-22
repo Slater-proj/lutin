@@ -27,7 +27,7 @@ def can_restart():
 
 
 def saved_security():
-    return _sec.Securite.depuis_dict(_m.config_lue().get("securite"))
+    return _sec.Security.depuis_dict(_m.config_lue().get("securite"))
 
 
 RESTAURE = {"fait": False}          # une sauvegarde remise pendant cette exécution : elle n'est entièrement prise en compte qu'au prochain démarrage
@@ -66,7 +66,7 @@ def apply(donnees, configurateur):
     if niveau not in _sec.LEVELS:
         raise ValueError(_t("Niveau inconnu : {}").format(niveau))
     actuel = _m.SECURITE
-    nouveau = _sec.Securite(niveau=niveau, port=actuel.port, ecoute=actuel.ecoute if niveau != _sec.LOCAL else "",
+    nouveau = _sec.Security(niveau=niveau, port=actuel.port, ecoute=actuel.ecoute if niveau != _sec.LOCAL else "",
                             url_publique=str(donnees.get("url_publique", "")).strip() if niveau == _sec.PROXY else "",
                             proxy_ips=[x for x in str(" ".join(donnees.get("proxy_ips") or [])).replace(",", " ").split() if x] if niveau == _sec.PROXY else [])
     if niveau != _sec.LOCAL and not donnees.get("comprend"):
@@ -139,9 +139,9 @@ def update_state():
 
 
 def qr_json(texte):
-    if len(texte.encode("utf-8")) > qr.CAPACITE_MAX:
+    if len(texte.encode("utf-8")) > qr.MAX_CAPACITY:
         raise ValueError(_t("Texte trop long pour le code QR."))
-    m = qr.matrice(texte)
+    m = qr.matrix(texte)
     return {"taille": len(m), "lignes": ["".join(map(str, ligne)) for ligne in m]}
 
 

@@ -51,14 +51,14 @@ def json_de(texte):
 class Base(unittest.TestCase):
     def setUp(self):
         self.avant = (A.SECURITE, A.APPAREILS, A.LIMITEUR_PIN, A.IP_LAN)
-        A.APPAREILS = S.Appareils()
-        A.LIMITEUR_PIN = S.LimiteurDebit(10, 60)
+        A.APPAREILS = S.Devices()
+        A.LIMITEUR_PIN = S.RateLimiter(10, 60)
 
     def tearDown(self):
         A.SECURITE, A.APPAREILS, A.LIMITEUR_PIN, A.IP_LAN = self.avant
 
     def niveau(self, **kw):
-        A.SECURITE = S.Securite(**kw)
+        A.SECURITE = S.Security(**kw)
 
 
 class NiveauLocal(Base):

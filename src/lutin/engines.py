@@ -32,7 +32,7 @@ MANAGED_SERVERS = (EXLLAMAV3, LMSTUDIO, COLIBRI)
 LOCK = threading.Lock()
 # La grille de capacités : pour chaque fonction, ce que le moteur fait « natif » (il le fait lui-même), « adapte » (Lutin traduit ou complète), « non » (impossible) ou « non_teste » (pas vérifié).
 # La suite de conformité (tests/test_conformite_moteurs.py) vérifie chaque case « natif » ou « adapte » contre un faux serveur : la grille ne ment pas.
-FONCTIONS = ("discuter", "flux", "arret", "outils", "reflexion", "vision", "embeddings", "plusieurs_modeles", "telechargement", "installation")
+FUNCTIONS = ("discuter", "flux", "arret", "outils", "reflexion", "vision", "embeddings", "plusieurs_modeles", "telechargement", "installation")
 STATES = ("natif", "adapte", "non", "non_teste")
 ENGINES = {}          # identifiant -> instance (voir enregistrer)
 TASKS = {}          # identifiant du moteur -> {action, statut, texte, fait, total, erreur, debut}
@@ -41,13 +41,13 @@ ACTIONS = ("installer", "desinstaller", "reinstaller", "demarrer", "arreter", "m
 CONTEXT = {"donnees": lambda: None, "en_docker": lambda: False, "hors_ligne": lambda: False, "profil": lambda: None, "profil_attendu": None, "dossier_ollama": lambda: None}
 
 
-def est_local(adresse):
+def is_local(adresse):
     """L'adresse désigne-t-elle cette machine (127.0.0.1, localhost, ::1) ?"""
     import re
     return bool(re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(/|$)", str(adresse or ""), re.I))
 
 
-class Moteur:
+class Engine:
     """L'interface commune. Les attributs décrivent le moteur pour la page ; les méthodes sont ce que Lutin lui demande."""
     id = ""
     nom = ""
@@ -107,7 +107,7 @@ class Moteur:
 
     def grille(self):
         """{fonction: (état, note)} pour chaque fonction de FONCTIONS : ce que ce moteur fait, et comment (voir ETATS). Par défaut, rien n'est vérifié."""
-        return {f: ("non_teste", "") for f in FONCTIONS}
+        return {f: ("non_teste", "") for f in FUNCTIONS}
 
     def aptitudes(self):
         """Ce que la BOUCLE de l'agent doit savoir pour piloter ce moteur (engine_capabilities.EngineCapabilities) : comment les appels d'outils arrivent au modèle,
@@ -136,7 +136,7 @@ class Moteur:
         Un moteur absent du catalogue, ou une machine pas encore mesurée, n'est jamais écarté : la carte le montre, l'installation dira le reste."""
         try:
             from . import engine_catalog
-            entree = engine_catalog.entree(self.id)
+            entree = engine_catalog.entry(self.id)
             if not entree:
                 return True, ""
             profil = CONTEXT["profil"]()
@@ -162,7 +162,7 @@ class Moteur:
         return {"id": self.id, "nom": self.nom, "genre": self.genre, "gere_modeles": self.gere_modeles, "description": f.get("description") or self.description, "courant": bool(courant),
                 "points_forts": f.get("points_forts") or list(self.points_forts), "points_faibles": f.get("points_faibles") or list(self.points_faibles), "adresse_modifiable": self.adresse_modifiable,
                 "site": f.get("site", ""), "version_testee": f.get("version_testee", ""), "remarque": f.get("remarque", ""), "source_fiche": "catalogue" if f else "code",
-                "grille": [{"fonction": f, "etat": e, "note": n} for f, (e, n) in ((f, self.grille().get(f, ("non_teste", ""))) for f in FONCTIONS)]}
+                "grille": [{"fonction": f, "etat": e, "note": n} for f, (e, n) in ((f, self.grille().get(f, ("non_teste", ""))) for f in FUNCTIONS)]}
 
 
 def abandon(reponse):
@@ -173,7 +173,7 @@ def abandon(reponse):
         pass
 
 
-class FluxInterruptible:
+class InterruptibleStream:
     """Les évènements d'une réponse en flux, lus dans un fil à part pour que le bouton Arrêter marche TOUJOURS : l'ouverture de la connexion (un modèle qui charge peut mettre des minutes à répondre)
     comme la lecture (un modèle qui se fige). `ouvrir()` rend le gestionnaire de flux du moteur ; `stop` est l'évènement du bouton Arrêter. Quand il est levé, la connexion est coupée et un évènement
     {"__stop__": True} est rendu : l'appelant le voit comme n'importe quel autre arrêt. Les erreurs du moteur (HTTP, réseau) sont relevées chez l'appelant, comme avant."""
@@ -243,7 +243,7 @@ def entries():
         return list(ENGINES.values())
 
 
-def par_id(ident):
+def by_id(ident):
     """Le moteur de cet identifiant ; Ollama si l'identifiant est inconnu ou vide (un réglage ancien ne doit jamais empêcher de discuter)."""
     with LOCK:
         return ENGINES.get(ident) or ENGINES.get(OLLAMA)
@@ -274,7 +274,7 @@ def all_tasks():
         return {k: dict(v) for k, v in TASKS.items()}
 
 
-class ErreurAnnule(ValueError):
+class TaskCancelled(ValueError):
     """L'utilisateur a annulé l'opération en cours (installation, mise à jour, téléchargement). Ce qui était déjà téléchargé est gardé : relancer reprend où ça s'était arrêté."""
 
 
@@ -319,7 +319,7 @@ def launch_task(moteur, action, executer=None, synchrone=False):
     def progression(texte="", fait=0, total=0):
         with LOCK:
             if TASKS[moteur.id].get("annule"):
-                raise ErreurAnnule("Opération annulée : ce qui est déjà téléchargé est gardé, relance pour reprendre.")
+                raise TaskCancelled("Opération annulée : ce qui est déjà téléchargé est gardé, relance pour reprendre.")
             TASKS[moteur.id].update({"texte": str(texte), "fait": int(fait or 0), "total": int(total or 0)})
             if texte:
                 TASKS[moteur.id]["dernier"] = str(texte)
@@ -338,7 +338,7 @@ def launch_task(moteur, action, executer=None, synchrone=False):
         except Exception as erreur:  # noqa: BLE001  (l'échec est montré dans la page, jamais une trace)
             with LOCK:
                 cause = erreur
-                while cause is not None and not isinstance(cause, ErreurAnnule):
+                while cause is not None and not isinstance(cause, TaskCancelled):
                     cause = cause.__cause__ or cause.__context__
                 if cause is not None:
                     TASKS[moteur.id].update({"statut": "annule", "erreur": "", "texte": "", "fait": 0, "total": 0})

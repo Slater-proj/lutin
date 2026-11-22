@@ -68,18 +68,18 @@ class Fiches(unittest.TestCase):
                         bloc(genre="ollama", id="llamacpp"),               # seul Ollama a le genre « ollama »
                         bloc(depot="pas un depot"), bloc(depot="a/b/c"), bloc(version_testee=""), bloc(version_testee="x" * 50),
                         bloc(etiquette="(["), bloc(etiquette=3), bloc(type="autre")):
-            with self.assertRaises(cm.ErreurCatalogue, msg=str(mauvais)):
+            with self.assertRaises(cm.CatalogueError, msg=str(mauvais)):
                 ok(mauvais)
 
     def test_un_catalogue_falsifie_ne_change_pas_les_fiches(self):
         ancien = dict(cm.PUBLIC_KEYS)
         cm.PUBLIC_KEYS["test"] = ed25519.public_key(GRAINE).hex()
         try:
-            e = cm.signer({"version": 99, "moteurs": [bloc(description={"fr": "Pirate."})]}, GRAINE, "test")
+            e = cm.sign({"version": 99, "moteurs": [bloc(description={"fr": "Pirate."})]}, GRAINE, "test")
             e["catalogue"]["moteurs"][0]["description"] = {"fr": "Autre texte, signature périmée."}
             f = _TEMP / "falsifie.json"
             f.write_text(json.dumps(e), encoding="utf-8")
-            self.assertLess(cm.charger(f)["version"], 99)
+            self.assertLess(cm.load(f)["version"], 99)
         finally:
             cm.PUBLIC_KEYS.clear()
             cm.PUBLIC_KEYS.update(ancien)

@@ -58,8 +58,8 @@ def requete(methode, chemin, en_tetes=None, corps=None, brut=None):
 class Base(unittest.TestCase):
     def setUp(self):
         self.avant = (A.SECURITE, A.APPAREILS)
-        A.SECURITE = S.Securite(niveau=S.LOCAL, port=8777)
-        A.APPAREILS = S.Appareils()
+        A.SECURITE = S.Security(niveau=S.LOCAL, port=8777)
+        A.APPAREILS = S.Devices()
         CONFIG.write_text(json.dumps({"schema": 1, "installe": True, "securite": {"niveau": "local", "port": 8777}, "emplacements": {"travail": str(_TEMP / "projet"), "travaux": [], "travail_actif": ""}}), encoding="utf-8")
         os.environ.pop("LUTIN_DOCKER", None)
         os.environ.pop("LUTIN_SUPERVISE", None)
@@ -114,7 +114,7 @@ class NiveauDAcces(Base):
             self.assertIn("LUTIN_NIVEAU", r["erreur"])
 
     def test_qui_peut_changer_le_niveau(self):
-        A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
+        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
         sur_la_machine = dict(self.session())
         self.assertTrue(requete("GET", "/api/acces", sur_la_machine)[1]["modifiable"], "le navigateur de cette machine, au niveau réseau")
         for intrus in ({"X-Forwarded-For": "192.168.1.50"}, {"Forwarded": "for=192.168.1.50"}, {"Via": "1.1 proxy"}, {"Host": "lutin.maison:8777"}, {"X-Real-IP": "10.0.0.2"}):
@@ -122,7 +122,7 @@ class NiveauDAcces(Base):
             if statut == 200:
                 self.assertFalse(e["modifiable"], intrus)
                 self.assertEqual(requete("POST", "/api/acces", dict(sur_la_machine, **intrus), {"niveau": "local"})[0], 403, intrus)
-        A.SECURITE = S.Securite(niveau=S.PROXY, port=8777, url_publique="https://lutin.exemple.fr", proxy_ips=["127.0.0.1"])
+        A.SECURITE = S.Security(niveau=S.PROXY, port=8777, url_publique="https://lutin.exemple.fr", proxy_ips=["127.0.0.1"])
         statut, e = requete("GET", "/api/acces", {"Remote-User": "moi", "Host": "lutin.exemple.fr"})
         if statut == 200:
             self.assertFalse(e["modifiable"], "derrière un proxy installé sur la machine : jamais, le proxy ne prouve rien")
@@ -130,7 +130,7 @@ class NiveauDAcces(Base):
 
 class AppairageEtAppareils(Base):
     def test_pin_et_appareils(self):
-        A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
+        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
         session = self.session()
         statut, r = requete("POST", "/api/nouveau-pin", session, {})
         self.assertEqual((statut, len(r["pin"]), r["valable_s"]), (200, 6, 600))
@@ -147,7 +147,7 @@ class AppairageEtAppareils(Base):
         self.assertEqual(requete("GET", "/api/qr?d=" + "x" * 300)[0], 400)
 
     def test_la_page_de_connexion_lit_le_pin_du_qr_code(self):
-        A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
+        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
         statut, page = requete("GET", "/", {"X-Token": ""})
         self.assertEqual(statut, 200)
         self.assertIn("pin=([0-9]{6})", page)
@@ -304,12 +304,12 @@ class Planification(Base):
         self.assertEqual(requete("POST", "/api/notifications-supprimer", corps={"id": liste["canaux"][0]["id"]})[0], 200)
 
     def test_les_notifications_se_reglent_depuis_cette_machine_seulement(self):
-        A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
+        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
         statut, _ = requete("POST", "/api/notifications-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "type": "ntfy", "params": {"sujet": "x"}})
         self.assertEqual(statut, 403)
 
     def test_gestion_reservee_a_cette_machine(self):
-        A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
+        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
         statut, r = requete("POST", "/api/planifie-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "prompt": "x", "heure": "08:00", "jours": [0]})
         self.assertEqual(statut, 403, "un appareil appairé, ou un relais, ne planifie pas")
         self.assertEqual(self.p.read(), [])
@@ -344,7 +344,7 @@ class Planification(Base):
         t = self.p.add("Matin", "résume le dépôt", "08:30", [0, 1, 2, 3, 4, 5, 6])
         appels = []
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(appels=appels)):
-            ident = self.p.executer(t["id"])
+            ident = self.p.execute(t["id"])
         self.assertEqual([(a[0], a[2], a[3]) for a in appels], [("⏰ Matin", True, True)])
         self.assertTrue(appels[0][1].startswith("(Tâche planifiée « Matin » lancée le "), "la demande est datée : le modèle sait quel jour et quelle heure il est")
         self.assertTrue(appels[0][1].endswith("résume le dépôt"))
@@ -356,8 +356,8 @@ class Planification(Base):
         t = self.p.add("Heure", "donne-moi l'heure", "19:00", [0, 1, 2, 3, 4, 5, 6])
         avant = len(A.conv_liste())
         with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
-            premiere = self.p.executer(t["id"])
-            seconde = self.p.executer(t["id"])
+            premiere = self.p.execute(t["id"])
+            seconde = self.p.execute(t["id"])
         self.assertEqual(premiere, seconde, "chaque exécution continue la même conversation")
         self.assertEqual(len(A.conv_liste()), avant + 1)
         messages = A.conv_lire(premiere)["messages"]
@@ -366,16 +366,16 @@ class Planification(Base):
     def test_une_conversation_supprimee_est_recreee(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour()):
-            premiere = self.p.executer(t["id"])
+            premiere = self.p.execute(t["id"])
             A.conv_supprimer(premiere)
-            seconde = self.p.executer(t["id"])
+            seconde = self.p.execute(t["id"])
         self.assertNotEqual(premiere, seconde)
         self.assertEqual(A.conv_lire(seconde)["titre"], "⏰ Heure")
 
     def test_un_moteur_muet_n_est_jamais_un_rien_fait_silencieux(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="")):
-            ident = self.p.executer(t["id"])
+            ident = self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         dernier = A.conv_lire(ident)["messages"][-1]
         self.assertEqual(dernier["role"], "assistant")
@@ -384,7 +384,7 @@ class Planification(Base):
     def test_une_erreur_du_tour_est_ecrite_dans_la_conversation(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="", evenements=[{"type": "erreur", "texte": "Ollama ne répond pas"}])):
-            ident = self.p.executer(t["id"])
+            ident = self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         self.assertIn("Ollama ne répond pas", A.conv_lire(ident)["messages"][-1]["content"])
 
@@ -394,7 +394,7 @@ class Planification(Base):
         with mock.patch.object(notifications, "find", lambda i: {"id": i, "nom": "Tel"}), mock.patch.object(notifications, "send", lambda canal, titre, msg, ouvrir=None: envois.append((canal, titre, msg))):
             t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
-                self.p.executer(t["id"])
+                self.p.execute(t["id"])
         self.assertEqual(envois, [("abcd1234", "⏰ Heure", "il est 19 h")])
         self.assertEqual(self.p.read()[0]["derniere_notif"], "ok")
 
@@ -405,7 +405,7 @@ class Planification(Base):
         with mock.patch.object(notifications, "find", lambda i: {"id": i}), mock.patch.object(notifications, "send", casse):
             t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("ok")):
-                self.p.executer(t["id"])
+                self.p.execute(t["id"])
         fait = self.p.read()[0]
         self.assertEqual(fait["derniere_etat"], "ok")
         self.assertIn("n'a pas répondu", fait["derniere_notif"])
@@ -417,7 +417,7 @@ class Planification(Base):
     def test_une_erreur_est_notee_et_ne_casse_pas_la_boucle(self):
         t = self.p.add("Matin", "x", "08:30", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=RuntimeError("boum")):
-            self.p.executer(t["id"])
+            self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
 
     def test_pas_de_demarrage_si_une_reponse_est_en_cours(self):
@@ -426,13 +426,13 @@ class Planification(Base):
         self.p.modify(t["id"], cree=(datetime.now() - timedelta(days=2)).isoformat(timespec="seconds"))
         A.TOURS_ACTIFS["abcdef12"] = threading.Event()
         try:
-            with mock.patch.object(self.p, "executer") as ex:
-                self.assertIsNone(self.p.un_regard())
+            with mock.patch.object(self.p, "execute") as ex:
+                self.assertIsNone(self.p.run_first_due())
                 ex.assert_not_called()
         finally:
             A.TOURS_ACTIFS.pop("abcdef12", None)
-        with mock.patch.object(self.p, "executer") as ex:
-            self.assertEqual(self.p.un_regard(), t["id"])
+        with mock.patch.object(self.p, "execute") as ex:
+            self.assertEqual(self.p.run_first_due(), t["id"])
             ex.assert_called_once_with(t["id"])
 
 
@@ -501,7 +501,7 @@ class Restauration(Base):
 
     def test_restauration_reservee_a_cette_machine_et_authentifiee(self):
         self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x")[0], 403)
-        A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
+        A.SECURITE = S.Security(niveau=S.RESEAU, port=8777)
         self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": A.JETON}, brut=b"x")[0], 401, "pas de session")
         session = self.session()
         statut, r = requete("POST", "/api/restaurer", dict(session, **{"X-Forwarded-For": "192.168.1.50"}), brut=self.archive())

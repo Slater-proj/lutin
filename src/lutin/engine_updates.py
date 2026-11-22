@@ -73,7 +73,7 @@ def _latest_colibri(mo):
     if not hasattr(mo, "colibri_choisi") or not mo.colibri_choisi() or not mo.version():
         return None
     from . import colibri
-    return mo.version(), colibri.derniere_version()
+    return mo.version(), colibri.latest_version()
 
 
 def _latest_exllamav3(mo):

@@ -35,7 +35,7 @@ from . import i18n as _i18n
 from . import tool_settings as _reglages_outils
 from . import security as _sec
 from .i18n import t as _t
-from .i18n import traduire as _tr
+from .i18n import translate as _tr
 from .ollama_client import Ollama as _Ollama  # noqa: F401  (client_banc et les tests s’en servent par ce module)
 
 ICI = Path(__file__).resolve().parent
@@ -53,9 +53,9 @@ JETON = secrets.token_hex(16)                 # écrit dans la page : protège c
 JETON_CONSOLE = secrets.token_hex(16)         # écrit dans un fichier réservé à l'utilisateur : sert à la ligne de commande (lutin chat), n'est jamais dans la page
 
 # Sécurité : le lanceur remplace ces valeurs avant de démarrer le serveur (voir lutin.security).
-SECURITE = _sec.Securite()
-APPAREILS = _sec.Appareils()
-LIMITEUR_PIN = _sec.LimiteurDebit(10, 60)
+SECURITE = _sec.Security()
+APPAREILS = _sec.Devices()
+LIMITEUR_PIN = _sec.RateLimiter(10, 60)
 IP_LAN = ""
 VERIFICATEUR = None          # fonction(portee) -> propositions de modèles ; fournie par le lanceur (boutons « chercher » de l'onglet Modèles)
 
@@ -969,8 +969,8 @@ def nouvelle_version_lutin():
 
 def page_web():
     """La page d'accueil, avec le jeton, la version, la langue et (en anglais) le dictionnaire de l'interface."""
-    langue = _i18n.langue()
-    dico = _i18n.dico("interface") if langue != "fr" else {}
+    langue = _i18n.language()
+    dico = _i18n.dictionary("interface") if langue != "fr" else {}
     donnees = json.dumps(dico, ensure_ascii=False).replace("</", "<\\/")          # une chaîne ne doit pas pouvoir fermer la balise <script>
     page = (WEB / "index.html").read_text(encoding="utf-8")
     return page.replace("__TOKEN__", JETON).replace("__VERSION__", VERSION).replace("__LANGUE__", langue).replace("__DICO__", donnees)
@@ -989,7 +989,7 @@ def traduire_json(objet, cle=""):
 
 def traduire_evenement(e):
     """Évènements du flux de réponse : seuls les messages de Lutin (info, erreur, accord, état) sont traduits, jamais le texte du modèle."""
-    if not isinstance(e, dict) or e.get("type") not in ("info", "erreur", "approbation", "etat") or _i18n.langue() == "fr":
+    if not isinstance(e, dict) or e.get("type") not in ("info", "erreur", "approbation", "etat") or _i18n.language() == "fr":
         return e
     return dict(e, **{k: _tr(e[k]) for k in ("texte", "titre") if isinstance(e.get(k), str)})
 

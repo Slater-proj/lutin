@@ -30,7 +30,7 @@ class Record(unittest.TestCase):
                                                                   "token_counts": "unknown", "starts_on_demand": False, "spills_to_cpu": False,
                                                                   "experts_in_ram": False})
         self.assertIs(engine_capabilities.of(object()), engine_capabilities.CAUTIOUS)
-        self.assertIs(engine_capabilities.of(engines.Moteur()), engine_capabilities.CAUTIOUS)
+        self.assertIs(engine_capabilities.of(engines.Engine()), engine_capabilities.CAUTIOUS)
 
         class Wrong:
             def aptitudes(self):
@@ -82,7 +82,7 @@ class Engines(unittest.TestCase):
         start.assert_called_once_with()
 
 
-class Down(engines.Moteur):
+class Down(engines.Engine):
     """An engine that fails the way the test says. It calls itself Ollama on purpose: the loop must read its record, not its name."""
     id, nom = engines.OLLAMA, "Fake"
 

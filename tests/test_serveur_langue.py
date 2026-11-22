@@ -49,7 +49,7 @@ class LangueDuServeur(unittest.TestCase):
     def setUp(self):
         os.environ.pop("LUTIN_LANGUE", None)
         Path(os.environ["LUTIN_CONFIG"]).unlink(missing_ok=True)
-        i18n.forcer(None)
+        i18n.force(None)
         i18n._config["mtime"] = None
 
     def test_reglage_par_l_api_puis_page_et_messages_dans_la_langue(self):

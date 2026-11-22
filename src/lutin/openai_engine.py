@@ -171,7 +171,7 @@ class OpenAIStream:
         yield dict({"done": True, "done_reason": "stop" if fin in ("", "tool_calls") else fin}, **counts(usage, timings))
 
 
-class OpenAIEngine(engines.Moteur):
+class OpenAIEngine(engines.Engine):
     """La conversation avec un serveur compatible OpenAI. Les sous-classes disent où il est (`adresse`) et comment s'identifier (`cle`) ; elles gèrent aussi son installation si elles le peuvent."""
     genre = "openai"
 
@@ -186,7 +186,7 @@ class OpenAIEngine(engines.Moteur):
         base = self.adresse().rstrip("/")
         if not base:
             raise urllib.error.URLError(_t("aucune adresse pour ce moteur"))
-        if engines.CONTEXT["hors_ligne"]() and not engines.est_local(base):
+        if engines.CONTEXT["hors_ligne"]() and not engines.is_local(base):
             raise urllib.error.URLError(_t("mode hors ligne : ce moteur distant n'est pas joint"))
         entetes = {"Content-Type": "application/json"}
         if self.cle():
@@ -198,7 +198,7 @@ class OpenAIEngine(engines.Moteur):
         """Faux si le serveur est sur cette machine et que personne n'écoute sur son port, vu en 0,3 s au plus. Sous Windows, une requête vers un port local
         fermé n'échoue qu'au bout d'environ 2 s : la liste des moteurs en demande plusieurs par carte. Vrai pour une adresse distante (la requête dira)."""
         base = self.adresse().rstrip("/")
-        if not engines.est_local(base):
+        if not engines.is_local(base):
             return True
         partie = urllib.parse.urlsplit(base)
         try:
@@ -244,7 +244,7 @@ class OpenAIEngine(engines.Moteur):
 
     def _gabarit(self):
         """A server on this machine takes `chat_template_kwargs`; a distant one may be a strict OpenAI-like API that refuses an unknown field."""
-        return engines.est_local(self.adresse())
+        return engines.is_local(self.adresse())
 
     def chat(self, corps, delai=60):
         return from_openai_full(self._json("/chat/completions", to_openai(dict(corps, stream=False), self._gabarit()), delai))

@@ -79,7 +79,7 @@ def routes(method):
 
 def setUpModule():
     global SERVER, PORT, DEVICE
-    patches = [mock.patch.object(A, "SECURITE", S.Securite(niveau=S.RESEAU)), mock.patch.object(A, "APPAREILS", S.Appareils()), mock.patch.object(A, "LIMITEUR_PIN", S.LimiteurDebit(10_000, 60)),
+    patches = [mock.patch.object(A, "SECURITE", S.Security(niveau=S.RESEAU)), mock.patch.object(A, "APPAREILS", S.Devices()), mock.patch.object(A, "LIMITEUR_PIN", S.RateLimiter(10_000, 60)),
                mock.patch.object(power, "schedule_shutdown", marker("shutdown")), mock.patch.object(access, "update", marker("update")),
                mock.patch.object(access, "restart", marker("restart")), mock.patch.object(access, "restore_stream", marker("restore")), mock.patch.object(access, "apply", marker("access level"))]
     for patch in patches:

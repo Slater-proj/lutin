@@ -1389,7 +1389,7 @@ class MoteurExterne(OpenAIEngine):
             p = int(self.config().get("port_colibri") or 0)
         except (TypeError, ValueError):
             p = 0
-        return p if 1024 <= p <= 65535 else colibri.PORT_DEFAUT
+        return p if 1024 <= p <= 65535 else colibri.DEFAULT_PORT
 
     # -- LM Studio : installé et lancé par Lutin sans son interface (démon llmster + commande lms), sur cette machine seulement
     def lmstudio_choisi(self):
@@ -1743,7 +1743,7 @@ class MoteurExterne(OpenAIEngine):
                 if engines.CONTEXT["hors_ligne"]():
                     raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
                 progression(_t("Colibri prépare le modèle…"), 0, 0)
-                colibri.preparer(action.split(":", 1)[1], self.port_colibri(), dossiers, lambda texte: progression(texte, 0, 0), annule=lambda: bool(engines.TASKS.get(self.id, {}).get("annule")))
+                colibri.prepare(action.split(":", 1)[1], self.port_colibri(), dossiers, lambda texte: progression(texte, 0, 0), annule=lambda: bool(engines.TASKS.get(self.id, {}).get("annule")))
                 progression(_t("Modèle prêt : Colibri répond sur le port {}.").format(self.port_colibri()), 1, 1)
             elif action == "demarrer":
                 progression(_t("Démarrage de Colibri (le chargement du modèle peut être long)…"), 0, 0)

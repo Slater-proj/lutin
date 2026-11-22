@@ -28,7 +28,7 @@ LOCK_OUT_S = 300
 
 
 @dataclass
-class Securite:
+class Security:
     niveau: str = LOCAL
     port: int = 8777
     url_publique: str = ""                     # niveau proxy : « https://lutin.exemple.fr »
@@ -67,7 +67,7 @@ class Securite:
 
     @staticmethod
     def depuis_dict(d):
-        return Securite(**{k: v for k, v in (d or {}).items() if k in Securite.__dataclass_fields__})
+        return Security(**{k: v for k, v in (d or {}).items() if k in Security.__dataclass_fields__})
 
 
 def address_listening(sec, ip_lan=""):
@@ -89,7 +89,7 @@ def _is_loop(texte):
         return False
 
 
-def _sans_port(hote):
+def _without_port(hote):
     hote = (hote or "").strip().lower()
     if hote.startswith("["):
         return hote.split("]")[0] + "]"
@@ -98,7 +98,7 @@ def _sans_port(hote):
 
 def allowed_host(sec, entete_host, ip_lan=""):
     """Protège du « DNS rebinding » : le nom demandé doit être un des noms de CETTE application (pas celui d'un site tiers qui pointerait vers 127.0.0.1)."""
-    hote = _sans_port(entete_host)
+    hote = _without_port(entete_host)
     if not hote:
         return False
     permis = {"127.0.0.1", "localhost", "[::1]"}
@@ -111,7 +111,7 @@ def allowed_host(sec, entete_host, ip_lan=""):
         except ValueError:
             return hote in permis or hote.endswith(".local") or "." not in hote                  # noms mDNS / noms de machine locaux
     if sec.niveau == PROXY:
-        permis.add(_sans_port(sec.url_publique.split("://", 1)[-1].split("/")[0]))
+        permis.add(_without_port(sec.url_publique.split("://", 1)[-1].split("/")[0]))
     return hote in permis
 
 
@@ -122,10 +122,10 @@ def allowed_origin(sec, entete_origin, entete_host, ip_lan=""):
     if entete_origin == "null":
         return False
     hote = entete_origin.split("://", 1)[-1].split("/")[0]
-    return allowed_host(sec, hote, ip_lan) and _sans_port(hote) == _sans_port(entete_host)
+    return allowed_host(sec, hote, ip_lan) and _without_port(hote) == _without_port(entete_host)
 
 
-def ip_dans(ip, reseaux):
+def ip_in(ip, reseaux):
     try:
         a = ipaddress.ip_address(ip)
     except ValueError:
@@ -144,7 +144,7 @@ def admins():
     return {x.strip().lower() for x in os.environ.get("LUTIN_ADMINS", "").replace(";", ",").replace(" ", ",").split(",") if x.strip()}
 
 
-def est_admin_proxy(sec, ip_client, en_tetes):
+def is_admin_proxy(sec, ip_client, en_tetes):
     """La requête vient du proxy de confiance, qui a identifié un administrateur déclaré (l'en-tête n'est cru que de la part du proxy : voir identite_proxy)."""
     nom = identity_proxy(sec, ip_client, en_tetes)
     return bool(nom) and nom.lower() in admins()
@@ -152,7 +152,7 @@ def est_admin_proxy(sec, ip_client, en_tetes):
 
 def identity_proxy(sec, ip_client, en_tetes):
     """Nom d'utilisateur transmis par le proxy, ou None. L'en-tête n'est cru QUE si la connexion vient du proxy déclaré : n'importe qui peut écrire « Remote-User: admin »."""
-    if sec.niveau != PROXY or not ip_dans(ip_client, sec.proxy_ips):
+    if sec.niveau != PROXY or not ip_in(ip_client, sec.proxy_ips):
         return None
     nom = (en_tetes.get(sec.en_tete_identite) or "").strip()
     return nom[:128] or None
@@ -167,7 +167,7 @@ def _digest(jeton):
     return hashlib.sha256(jeton.encode("utf-8")).hexdigest()
 
 
-class LimiteurDebit:
+class RateLimiter:
     """Au plus `maximum` événements par `fenetre` secondes et par clé (adresse IP)."""
 
     def __init__(self, maximum=10, fenetre=60, horloge=time.monotonic):
@@ -197,7 +197,7 @@ def nom_appareil(donne, agent="", sur_la_machine=False):
     return ("Cet ordinateur (" + base + ")") if sur_la_machine else base
 
 
-class Appareils:
+class Devices:
     """Code PIN d'appairage et sessions des appareils. Seules les EMPREINTES des jetons sont gardées sur disque : le fichier ne permet pas d'usurper une session."""
 
     def __init__(self, fichier=None, horloge=time.time):
@@ -280,11 +280,11 @@ def cookie_session(en_tetes_cookie):
     return ""
 
 
-def en_tete_set_cookie(jeton, https):
+def set_cookie_header(jeton, https):
     return "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}{}".format(NAME_COOKIE, jeton, DURATION_SESSION_S, "; Secure" if https else "")
 
 
-def acces(sec, appareils, ip_client, en_tetes, jeton_local=None):
+def access_decision(sec, appareils, ip_client, en_tetes, jeton_local=None):
     """Décision d'accès pour une requête : (autorise, identité ou raison du refus).
 
     local   : toute requête arrivant sur 127.0.0.1 (le serveur n'écoute pas ailleurs) ; le jeton de page protège contre les autres sites web

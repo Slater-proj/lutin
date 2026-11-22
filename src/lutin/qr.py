@@ -6,11 +6,11 @@
 # versions 1 à 10, niveau M : (octets de données, octets de correction par bloc, [(nombre de blocs, octets de données par bloc), ...])
 VERSIONS = {1: (16, 10, [(1, 16)]), 2: (28, 16, [(1, 28)]), 3: (44, 26, [(1, 44)]), 4: (64, 18, [(2, 32)]), 5: (86, 24, [(2, 43)]), 6: (108, 16, [(4, 27)]),
             7: (124, 18, [(4, 31)]), 8: (154, 22, [(2, 38), (2, 39)]), 9: (182, 22, [(3, 36), (2, 37)]), 10: (216, 26, [(4, 43), (1, 44)])}
-ALIGNEMENT = {1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34], 7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46], 10: [6, 28, 50]}
-CAPACITE_MAX = 213
+ALIGNMENT = {1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34], 7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46], 10: [6, 28, 50]}
+MAX_CAPACITY = 213
 
 
-class TropLong(ValueError):
+class TooLong(ValueError):
     pass
 
 
@@ -30,7 +30,7 @@ def _mul(a, b):
     return 0 if a == 0 or b == 0 else EXP[LOG[a] + LOG[b]]
 
 
-def _generateur(n):
+def _generator(n):
     g = [1]
     for i in range(n):
         suivant = [0] * (len(g) + 1)
@@ -42,7 +42,7 @@ def _generateur(n):
 
 
 def _correction(donnees, n):
-    g = _generateur(n)
+    g = _generator(n)
     reste = list(donnees) + [0] * n
     for i in range(len(donnees)):
         c = reste[i]
@@ -52,7 +52,7 @@ def _correction(donnees, n):
     return reste[len(donnees):]
 
 
-def _bits_donnees(octets, version):
+def _data_bits(octets, version):
     capacite = VERSIONS[version][0]
     bits = "0100" + format(len(octets), "016b" if version >= 10 else "08b") + "".join(format(b, "08b") for b in octets)
     bits += "0" * min(4, capacite * 8 - len(bits))
@@ -63,7 +63,7 @@ def _bits_donnees(octets, version):
     return mots
 
 
-def _mots_finaux(mots, version):
+def _final_codewords(mots, version):
     _, ec, groupes = VERSIONS[version]
     blocs, i = [], 0
     for nombre, taille in groupes:
@@ -89,11 +89,11 @@ def _bch(valeur, generateur, degre):
     return (valeur << degre) | r
 
 
-MASQUES = [lambda r, c: (r + c) % 2 == 0, lambda r, c: r % 2 == 0, lambda r, c: c % 3 == 0, lambda r, c: (r + c) % 3 == 0, lambda r, c: (r // 2 + c // 3) % 2 == 0,
+MASKS = [lambda r, c: (r + c) % 2 == 0, lambda r, c: r % 2 == 0, lambda r, c: c % 3 == 0, lambda r, c: (r + c) % 3 == 0, lambda r, c: (r // 2 + c // 3) % 2 == 0,
            lambda r, c: (r * c) % 2 + (r * c) % 3 == 0, lambda r, c: ((r * c) % 2 + (r * c) % 3) % 2 == 0, lambda r, c: ((r + c) % 2 + (r * c) % 3) % 2 == 0]
 
 
-def _fonctions(version):
+def _functions(version):
     """Matrice de base : modules de fonction posés (None = libre pour les données) et le masque des modules réservés."""
     n = 17 + 4 * version
     m = [[None] * n for _ in range(n)]
@@ -111,7 +111,7 @@ def _fonctions(version):
                     pose(r0 + dr, c0 + dc, 0 if ext else (1 if (bord or centre) else 0))
     for i in range(8, n - 8):                                              # lignes de synchronisation
         m[6][i] = m[i][6] = 1 - i % 2
-    pos = ALIGNEMENT[version]
+    pos = ALIGNMENT[version]
     for r in pos:
         for c in pos:
             if (r, c) in ((6, 6), (6, pos[-1]), (pos[-1], 6)):
@@ -134,7 +134,7 @@ def _fonctions(version):
     return m, reserve
 
 
-def _poser_donnees(base, reserve, mots):
+def _place_data(base, reserve, mots):
     n = len(base)
     m = [ligne[:] for ligne in base]
     bits = "".join(format(b, "08b") for b in mots)
@@ -154,13 +154,13 @@ def _poser_donnees(base, reserve, mots):
     return m
 
 
-def _avec_masque(base, reserve, donnees, masque):
+def _with_mask(base, reserve, donnees, masque):
     """Applique le masque aux modules de données, puis écrit l'information de format (deux copies)."""
     n = len(base)
     m = [ligne[:] for ligne in donnees]
     for r in range(n):
         for c in range(n):
-            if not reserve[r][c] and MASQUES[masque](r, c):
+            if not reserve[r][c] and MASKS[masque](r, c):
                 m[r][c] ^= 1
     bits = _bch(masque, 0x537, 10) ^ 0x5412          # niveau M = 00, puis le numéro de masque (3 bits)
 
@@ -179,7 +179,7 @@ def _avec_masque(base, reserve, donnees, masque):
     return m
 
 
-def _penalite(m):
+def _penalty(m):
     n = len(m)
     total = 0
     for ligne in (m, [list(x) for x in zip(*m)]):
@@ -208,22 +208,22 @@ def _penalite(m):
     return total
 
 
-def matrice(texte):
+def matrix(texte):
     """Les lignes (0/1) du code QR de `texte`, sans marge. TropLong au-delà de 213 octets."""
     octets = texte.encode("utf-8")
     version = next((v for v in VERSIONS if len(octets) <= (VERSIONS[v][0] * 8 - (20 if v >= 10 else 12)) // 8), None)
     if version is None:
-        raise TropLong("texte trop long pour le code QR ({} octets, {} au plus)".format(len(octets), CAPACITE_MAX))
-    base, reserve = _fonctions(version)
-    donnees = _poser_donnees(base, reserve, _mots_finaux(_bits_donnees(octets, version), version))
-    meilleure = min((_penalite(m), k, m) for k, m in ((k, _avec_masque(base, reserve, donnees, k)) for k in range(8)))
+        raise TooLong("texte trop long pour le code QR ({} octets, {} au plus)".format(len(octets), MAX_CAPACITY))
+    base, reserve = _functions(version)
+    donnees = _place_data(base, reserve, _final_codewords(_data_bits(octets, version), version))
+    meilleure = min((_penalty(m), k, m) for k, m in ((k, _with_mask(base, reserve, donnees, k)) for k in range(8)))
     return meilleure[2]
 
 
-def matrice_avec_masque(texte, masque, version=None):
+def matrix_with_mask(texte, masque, version=None):
     """Pour les tests : la matrice avec un masque imposé (et une version imposée si on veut)."""
     octets = texte.encode("utf-8")
     version = version or next(v for v in VERSIONS if len(octets) <= (VERSIONS[v][0] * 8 - (20 if v >= 10 else 12)) // 8)
-    base, reserve = _fonctions(version)
-    donnees = _poser_donnees(base, reserve, _mots_finaux(_bits_donnees(octets, version), version))
-    return _avec_masque(base, reserve, donnees, masque)
+    base, reserve = _functions(version)
+    donnees = _place_data(base, reserve, _final_codewords(_data_bits(octets, version), version))
+    return _with_mask(base, reserve, donnees, masque)

@@ -203,7 +203,7 @@ class Emplacements(unittest.TestCase):
             locations.set_models_folder("")
 
     def test_la_liste_montre_tous_les_emplacements(self):
-        r = locations.lister()
+        r = locations.list_locations()
         cles = [x["cle"] for x in r["lignes"]]
         for attendu in ("programme", "config", "donnees", "memoire", "cache", "modeles"):
             self.assertIn(attendu, cles)

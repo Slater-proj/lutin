@@ -220,7 +220,7 @@ class AvecDeuxServeurs(tm.Base):
         self.assertEqual(r["etat"], "reveil_envoye")
         self.assertIn("Réveil envoyé", r["detail"])
         # la machine démarre : son Lutin répond de nouveau
-        self.srv = ThreadingHTTPServer(("127.0.0.1", self.port), __import__("lutin.server", fromlist=["Gestionnaire"]).Handler)
+        self.srv = ThreadingHTTPServer(("127.0.0.1", self.port), __import__("lutin.server", fromlist=["Handler"]).Handler)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.assertEqual(machines.sonder(mm, "m1", force=True)["etat"], "operationnel")
         self.assertIn(m["id"], machines.REVEIL, "elle vient de répondre : le réveil n'est fini que quand elle répond sans interruption")

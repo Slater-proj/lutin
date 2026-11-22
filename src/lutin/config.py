@@ -187,8 +187,8 @@ def prepare(d):
         Path(chemin).mkdir(parents=True, exist_ok=True)
     from . import i18n
     modeles = Path(__file__).resolve().parent / "data"
-    if i18n.langue() != "fr" and (modeles / i18n.langue()).is_dir():
-        modeles = modeles / i18n.langue()                 # les fichiers de départ existent dans la langue choisie ; sans traduction, le français
+    if i18n.language() != "fr" and (modeles / i18n.language()).is_dir():
+        modeles = modeles / i18n.language()                 # les fichiers de départ existent dans la langue choisie ; sans traduction, le français
     for nom in ("CONTEXTE.md", "MEMOIRE.md"):
         cible = Path(d["memoire"]) / nom
         if not cible.exists():

@@ -34,7 +34,7 @@ class CreatedFiles(unittest.TestCase):
         seen = {"lignes": [{"cle": "donnees", "nom": "Données", "chemin": "C:/data", "explication": "Conversations…", "existe": True, "taille": 10 ** 6, "disque": {"libre": 5, "total": 10, "racine": "C:\\"}},
                            {"cle": "travail:1", "nom": "Dossier de travail : x", "chemin": "D:/x", "explication": "…", "existe": True, "taille": None, "disque": None}],
                 "donnees_detail": [{"nom": "conversations", "taille": 900}]}
-        with mock.patch.object(locations, "lister", lambda: seen):
+        with mock.patch.object(locations, "list_locations", lambda: seen):
             status, answer = V.call("GET", "/api/v1/locations", V.OWNER)
         self.assertEqual(status, 200, answer)
         self.assertEqual(answer["locations"][0]["disk"], {"free": 5, "total": 10, "root": "C:\\"})

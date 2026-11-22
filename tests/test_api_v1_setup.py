@@ -64,8 +64,8 @@ class Setup(unittest.TestCase):
 class Language(unittest.TestCase):
     def test_the_language_is_read_chosen_and_refused_when_unknown(self):
         from lutin import i18n
-        before = i18n.langue_configuree()
-        self.addCleanup(i18n.definir, before or "auto")
+        before = i18n.configured_language()
+        self.addCleanup(i18n.save_language, before or "auto")
         status, answer = V.call("PATCH", "/api/v1/language", V.OWNER, {"language": "en"})
         self.assertEqual((status, answer["choice"]), (200, "en"))          # `language` is the one in use: the test server forces it with LUTIN_LANGUE
         self.assertEqual(V.call("GET", "/api/v1/language", V.OWNER)[1]["choice"], "en")

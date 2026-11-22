@@ -42,7 +42,7 @@ def entry(ident):
 def _text(valeur):
     """Un texte {fr, en} dans la langue affichée."""
     if isinstance(valeur, dict):
-        return valeur.get(_i18n.langue()) or valeur.get("fr") or ""
+        return valeur.get(_i18n.language()) or valeur.get("fr") or ""
     return str(valeur or "")
 
 

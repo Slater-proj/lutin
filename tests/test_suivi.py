@@ -217,7 +217,7 @@ class Scribe(unittest.TestCase):
         self.assertEqual(refus, [schema, "json"], "le schéma refusé, puis du JSON libre")
         self.assertEqual(progress_sheet.read(ID)["etape"], ["Choisir la salle"], "la réponse du second essai est gardée")
 
-        class SansAptitudes(engines.Moteur):
+        class SansAptitudes(engines.Engine):
             id = "inconnu"
 
             def __init__(self):

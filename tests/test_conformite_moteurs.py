@@ -145,7 +145,7 @@ class Conformite:
         return dict({"model": self.modele, "messages": messages, "options": {}}, **plus)
 
     def flux(self, corps, stop=None):
-        with engines.FluxInterruptible(lambda: self.moteur.chat_flux(corps), stop or threading.Event()) as f:
+        with engines.InterruptibleStream(lambda: self.moteur.chat_flux(corps), stop or threading.Event()) as f:
             return list(f)
 
     def verifier_discuter(self):
@@ -185,7 +185,7 @@ class Conformite:
         threading.Timer(0.4, stop.set).start()
         debut = time.time()
         lus = 0
-        with engines.FluxInterruptible(lambda: self.moteur.chat_flux(self.corps([{"role": "user", "content": "LONG"}])), stop) as f:
+        with engines.InterruptibleStream(lambda: self.moteur.chat_flux(self.corps([{"role": "user", "content": "LONG"}])), stop) as f:
             for e in f:
                 lus += 1
                 if stop.is_set():
@@ -201,11 +201,11 @@ class Conformite:
 
     def test_la_grille_est_complete_et_honnete(self):
         g = self.moteur.grille()
-        self.assertEqual(set(g), set(engines.FONCTIONS))
+        self.assertEqual(set(g), set(engines.FUNCTIONS))
         for f, (etat, note) in g.items():
             self.assertIn(etat, engines.STATES, f)
         vue = {x["fonction"]: x for x in self.moteur.vue()["grille"]}
-        self.assertEqual(list(vue), list(engines.FONCTIONS))
+        self.assertEqual(list(vue), list(engines.FUNCTIONS))
         self.verifier_liste()
         for f, (etat, note) in g.items():
             if etat not in ("natif", "adapte"):
@@ -268,7 +268,7 @@ class Garde(unittest.TestCase):
     def test_trois_adaptateurs_et_chaque_fonction_declaree_est_couverte(self):
         self.assertEqual({"ollama", "llamacpp", "openai"} <= set(engines.ENGINES), True)
         for ident in ("ollama", "llamacpp", "openai"):
-            for f in engines.FONCTIONS:
+            for f in engines.FUNCTIONS:
                 etat = engines.ENGINES[ident].grille()[f][0]
                 if etat in ("natif", "adapte") and f not in VERIFIE_AILLEURS:
                     self.assertTrue(hasattr(Conformite, "verifier_" + f), "{} : aucune vérification pour « {} »".format(ident, f))

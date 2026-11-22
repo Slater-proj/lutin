@@ -11,7 +11,7 @@ from lutin import api_v1, engines  # noqa: E402
 A = V.A
 
 
-class Fake(engines.Moteur):
+class Fake(engines.Engine):
     id, nom, genre, gere_modeles, description = "fake", "Fake engine", "openai", True, "An engine for the tests."
 
     def __init__(self):

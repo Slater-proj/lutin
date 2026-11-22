@@ -87,7 +87,7 @@ class Node(unittest.TestCase):
         self.assertEqual(call("PATCH", "/api/v1/node", {"lending": False})[1]["lending"], False)
 
     def test_at_the_level_local_lending_is_refused(self):
-        with mock.patch.object(A, "SECURITE", S.Securite(niveau=S.LOCAL)):
+        with mock.patch.object(A, "SECURITE", S.Security(niveau=S.LOCAL)):
             status, answer = call("PATCH", "/api/v1/node", {"lending": True})
             self.assertEqual((status, answer["error"]["code"]), (409, "local_only"))
             self.assertIn("réseau", answer["error"]["message"])
@@ -170,7 +170,7 @@ class Node(unittest.TestCase):
         """The level `local` is stricter than `configurator`: an administrator on another device lends and revokes, but what this machine grants,
         the answer to a request and a shutdown stay with the person in front of it."""
         machines.noeud_demander("Bureau", "piloter")
-        with mock.patch.object(A.Gestionnaire, "_admin_tous", staticmethod(lambda: True)):
+        with mock.patch.object(A.Handler, "_admin_tous", staticmethod(lambda: True)):
             self.assertEqual(call("PATCH", "/api/v1/node", {"lending": True}, who=V.DEVICE)[0], 200)
             self.assertEqual(call("POST", "/api/v1/node/pairing-code", who=V.DEVICE)[0], 201)
             for method, path, body in (("PATCH", "/api/v1/node/permissions", {"allow": {"lead": True}}),

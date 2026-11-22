@@ -117,11 +117,11 @@ class Installation(Base):
         with self.assertRaises(ValueError):
             C.install("2.1.0; rm", self.dossiers, systeme="win32", architecture="AMD64", dire=lambda t: None)
         with self.assertRaises(ValueError):
-            C.nom_archive("2.1.0", "freebsd", "x86_64")
-        self.assertEqual(C.nom_archive("2.1.0", "linux", "x86_64"), "colibri-v2.1.0-linux-x86_64.tar.gz")
-        self.assertEqual(C.nom_archive("2.1.0", "darwin", "arm64"), "colibri-v2.1.0-macos-arm64.tar.gz")
+            C.archive_name("2.1.0", "freebsd", "x86_64")
+        self.assertEqual(C.archive_name("2.1.0", "linux", "x86_64"), "colibri-v2.1.0-linux-x86_64.tar.gz")
+        self.assertEqual(C.archive_name("2.1.0", "darwin", "arm64"), "colibri-v2.1.0-macos-arm64.tar.gz")
         with self.assertRaises(ValueError):
-            C.nom_archive("2.1.0", "darwin", "x86_64")          # pas d'archive Intel pour macOS
+            C.archive_name("2.1.0", "darwin", "x86_64")          # pas d'archive Intel pour macOS
 
     def test_tar_avec_lien_refuse(self):
         archive = self.tmp / "a.tar.gz"
@@ -134,7 +134,7 @@ class Installation(Base):
             lien.linkname = "/etc/passwd"
             tf.addfile(lien)
         with self.assertRaises(ValueError):
-            C.extraire(archive, self.tmp / "sortie")
+            C.extract(archive, self.tmp / "sortie")
 
 
 class Demarrage(Base):
@@ -229,9 +229,9 @@ class Modeles(unittest.TestCase):
         lances = []
         with mock.patch.object(C, "catalogue", lambda dossiers=None, lancer=None: [{"id": "qwen36-35b", "go": 23.0, "ok": True, "statut": "ready", "raison": ""}, {"id": "glm-5.2", "go": 429.0, "ok": False, "statut": "needs-ram", "raison": "16 GB"}]):
             with self.assertRaises(ValueError):
-                C.preparer("--model-dir=/etc", dossiers=self.dossiers, lancer=lambda *a, **k: lances.append(a))
+                C.prepare("--model-dir=/etc", dossiers=self.dossiers, lancer=lambda *a, **k: lances.append(a))
             with self.assertRaises(ValueError):
-                C.preparer("glm-5.2", dossiers=self.dossiers, lancer=lambda *a, **k: lances.append(a))
+                C.prepare("glm-5.2", dossiers=self.dossiers, lancer=lambda *a, **k: lances.append(a))
         self.assertEqual(lances, [], "rien n'est lancé pour un modèle inconnu ou qui ne tient pas")
 
     def test_preparer_transmet_les_lignes_de_colibri_et_signale_son_echec(self):
@@ -253,12 +253,12 @@ class Modeles(unittest.TestCase):
         vus, cmds = [], []
         catalogue = [{"id": "qwen36-35b", "go": 23.0, "ok": True, "statut": "ready", "raison": ""}]
         with mock.patch.object(C, "catalogue", lambda dossiers=None, lancer=None: catalogue):
-            C.preparer("qwen36-35b", 8123, self.dossiers, dire=vus.append, lancer=lambda cmd, **kw: (cmds.append(cmd), Faux(["download 10%\n", "\n", "download 20%\n"], 0))[1])
+            C.prepare("qwen36-35b", 8123, self.dossiers, dire=vus.append, lancer=lambda cmd, **kw: (cmds.append(cmd), Faux(["download 10%\n", "\n", "download 20%\n"], 0))[1])
             self.assertEqual(vus, ["download 10%", "download 20%"])
             self.assertEqual(cmds[0][2:9], ["setup", "--model", "qwen36-35b", "--yes", "--no-browser", "--background", "--host"])
             self.assertIn("127.0.0.1", cmds[0])
             with self.assertRaises(ValueError) as e:
-                C.preparer("qwen36-35b", 8123, self.dossiers, lancer=lambda cmd, **kw: Faux(["boom\n"], 3))
+                C.prepare("qwen36-35b", 8123, self.dossiers, lancer=lambda cmd, **kw: Faux(["boom\n"], 3))
             self.assertIn("boom", str(e.exception))
 
 

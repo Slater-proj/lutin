@@ -24,7 +24,7 @@ RACINE = Path(__file__).resolve().parent.parent
 
 class Catalogue(unittest.TestCase):
     def entrees(self):
-        return {m["id"]: m for m in cm.charger()["moteurs"]}
+        return {m["id"]: m for m in cm.load()["moteurs"]}
 
     def test_colibri_et_strata_sont_des_preregalages_externes_experimentaux(self):
         e = self.entrees()
@@ -59,11 +59,11 @@ class Catalogue(unittest.TestCase):
         self.assertIn("recommandation", pre["strata"]["remarque"])
 
     def test_le_schema_refuse_un_experimental_qui_n_est_pas_booleen(self):
-        c = json.loads(json.dumps(cm.charger()))
+        c = json.loads(json.dumps(cm.load()))
         for m in c["moteurs"]:
             if m["id"] == "colibri":
                 m["experimental"] = "oui"
-        with self.assertRaises(cm.ErreurCatalogue):
+        with self.assertRaises(cm.CatalogueError):
             cm.validate(c)
 
     def test_le_catalogue_livre_est_bien_signe(self):

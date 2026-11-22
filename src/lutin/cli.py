@@ -103,7 +103,7 @@ def parseur():
     s.add_argument("--no-models", "--sans-modeles", dest="sans_modeles", action="store_true")
     s.add_argument("--no-ollama", "--sans-ollama", dest="sans_ollama", action="store_true")
     s.add_argument("--listen", "--ecoute", dest="ecoute", help=_t("adresse d'écoute imposée (conteneur : 0.0.0.0) ; interdite au niveau « local »"))
-    s.add_argument("--language", "--langue", dest="langue", choices=i18n.LANGUES + ("auto",), help=_t("langue de l'application (fr, en ou auto)"))
+    s.add_argument("--language", "--langue", dest="langue", choices=i18n.LANGUAGES + ("auto",), help=_t("langue de l'application (fr, en ou auto)"))
     s.add_argument("--reconfigure", "--reconfigurer", dest="reconfigurer", action="store_true", help=_t("refaire l'installation guidée même si Lutin est déjà installé (les modèles déjà là ne sont pas retéléchargés)"))
     sv = commande("serve", help=_t("démarrer le serveur"))
     sv.add_argument("--no-browser", "--sans-navigateur", dest="sans_navigateur", action="store_true")
@@ -218,7 +218,7 @@ def command_setup(args, es=None):
                "reconfigurer": getattr(args, "reconfigurer", False), "ecoute": getattr(args, "ecoute", None), "langue": getattr(args, "langue", None)}
     es = es or setup_wizard.Es(oui=args.oui)
     try:
-        setup_wizard.executer(cfg, d, es, options)
+        setup_wizard.run(cfg, d, es, options)
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 2
@@ -559,7 +559,7 @@ def command_trial_engine(args):
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
     from . import engine_trial, core as _moteur, llamacpp_engine, engines  # noqa: F401  (importer le moteur enregistre les moteurs)
-    mo = engines.par_id(args.moteur)
+    mo = engines.by_id(args.moteur)
     if args.variante:
         llamacpp_engine.regler(mo.id, variante=args.variante)
     if args.dossier:
@@ -718,7 +718,7 @@ def command_security(args):
         cfg["admin_a_distance"] = args.admin_distance == "on"
         config.save(d, cfg)
         print(_t("✔ Administration à distance {}.").format(_t("ouverte") if cfg["admin_a_distance"] else _t("fermée")))
-    s = security.Securite.depuis_dict(cfg["securite"])
+    s = security.Security.depuis_dict(cfg["securite"])
     texte = {security.LOCAL: _t("cette machine seulement"), security.RESEAU: _t("réseau local (code PIN)"), security.PROXY: _t("derrière un proxy")}[s.niveau]
     print(_t("Niveau : {} — {}").format(s.niveau, texte))
     if s.niveau == security.PROXY:
@@ -814,13 +814,13 @@ def command_language(args):
     chemin = Path(d["config"]) / "config.json"
     if args.valeur:
         try:
-            i18n.definir(args.valeur.strip().lower(), chemin)
+            i18n.save_language(args.valeur.strip().lower(), chemin)
         except ValueError as e:
             print("✘ " + str(e), file=sys.stderr)
             return 2
-    print(_t("Langue : {}").format(NOMS_LANGUES[i18n.langue()]))
+    print(_t("Langue : {}").format(NOMS_LANGUES[i18n.language()]))
     imposee = os.environ.get("LUTIN_LANGUE", "").strip().lower()
-    if imposee in i18n.LANGUES:
+    if imposee in i18n.LANGUAGES:
         print(_t("La variable LUTIN_LANGUE ({}) l'emporte sur ce réglage.").format(imposee))
     elif not args.valeur:
         print(_t("Pour changer : lutin language fr|en|auto (auto : suivre la langue du système)"))
@@ -842,7 +842,7 @@ def diagnostic(cfg, dossiers, profil, ollama):
         lignes.append(("ok" if installes else "attention", _t("{} modèle(s) installé(s)").format(len(installes))))
     except ollama_client.OllamaError:
         lignes.append(("erreur", _t("Ollama ne répond pas (installé : {})").format("oui" if ollama_client.find_executable(profil.systeme) else "non")))
-    s = security.Securite.depuis_dict(cfg["securite"])
+    s = security.Security.depuis_dict(cfg["securite"])
     lignes.append(("info", _t("Niveau de sécurité : ") + s.niveau))
     lignes += [("erreur", p) for p in s.valider()]
     for disque in profil.disques:
@@ -882,7 +882,7 @@ def command_colibri(args):
         else:
             trouve = colibri.installed()
             print(_t("Colibri {} installé dans {}").format(*trouve) if trouve else _t("Colibri n'est pas installé."))
-            print(_t("Répond sur le port {} : {}").format(args.port, _t("oui") if colibri.repond(args.port) else _t("non")))
+            print(_t("Répond sur le port {} : {}").format(args.port, _t("oui") if colibri.responds(args.port) else _t("non")))
     except (ValueError, OSError) as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1

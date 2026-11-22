@@ -55,9 +55,9 @@ def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
         os.environ["LUTIN_SANS_NAVIGATEUR"] = "1"
     ensure_ollama_runs(cfg, profil, ecrire)
     from . import core
-    core.SECURITE = security.Securite.depuis_dict(cfg["securite"])
+    core.SECURITE = security.Security.depuis_dict(cfg["securite"])
     core.PORT = int(cfg["securite"]["port"])
-    core.APPAREILS = security.Appareils(Path(dossiers["config"]) / "appareils.json")
+    core.APPAREILS = security.Devices(Path(dossiers["config"]) / "appareils.json")
 
     def verifier_a_la_demande(portee):
         """Boutons de l'onglet Modèles : la configuration est relue à chaque fois (les propositions refusées entre-temps comptent)."""
@@ -87,7 +87,7 @@ def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
                     from . import engine_updates
                     engine_updates.in_background()
                     from . import engine_catalog
-                    engine_catalog.en_arriere_plan(config.load(dossiers).get("catalogue_moteurs_url"))
+                    engine_catalog.in_background(config.load(dossiers).get("catalogue_moteurs_url"))
                 except Exception:  # noqa: BLE001 — jamais bloquant, jamais bruyant
                     pass
                 time.sleep(6 * 3600)

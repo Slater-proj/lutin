@@ -56,13 +56,13 @@ class Devices(unittest.TestCase):
             self.assertEqual(call("DELETE", "/api/v1/devices/" + unknown)[1]["error"]["code"], "not_found", unknown)
 
     def test_at_the_level_local_no_code_is_made(self):
-        with mock.patch.object(A, "SECURITE", S.Securite(niveau=S.LOCAL)):
+        with mock.patch.object(A, "SECURITE", S.Security(niveau=S.LOCAL)):
             self.assertEqual(call("GET", "/api/v1/devices")[1]["pairing_possible"], False)
             status, answer = call("POST", "/api/v1/devices/pairing-code", {})
             self.assertEqual((status, answer["error"]["code"]), (409, "local_only"))
 
     def test_revoking_everything_ends_every_session(self):
-        spare = S.Appareils()
+        spare = S.Devices()
         with mock.patch.object(A, "APPAREILS", spare):
             token = spare.appairer(spare.nouveau_pin(), "One")
             self.assertTrue(spare.valide(token))

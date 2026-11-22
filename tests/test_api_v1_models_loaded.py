@@ -8,7 +8,7 @@ import test_api_v1 as V  # its temporary folders, its server and its callers (im
 from lutin import api_v1, engines  # noqa: E402
 
 
-class Fake(engines.Moteur):
+class Fake(engines.Engine):
     id, nom, genre = "fake", "Fake engine", "openai"
     held = None
     says = True

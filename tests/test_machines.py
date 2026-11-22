@@ -81,13 +81,13 @@ class Base(unittest.TestCase):
         machines.REGISTRE.update(t=0.0)
         self.noeud = FauxNoeud()
         self.avant = (A.SECURITE, A.APPAREILS)
-        A.SECURITE = S.Securite()
+        A.SECURITE = S.Security()
         import lutin.server as srv
-        self.p_moteur = mock.patch.object(srv._moteurs, "par_id", lambda ident: self.noeud)
+        self.p_moteur = mock.patch.object(srv._moteurs, "by_id", lambda ident: self.noeud)
         self.p_reglages = mock.patch.object(srv._m, "reglages", lambda: dict(A.REGLAGES_DEFAUT))
         self.p_moteur.start()
         self.p_reglages.start()
-        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler if hasattr(A, "Gestionnaire") else srv.Handler)
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler if hasattr(A, "Handler") else srv.Handler)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.port = self.srv.server_address[1]
         self.adresse = "http://127.0.0.1:%d" % self.port

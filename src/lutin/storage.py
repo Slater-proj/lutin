@@ -95,7 +95,7 @@ def _enregistrer_reglages(nouveau):
         r["modele_annexe"] = ""
         if "modele" not in nouveau:
             try:
-                installes = engines.par_id(r["moteur"]).modeles()["installes"]
+                installes = engines.by_id(r["moteur"]).modeles()["installes"]
             except Exception:  # noqa: BLE001  (un moteur qui ne répond pas ne doit pas empêcher de le choisir)
                 installes = []
             voulu = par.get(r["moteur"])
@@ -169,7 +169,7 @@ def noter(note):
     existant = lire_memoire("MEMOIRE.md") or _t("# Mémoire de l'assistant\n\nNotes durables (ajoutées par l'assistant ou à la main).\n\n")
     if position_notes(existant) < 0:                        # sans la section des notes, une note n'était ni listée ni relue : la section est créée
         from . import i18n
-        existant = existant.rstrip("\n") + "\n" + (MARQUES_NOTES[1] if i18n.langue() == "en" else MARQUE_NOTES) + "\n"
+        existant = existant.rstrip("\n") + "\n" + (MARQUES_NOTES[1] if i18n.language() == "en" else MARQUE_NOTES) + "\n"
     texte = existant.rstrip("\n") + "\n" + ligne
     i = position_notes(texte)
     if i >= 0:                                              # la section des notes ne grossit pas sans fin : on garde les 40 dernières lignes

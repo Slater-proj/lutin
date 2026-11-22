@@ -16,7 +16,7 @@ import time
 from pathlib import Path
 
 from . import ed25519, engines
-from .i18n import langue
+from .i18n import language
 
 # Les clés publiques (hexadécimal). Les clés privées ne sont JAMAIS dans le dépôt (voir docs/ENGINE_CATALOG.md pour la rotation).
 PUBLIC_KEYS = {
@@ -35,7 +35,7 @@ RE_REPO = re.compile(r"^[A-Za-z0-9][\w.-]{0,38}/[A-Za-z0-9][\w.-]{0,99}$")
 REQUIRED = ("id", "nom", "genre", "description")
 
 
-class ErreurCatalogue(ValueError):
+class CatalogueError(ValueError):
     pass
 
 
@@ -44,7 +44,7 @@ def canonical(catalogue):
     return json.dumps(catalogue, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
 
 
-def signer(catalogue, graine, cle):
+def sign(catalogue, graine, cle):
     """L'enveloppe signée d'un catalogue (pour l'outil de signature et les tests)."""
     return {"catalogue": catalogue, "cle": cle, "signature": base64.b64encode(ed25519.sign(graine, canonical(catalogue))).decode("ascii")}
 
@@ -53,10 +53,10 @@ def _text(valeur, contexte, maxi=400):
     """Un texte, ou un dictionnaire {fr, en} de textes courts."""
     textes = valeur.values() if isinstance(valeur, dict) else [valeur]
     if isinstance(valeur, dict) and not (valeur and set(valeur) <= {"fr", "en"} and "fr" in valeur):
-        raise ErreurCatalogue("{} : texte à fournir en français (« fr »), éventuellement en anglais (« en »)".format(contexte))
+        raise CatalogueError("{} : texte à fournir en français (« fr »), éventuellement en anglais (« en »)".format(contexte))
     for t in textes:
         if not isinstance(t, str) or not t.strip() or len(t) > maxi:
-            raise ErreurCatalogue("{} : texte vide ou trop long".format(contexte))
+            raise CatalogueError("{} : texte vide ou trop long".format(contexte))
 
 
 def _valid_address(adresse):
@@ -66,84 +66,84 @@ def _valid_address(adresse):
 def validate(catalogue):
     """Lève ErreurCatalogue au premier défaut ; renvoie le catalogue sinon. Schéma strict : un champ inconnu est refusé."""
     if not isinstance(catalogue, dict) or not isinstance(catalogue.get("moteurs"), list) or not catalogue["moteurs"]:
-        raise ErreurCatalogue("catalogue vide ou mal formé")
+        raise CatalogueError("catalogue vide ou mal formé")
     if not isinstance(catalogue.get("version"), int) or isinstance(catalogue.get("version"), bool):
-        raise ErreurCatalogue("numéro de version manquant")
+        raise CatalogueError("numéro de version manquant")
     inconnus = set(catalogue) - {"version", "date", "moteurs"}
     if inconnus:
-        raise ErreurCatalogue("champ inconnu : {}".format(sorted(inconnus)[0]))
+        raise CatalogueError("champ inconnu : {}".format(sorted(inconnus)[0]))
     autorises = set(REQUIRED) | {"adresse_defaut", "cle_requise", "points_forts", "points_faibles", "plateformes", "site", "remarque", "type", "depot", "version_testee", "etiquette", "experimental", "materiel", "docker"}
     vus = set()
     for m in catalogue["moteurs"]:
         if not isinstance(m, dict):
-            raise ErreurCatalogue("entrée de moteur invalide")
+            raise CatalogueError("entrée de moteur invalide")
         for cle in REQUIRED:
             if cle not in m:
-                raise ErreurCatalogue("{} : champ « {} » manquant".format(m.get("id", "?"), cle))
+                raise CatalogueError("{} : champ « {} » manquant".format(m.get("id", "?"), cle))
         ident = m["id"]
         if m.get("type", "externe") not in TYPES:
-            raise ErreurCatalogue("{} : type inconnu".format(ident))
+            raise CatalogueError("{} : type inconnu".format(ident))
         gere = m.get("type") == "gere"
         if (not isinstance(ident, str) or not ident.replace("-", "").replace("_", "").isalnum() or not ident.islower() or ident in vus or ident == "openai"
                 or (ident in MANAGED) != gere):
-            raise ErreurCatalogue("identifiant invalide, réservé ou en double : {!r}".format(ident))
+            raise CatalogueError("identifiant invalide, réservé ou en double : {!r}".format(ident))
         vus.add(ident)
         if set(m) - autorises:
-            raise ErreurCatalogue("{} : champ inconnu « {} »".format(ident, sorted(set(m) - autorises)[0]))
+            raise CatalogueError("{} : champ inconnu « {} »".format(ident, sorted(set(m) - autorises)[0]))
         if "depot" in m and not (isinstance(m["depot"], str) and RE_REPO.match(m["depot"])):
-            raise ErreurCatalogue("{} : dépôt invalide (« propriétaire/nom »)".format(ident))
+            raise CatalogueError("{} : dépôt invalide (« propriétaire/nom »)".format(ident))
         if "etiquette" in m:
             try:
                 if not isinstance(m["etiquette"], str) or len(m["etiquette"]) > 60:
                     raise ValueError
                 re.compile(m["etiquette"])
             except (ValueError, re.error):
-                raise ErreurCatalogue("{} : motif d'étiquette invalide".format(ident))
+                raise CatalogueError("{} : motif d'étiquette invalide".format(ident))
         if "experimental" in m and not isinstance(m["experimental"], bool):
-            raise ErreurCatalogue("{} : « experimental » doit être vrai ou faux".format(ident))
+            raise CatalogueError("{} : « experimental » doit être vrai ou faux".format(ident))
         if "version_testee" in m and not (isinstance(m["version_testee"], str) and 0 < len(m["version_testee"]) <= 40):
-            raise ErreurCatalogue("{} : version testée invalide".format(ident))
+            raise CatalogueError("{} : version testée invalide".format(ident))
         if m["genre"] not in KINDS or (m["genre"] == "ollama" and ident != "ollama"):
-            raise ErreurCatalogue("{} : genre inconnu".format(ident))
+            raise CatalogueError("{} : genre inconnu".format(ident))
         if not isinstance(m["nom"], str) or not m["nom"].strip() or len(m["nom"]) > 60:
-            raise ErreurCatalogue("{} : nom invalide".format(ident))
+            raise CatalogueError("{} : nom invalide".format(ident))
         _text(m["description"], ident + " (description)")
         for liste in ("points_forts", "points_faibles"):
             if liste in m:
                 if not isinstance(m[liste], list) or len(m[liste]) > 6:
-                    raise ErreurCatalogue("{} : « {} » doit être une courte liste".format(ident, liste))
+                    raise CatalogueError("{} : « {} » doit être une courte liste".format(ident, liste))
                 for t in m[liste]:
                     _text(t, "{} ({})".format(ident, liste))
         if "remarque" in m:
             _text(m["remarque"], ident + " (remarque)")
         if not _valid_address(m.get("adresse_defaut", "")):
-            raise ErreurCatalogue("{} : adresse invalide".format(ident))
+            raise CatalogueError("{} : adresse invalide".format(ident))
         if not _valid_address(m.get("site", "")) or (m.get("site") and not m["site"].startswith("https://")):
-            raise ErreurCatalogue("{} : site invalide (https seulement)".format(ident))
+            raise CatalogueError("{} : site invalide (https seulement)".format(ident))
         if "cle_requise" in m and not isinstance(m["cle_requise"], bool):
-            raise ErreurCatalogue("{} : « cle_requise » doit être vrai ou faux".format(ident))
+            raise CatalogueError("{} : « cle_requise » doit être vrai ou faux".format(ident))
         if "plateformes" in m and (not isinstance(m["plateformes"], list) or not set(m["plateformes"]) <= set(SYSTEMS)):
-            raise ErreurCatalogue("{} : plateformes inconnues".format(ident))
+            raise CatalogueError("{} : plateformes inconnues".format(ident))
         if "materiel" in m and (not isinstance(m["materiel"], list) or not m["materiel"] or not set(m["materiel"]) <= set(HARDWARE)):
-            raise ErreurCatalogue("{} : matériel inconnu".format(ident))
+            raise CatalogueError("{} : matériel inconnu".format(ident))
         if "docker" in m and not isinstance(m["docker"], bool):
-            raise ErreurCatalogue("{} : « docker » doit être vrai ou faux".format(ident))
+            raise CatalogueError("{} : « docker » doit être vrai ou faux".format(ident))
     return catalogue
 
 
 def check(enveloppe):
     """Le catalogue contenu dans une enveloppe signée, après vérification de la signature puis du schéma. Lève ErreurCatalogue."""
     if not isinstance(enveloppe, dict) or set(enveloppe) != {"catalogue", "cle", "signature"}:
-        raise ErreurCatalogue("enveloppe mal formée")
+        raise CatalogueError("enveloppe mal formée")
     cle = PUBLIC_KEYS.get(enveloppe["cle"])
     if cle is None:
-        raise ErreurCatalogue("clé de signature inconnue")
+        raise CatalogueError("clé de signature inconnue")
     try:
         signature = base64.b64decode(enveloppe["signature"], validate=True)
     except (ValueError, TypeError):
-        raise ErreurCatalogue("signature illisible")
+        raise CatalogueError("signature illisible")
     if not ed25519.check(bytes.fromhex(cle), canonical(enveloppe["catalogue"]), signature):
-        raise ErreurCatalogue("signature invalide : catalogue modifié ou non signé par une clé de confiance")
+        raise CatalogueError("signature invalide : catalogue modifié ou non signé par une clé de confiance")
     return validate(enveloppe["catalogue"])
 
 
@@ -151,7 +151,7 @@ def read_file(chemin):
     return check(json.loads(Path(chemin).read_text(encoding="utf-8")))
 
 
-def charger(cache=None, fichier=SHIPPED_FILE):
+def load(cache=None, fichier=SHIPPED_FILE):
     """Le catalogue à utiliser. La copie livrée doit être valide (sinon c'est un défaut de la distribution : l'erreur remonte). `cache` : copie récupérée en ligne, prise seulement
     si elle est signée, valide et plus récente."""
     livre = read_file(fichier)
@@ -188,7 +188,7 @@ def download(url, cache, http):
 def text(valeur):
     """Un texte du catalogue dans la langue de l'interface (le français si l'anglais manque)."""
     if isinstance(valeur, dict):
-        return valeur.get(langue()) or valeur["fr"]
+        return valeur.get(language()) or valeur["fr"]
     return valeur
 
 
@@ -196,9 +196,9 @@ def fiche(ident, catalogue=None):
     """La fiche d'un moteur que Lutin gère lui-même (« ollama », « llamacpp ») telle que le catalogue la décrit : {description, points_forts, points_faibles, site, remarque, version_testee} dans la langue
     courante, ou None si le catalogue ne la contient pas (la page garde alors les textes écrits dans le code)."""
     try:
-        for m in (catalogue or en_cours())["moteurs"]:
+        for m in (catalogue or running())["moteurs"]:
             if m["id"] == ident and m.get("type") == "gere":
-                v = vue(m)
+                v = view(m)
                 v["version_testee"] = m.get("version_testee", "")
                 return v
     except (OSError, ValueError):
@@ -206,18 +206,18 @@ def fiche(ident, catalogue=None):
     return None
 
 
-def entree(ident, catalogue=None):
+def entry(ident, catalogue=None):
     """The entry of the catalogue with this id, whatever its type (`vue`), or None: what the card of that engine says about where it runs."""
     try:
-        for m in (catalogue or en_cours())["moteurs"]:
+        for m in (catalogue or running())["moteurs"]:
             if m["id"] == ident:
-                return vue(m)
+                return view(m)
     except (OSError, ValueError, KeyError):
         pass
     return None
 
 
-def vue(moteur):
+def view(moteur):
     """Une entrée du catalogue prête pour la page : textes dans la langue courante."""
     return {"id": moteur["id"], "nom": moteur["nom"], "adresse": moteur.get("adresse_defaut", ""), "cle_requise": bool(moteur.get("cle_requise")), "site": moteur.get("site", ""),
             "description": text(moteur["description"]), "points_forts": [text(t) for t in moteur.get("points_forts", [])], "points_faibles": [text(t) for t in moteur.get("points_faibles", [])],
@@ -244,7 +244,7 @@ def compatibility(fiche, systeme, en_docker, fabricants):
 
 def presets(cache=None):
     """Les serveurs externes proposés d'un clic (pas les moteurs que Lutin gère lui-même)."""
-    return [vue(m) for m in charger(cache)["moteurs"] if m.get("type", "externe") == "externe"]
+    return [view(m) for m in load(cache)["moteurs"] if m.get("type", "externe") == "externe"]
 
 
 # --------------------------------------------------------------------------- lecture en ligne (au plus une par semaine, en arrière-plan)
@@ -253,7 +253,7 @@ INTERVAL_S = 7 * 24 * 3600
 TRIAL = {"quand": 0.0, "actif": False}
 
 
-def fichier_cache():
+def cache_file():
     donnees = engines.CONTEXT["donnees"]()
     return Path(donnees) / "moteurs_catalogue.json" if donnees else None
 
@@ -261,23 +261,23 @@ def fichier_cache():
 MEMORY = {"cle": None, "catalogue": None}
 
 
-def en_cours():
+def running():
     """Le catalogue à utiliser maintenant (copie livrée, ou copie en ligne plus récente et bien signée). Gardé en mémoire tant que les fichiers ne changent pas (la page le demande souvent)."""
-    cache = fichier_cache()
+    cache = cache_file()
     try:
         cle = (str(cache), cache.stat().st_mtime_ns if cache and cache.is_file() else 0, SHIPPED_FILE.stat().st_mtime_ns, tuple(sorted(PUBLIC_KEYS.items())))
     except OSError:
         cle = None
     if cle is not None and MEMORY["cle"] == cle:
         return MEMORY["catalogue"]
-    c = charger(cache)
+    c = load(cache)
     MEMORY.update(cle=cle, catalogue=c)
     return c
 
 
-def en_arriere_plan(url=None, http=None):
+def in_background(url=None, http=None):
     """Va chercher le catalogue en ligne si la copie gardée a plus d'une semaine (et au plus un essai toutes les 6 h). Jamais bloquant, jamais bruyant. `url` : None = adresse par défaut, « » = désactivé."""
-    cache = fichier_cache()
+    cache = cache_file()
     if cache is None or TRIAL["actif"]:
         return
     try:

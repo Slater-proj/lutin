@@ -482,7 +482,7 @@ def tool_web_search(requete, nombre, ctx, lire=None, periode=None, site=None, ac
 
 def _i18n_langue():
     from . import i18n
-    return i18n.langue()
+    return i18n.language()
 
 
 CACHE_PAGES = {}          # adresse -> (instant, (adresse finale, type, contenu)) : lire la suite d'une page longue ne la télécharge pas de nouveau

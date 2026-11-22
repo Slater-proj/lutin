@@ -147,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
             corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Dans Docker : ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (ou, derrière un proxy, ton identifiant dans LUTIN_ADMINS), puis redémarre-le."))
         elif code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")):
             corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Pour le faire depuis un autre appareil : Accès > Administration à distance (à activer depuis cette machine)."))
-        if isinstance(corps, dict) and _i18n.langue() != "fr":
+        if isinstance(corps, dict) and _i18n.language() != "fr":
             corps = _m.traduire_json(corps)
         donnees = corps if isinstance(corps, (bytes, bytearray)) else (corps if isinstance(corps, str) else json.dumps(corps, ensure_ascii=False)).encode("utf-8")
         compressible = len(donnees) > 1400 and type_.split(";")[0].strip() in COMPRESSIBLE_TYPES and "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
@@ -188,7 +188,7 @@ class Handler(BaseHTTPRequestHandler):
             return True
         if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return True                                      # la console de cette machine (fichier réservé à l'utilisateur)
-        return _sec.acces(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[0]
+        return _sec.access_decision(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[0]
 
     def _identite(self):
         """Qui fait cette requête, pour le journal : « console », « local », le nom donné par le proxy, ou « appareil »."""
@@ -196,12 +196,12 @@ class Handler(BaseHTTPRequestHandler):
             return "machine : " + self._via_relais
         if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return "console"
-        return _sec.acces(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[1]
+        return _sec.access_decision(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[1]
 
     def _sur_cette_machine(self):
         """Le navigateur est sur cette machine : connexion de boucle locale, nom d'hôte de boucle locale, et aucun en-tête laissant croire qu'un relais (proxy, tunnel) a transmis une requête venue d'ailleurs."""
         relais = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "Via", "X-Real-IP")
-        return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._is_loop(_sec._sans_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._sans_port(self.headers.get("Host") or "") == _m.IP_LAN))
+        return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._is_loop(_sec._without_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._without_port(self.headers.get("Host") or "") == _m.IP_LAN))
 
     def _vue_moteur(self, mo, courant):
         """Un moteur pour la page : description, forces et faiblesses, état, ce qui est possible (ou pourquoi non), tâche en cours, réglages d'adresse sans la clé."""
@@ -222,10 +222,10 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001  (profil illisible : aucun serveur n'est écarté à cause du matériel... sauf ceux qui exigent une carte)
                 fabricants = []
             sortie = []
-            for m in _catalogue_moteurs.en_cours()["moteurs"]:
+            for m in _catalogue_moteurs.running()["moteurs"]:
                 if m.get("type", "externe") != "externe":
                     continue
-                v = dict(_catalogue_moteurs.vue(m))
+                v = dict(_catalogue_moteurs.view(m))
                 v["compatible"], v["raison_incompatible"] = _catalogue_moteurs.compatibility(v, systeme, docker, fabricants)          # filtré selon la machine où Lutin tourne (système, Docker, carte graphique)
                 sortie.append(v)
             return sortie
@@ -406,7 +406,7 @@ class Handler(BaseHTTPRequestHandler):
             return True
         if self._local() and _sec.equal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return True
-        if _sec.est_admin_proxy(_m.SECURITE, self.client_address[0], self.headers):
+        if _sec.is_admin_proxy(_m.SECURITE, self.client_address[0], self.headers):
             return True                                                    # niveau proxy : un administrateur déclaré (LUTIN_ADMINS) identifié par le proxy de confiance (Authelia…)
         return _m.SECURITE.niveau == _sec.RESEAU and self._sur_cette_machine()
 
@@ -426,10 +426,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _page_connexion(self):
         page = _m.PAGE_CONNEXION
-        if _i18n.langue() != "fr":
+        if _i18n.language() != "fr":
             for phrase in _m.TEXTES_PAGE_CONNEXION:
                 page = page.replace(phrase, _t(phrase))
-            page = page.replace('<html lang="fr">', '<html lang="{}">'.format(_i18n.langue()))
+            page = page.replace('<html lang="fr">', '<html lang="{}">'.format(_i18n.language()))
         return self._envoyer(200, page, "text/html; charset=utf-8")
 
     def _nouvelle_interface(self, chemin):
@@ -453,7 +453,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(404, {"erreur": "introuvable"})
         if not self._authentifie():
             return self._page_connexion()
-        page = _web_app.page(_m.JETON, _m.VERSION, _i18n.langue())
+        page = _web_app.page(_m.JETON, _m.VERSION, _i18n.language())
         if page is None:
             return self._envoyer(404, _web_app.NOT_BUILT, "text/html; charset=utf-8")
         return self._envoyer(200, page, "text/html; charset=utf-8", {"Content-Security-Policy": _web_app.CSP})
@@ -535,7 +535,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.state(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.par_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.state(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
@@ -604,7 +604,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.entries()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.vue_dossier_moteurs()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            mo = _moteurs.par_id((q.get("moteur") or [""])[0])
+            mo = _moteurs.by_id((q.get("moteur") or [""])[0])
             try:
                 if chemin == "/api/moteur-recherche":
                     return self._envoyer(200, {"resultats": mo.chercher_modeles((q.get("q") or [""])[0])})
@@ -687,7 +687,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._envoyer(200, _emplacements.copy_state())
         if chemin == "/api/emplacements":                        # tous les dossiers que Lutin utilise, leur taille et la place libre
             from . import locations
-            return self._envoyer(200, dict(locations.lister(), modifiable=self._configurateur()))
+            return self._envoyer(200, dict(locations.list_locations(), modifiable=self._configurateur()))
         if chemin == "/api/journal":
             m = re.search(r"[?&]n=(\d+)", self.path)
             return self._envoyer(200, {"entrees": _m.lire_journal(int(m.group(1)) if m else 200)})
@@ -910,7 +910,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/noeud/capacites":                # ... ou pour savoir ce qu'un de ses modèles sait faire (outils, images, réflexion)
             if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
                 return self._envoyer(401, {"erreur": "machine non autorisée"})
-            mo = _moteurs.par_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
+            mo = _moteurs.by_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
             return self._envoyer(200, {"capacites": _machines.noeud_capacites(mo, donnees.get("modele"))})
         if self.path == "/api/noeud/eteindre":                 # ... ou, si le propriétaire l'a autorisé, pour l'éteindre (30 s, annulable, journalisé)
             return self._noeud_eteindre(donnees)
@@ -1184,7 +1184,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": updates.lire_fichier_version(chemin).get("version", ""), "nouvelle": _m.nouvelle_version_lutin()})
             if self.path == "/api/langue":
                 try:
-                    return self._envoyer(200, {"langue": _i18n.definir(str(donnees.get("valeur", "")).strip().lower())})
+                    return self._envoyer(200, {"langue": _i18n.save_language(str(donnees.get("valeur", "")).strip().lower())})
                 except ValueError:
                     raise ValueError("Langue inconnue (fr, en ou auto).")
             if self.path == "/api/hors-ligne":
@@ -1378,7 +1378,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(409, {"erreur": _t("Une réponse est en cours : attends sa fin avant de mesurer (la mesure occupe le moteur).")})
                 if str(donnees.get("moteur", "")) not in _moteurs.ENGINES:
                     return self._envoyer(400, {"erreur": _t("Moteur inconnu.")})
-                mo = _moteurs.par_id(str(donnees["moteur"]))
+                mo = _moteurs.by_id(str(donnees["moteur"]))
                 modele = str(donnees.get("modele", ""))
                 return self._envoyer(200, _mesures.launch(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memory_of_engine(mo.id, modele)))
             if self.path in ("/api/exllamav3-verifier", "/api/lmstudio-verifier", "/api/colibri-verifier"):          # chercher les mises à jour des modèles téléchargés (ExLlamaV3), ou de nouveaux modèles qui tiennent sur cette machine
@@ -1522,7 +1522,7 @@ class Handler(BaseHTTPRequestHandler):
     def _noeud_etat(self):
         if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})
-        mo = _moteurs.par_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
+        mo = _moteurs.by_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
         return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0], _machines.noeud_charge(bool(_m.TOURS_ACTIFS), self.NOEUD_ACTIFS["n"]), _machines.noeud_jeton_valide(self.headers.get("X-Noeud")) or ""))
 
     def _noeud_appairer(self, donnees):
@@ -1650,7 +1650,7 @@ class Handler(BaseHTTPRequestHandler):
             corps = _machines.corps_autorise(donnees.get("corps"))
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
-        mo = _moteurs.par_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)          # le moteur de CETTE machine : jamais une autre machine (pas de chaîne)
+        mo = _moteurs.by_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)          # le moteur de CETTE machine : jamais une autre machine (pas de chaîne)
         if corps["model"] not in mo.modeles()["installes"]:
             return self._envoyer(404, {"erreur": "modèle absent de cette machine"})
         if not self.NOEUD_PLACES.acquire(blocking=False):
@@ -1755,7 +1755,7 @@ class Handler(BaseHTTPRequestHandler):
         jeton = _m.APPAREILS.appairer(str(donnees.get("pin", "")), _sec.nom_appareil(nom if isinstance(nom, str) else "", self.headers.get("User-Agent"), self._sur_cette_machine()))
         if not jeton:
             return self._envoyer(403, {"erreur": "Code incorrect ou expiré. Demande-en un nouveau sur l'ordinateur (lutin pin)."})
-        return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.en_tete_set_cookie(jeton, _m.SECURITE.url_publique.startswith("https://"))})
+        return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.set_cookie_header(jeton, _m.SECURITE.url_publique.startswith("https://"))})
 
     _flux_v1 = False          # posé par lutin.api_v1 : cette demande de réponse vient de /api/v1, ses refus et ses évènements sont traduits à la frontière
 

@@ -219,7 +219,7 @@
   ]
  },
  "dynamic": [
-  "ROUTES_MODELES_GERES"
+  "MANAGED_MODEL_ROUTES"
  ],
  "events": [
   "accord_retabli",

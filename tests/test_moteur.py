@@ -441,9 +441,9 @@ class Assistant(unittest.TestCase):
         post("/api/moteur-regler", {"moteur": "ollama", "url": "http://x"}, attendu=400)          # pas d'adresse à régler pour Ollama
         self.assertEqual(lire("/api/etat")["moteur"], "ollama")
         post("/api/reglages", {"moteur": "inconnu"}, attendu=400)
-        self.assertEqual(engines.par_id("inconnu").id, "ollama", "un réglage ancien ou inconnu retombe sur Ollama")
+        self.assertEqual(engines.by_id("inconnu").id, "ollama", "un réglage ancien ou inconnu retombe sur Ollama")
 
-        class Faux(engines.Moteur):
+        class Faux(engines.Engine):
             id, nom, genre = "faux", "Faux moteur", "openai"
 
             def actif(self):
@@ -625,7 +625,7 @@ class Assistant(unittest.TestCase):
         cible = PROJET / "niveau.txt"
 
         def lancer(niveau, options):
-            A.SECURITE = security.Securite(niveau=niveau, proxy_ips=["10.0.0.1"], url_publique="https://x.example.com") if niveau == security.PROXY else security.Securite(niveau=niveau)
+            A.SECURITE = security.Security(niveau=niveau, proxy_ips=["10.0.0.1"], url_publique="https://x.example.com") if niveau == security.PROXY else security.Security(niveau=niveau)
             cible.unlink(missing_ok=True)
             SCENARIO[:] = [[appel_outil("executer", commande="echo ok> niveau.txt")], [{"content": "."}]]
             evenements = []

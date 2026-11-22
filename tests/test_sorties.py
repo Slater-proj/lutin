@@ -136,7 +136,7 @@ class Api(unittest.TestCase):
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
         cls.avant = A.SECURITE
-        A.SECURITE = S.Securite(niveau=S.LOCAL)
+        A.SECURITE = S.Security(niveau=S.LOCAL)
 
     @classmethod
     def tearDownClass(cls):
