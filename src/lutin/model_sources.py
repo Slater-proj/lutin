@@ -50,12 +50,24 @@ def download_state(fit, can=None, installed=False):
     return {"possible": True, "reason": ""}
 
 
+# The roles of the catalogue under their v1 names, and the rating from which a role is a strength of the model (as the old catalogue tab said them)
+ROLES_V1 = {"polyvalent": "general", "rapide": "fast", "creatif": "creative", "code": "code", "vision": "images"}
+STRONG = 7
+
+
+def strengths_of(model):
+    """The roles a model of the catalogue is good at, the best first: `["code", "general"]`. Empty for a model the catalogue does not rate."""
+    notes = model.get("notes") or {}
+    return [ROLES_V1.get(role, role) for role, note in sorted(notes.items(), key=lambda pair: (-pair[1], pair[0])) if note >= STRONG]
+
+
 def entry(ident, name=None, revision="", size_gb=None, approximate=False, fit=None, installed=False, in_use=False, summary="", can=None, has_variants=False,
-          incomplete=False, removable=None):
-    """One model, in the shape every source gives. `fit` is the verdict as the judge writes it (`{niveau, texte}`). An installed model is removable unless said."""
+          incomplete=False, removable=None, strengths=()):
+    """One model, in the shape every source gives. `fit` is the verdict as the judge writes it (`{niveau, texte}`). An installed model is removable unless said.
+    `strengths`: the roles it is good at, when the source rates them (the catalogue of Lutin), so that every card says it whatever the engine."""
     return {"id": ident, "name": name or ident.split("/")[-1], "revision": revision or "", "size_gb": size_gb, "approximate": bool(approximate), "fit": fit_view(fit),
             "installed": bool(installed), "in_use": bool(in_use), "summary": summary or "", "download": download_state(fit, can, installed), "has_variants": bool(has_variants),
-            "incomplete": bool(incomplete), "removable": bool(installed) if removable is None else bool(removable and installed)}
+            "incomplete": bool(incomplete), "removable": bool(installed) if removable is None else bool(removable and installed), "strengths": list(strengths)}
 
 
 def _judge(engine):
@@ -142,7 +154,7 @@ class CatalogueSource(ModelSource):
                 seen.add(choice.id)
                 model = choice.modele
                 fit = _fit.evaluer(model, profile, experts_en_ram=_capabilities.of(self.engine).experts_in_ram)
-                out.append(entry(model["id"], model["nom"], size_gb=model["go"], fit=fit, installed=model["id"] in installed, summary=model.get("phrase", ""), can=self.engine.telechargeable()))
+                out.append(entry(model["id"], model["nom"], size_gb=model["go"], fit=fit, installed=model["id"] in installed, summary=model.get("phrase", ""), strengths=strengths_of(model), can=self.engine.telechargeable()))
         return sorted(out, key=lambda item: -(item["size_gb"] or 0))[:RECOMMENDED]
 
     def search(self, words="", page=1, order="recent", community=False, capability=""):
@@ -156,7 +168,7 @@ class CatalogueSource(ModelSource):
                 if capability and CAPABILITIES[capability] not in model.get("capacites", []):
                     continue
                 can = {"possible": verdict["compatible"], "raison": " ".join(verdict["raisons"])} if not verdict["compatible"] else self.engine.telechargeable()
-                found.append(entry(model["id"], model["nom"], size_gb=model["go"], fit=fit, installed=model["id"] in installed, summary=model.get("phrase", ""), can=can,
+                found.append(entry(model["id"], model["nom"], size_gb=model["go"], fit=fit, installed=model["id"] in installed, summary=model.get("phrase", ""), strengths=strengths_of(model), can=can,
                                    has_variants=self.engine.id == _engines.OLLAMA))
         more = False
         offline = _offline.is_active() or _engines.CONTEXT["hors_ligne"]()

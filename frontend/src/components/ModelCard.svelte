@@ -20,6 +20,7 @@
     incomplete = false,
     engine,
     summary = "",
+    strengths = [],
     actions,
   }: {
     name: string;
@@ -33,6 +34,7 @@
     incomplete?: boolean;
     engine: string;
     summary?: string;
+    strengths?: string[]; // the roles it is good at, when its source rates them (the catalogue of Lutin)
     actions?: Snippet;
   } = $props();
 
@@ -73,6 +75,7 @@
     {#each facts.uses as use (use)}<li>{useLabel(use)}</li>{/each}
   </ul>
   <p class="summary">{describe()}</p>
+  {#if strengths.length}<p class="plus">{t("models.cat.strong", strengths.map((role) => t(("guide.role." + role) as MessageKey)).join(", "))}</p>{/if}
   {#if fit?.text}<p class="muted">{fit.text}</p>{/if}
   {#if incomplete}<p class="problem">{t("managed.incomplete")}</p>{/if}
   <div class="actions">
@@ -122,6 +125,11 @@
 
   .summary {
     max-width: var(--measure);
+  }
+
+  .plus {
+    color: var(--color-accent-text);
+    font-size: var(--text-sm);
   }
 
   .problem {

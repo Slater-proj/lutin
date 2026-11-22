@@ -10,7 +10,7 @@ import test_api_v1 as V  # its temporary folders, its server and its callers (im
 from lutin import agent, api_v1, engines, managed_models, model_compat, model_discovery, model_fit, model_sources, model_variants  # noqa: E402
 
 A = V.A
-ENTRY_KEYS = ["approximate", "download", "fit", "has_variants", "id", "in_use", "incomplete", "installed", "name", "removable", "revision", "size_gb", "summary"]
+ENTRY_KEYS = ["approximate", "download", "fit", "has_variants", "id", "in_use", "incomplete", "installed", "name", "removable", "revision", "size_gb", "strengths", "summary"]
 TOO_BIG = {"niveau": "trop_gros", "texte": "Too big for this machine."}
 GOOD = {"niveau": "bien", "texte": "Fits."}
 
@@ -48,6 +48,14 @@ class Entries(unittest.TestCase):
         self.assertEqual(sorted(made), ENTRY_KEYS)
         self.assertEqual((made["name"], made["revision"], made["fit"]), ("model", "4.0bpw", {"level": "good", "text": "Fits."}))
         self.assertEqual(sorted(model_sources.entry("qwen3:8b")), ENTRY_KEYS)
+
+
+class Strengths(unittest.TestCase):
+    def test_a_model_of_the_catalogue_says_what_it_is_good_at_the_best_first(self):
+        """The catalogue tab of Ollama said a model's strengths; since the Models screen is the same for every engine (2026-11-22), the common entry carries them."""
+        self.assertEqual(model_sources.strengths_of({"notes": {"polyvalent": 7, "code": 9, "vision": 2, "rapide": 6}}), ["code", "general"])
+        self.assertEqual(model_sources.strengths_of({}), [])
+        self.assertEqual(model_sources.entry("m")["strengths"], [], "a source that does not rate its models says nothing")
 
 
 class Ollama(InUse):
@@ -273,6 +281,15 @@ class Managed(InUse):
         self.use("ollama")          # Ollama's models are kept current by the proposals (POST /models/check)
         status, answer = V.call("POST", "/api/v1/engines/ollama/models/check", V.OWNER, {"scope": "new"})
         self.assertEqual((status, answer["error"]["code"]), (400, "action_impossible"))
+
+
+class Detecting(InUse):
+    def test_recommendations_before_the_machine_is_measured_say_so_instead_of_an_empty_list(self):
+        """Maintainer, 2026-11-22: « dans la page Modèles de ExLlamaV3, rien du tout proposé ». The first visit starts the measure of the machine; the list was
+        empty and the page said « nothing fits » for good. Now `detecting` says it, and the page asks again."""
+        self.use("ollama")
+        status, answer = get("/engines/ollama/models/recommended")          # InUse: the profile is not known
+        self.assertEqual((status, answer["models"], answer["detecting"]), (200, [], True), answer)
 
 
 class Address(InUse):

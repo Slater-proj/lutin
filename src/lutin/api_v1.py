@@ -1402,9 +1402,12 @@ def engine_models(request):
 @route("GET", "/engines/{id}/models/recommended", SESSION)
 def engine_models_recommended(request):
     """What this machine runs well with this engine, the largest first, at most five, each with the precision to take and its exact size. Can be empty
-    (nothing fits, the machine is not detected yet, or the engine manages its models itself)."""
+    (nothing fits, or the engine manages its models itself). `detecting`: the machine is not measured yet, the list comes a few seconds later.
+    Before, that case was an empty list the page took for « nothing fits » (maintainer, ExLlamaV3, 2026-11-22)."""
     engine, source = _source(request)
-    return {"engine": engine.id, "models": _source_list(source.recommended)}
+    models = _source_list(source.recommended)          # not the engine in use (409) and a catalogue that cannot be read (502) are said first
+    detecting = not models and _model_fit.profil_pret() is None          # the machine is being measured (the first visit starts it): the page asks again
+    return {"engine": engine.id, "models": models, "detecting": detecting}
 
 
 @route("GET", "/engines/{id}/models/search", SESSION)
@@ -1589,7 +1592,7 @@ RUNS_ON = {"gpu": "gpu", "partiel": "partial", "cpu": "cpu"}
 # What a person says they want to do, and the roles of the catalogue that answer it, the best first.
 USES = {"chat": ("polyvalent", "creatif"), "code": ("code", "polyvalent"), "documents": ("polyvalent", "vision"), "unsure": ("polyvalent", "rapide")}
 ROLE_IDS = ("polyvalent", "rapide", "creatif", "code", "vision")
-ROLES_V1 = {"polyvalent": "general", "rapide": "fast", "creatif": "creative", "code": "code", "vision": "images"}
+ROLES_V1 = _model_sources.ROLES_V1
 
 
 def models_folder(engine_running):

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canDownload, checkPath, downloadBody, downloadLabel, downloadPath, entryKey, installedPath, libraryQuery, recommendedPath, removePath, searchPath, shortName, sizesShown, variantsPath } from "./library";
+import { bestVariant, canDownload, checkPath, downloadBody, downloadLabel, downloadPath, entryKey, installedPath, libraryQuery, recommendedPath, removePath, searchPath, shortName, sizesShown, variantsPath } from "./library";
 
 describe("paths", () => {
   it("encode the engine, the words and the repository", () => {
@@ -63,5 +63,17 @@ describe("the Ollama library filters", () => {
 describe("entryKey", () => {
   it("tells apart two files of one repository", () => {
     expect(entryKey({ id: "a/b", revision: "q2.gguf" })).not.toBe(entryKey({ id: "a/b", revision: "q8.gguf" }));
+  });
+});
+
+describe("bestVariant", () => {
+  const v = (size: number, level: string, possible = true, installed = false) => ({ size_gb: size, fit: { level, text: "" }, download: { possible, reason: "" }, installed });
+  it("takes the heaviest precision that runs well here and can be downloaded", () => {
+    expect(bestVariant([v(4, "comfortable"), v(9, "good"), v(14, "tight"), v(30, "too_big")])?.size_gb).toBe(9);
+    expect(bestVariant([v(4, "comfortable"), v(9, "good", false)])?.size_gb).toBe(4);
+    expect(bestVariant([v(4, "comfortable", true, true), v(6, "comfortable")])?.size_gb).toBe(6);
+  });
+  it("advises nothing when nothing runs well (the machine not measured yet: no verdict)", () => {
+    expect(bestVariant([v(14, "tight"), { size_gb: 5, fit: null, download: { possible: true, reason: "" }, installed: false }])).toBeNull();
   });
 });

@@ -5,11 +5,12 @@
   // button, which waits for a second click that says its size, or says why it cannot be downloaded. The routes are `/engines/{id}/models*`. What
   // only Ollama and llama.cpp have (the guide, the proposals, the form by name) is around this component on the Models screen; the catalogue of
   // Lutin, grouped by family, is given as `children` and shown in the search until words are searched.
-  import type { Snippet } from "svelte";
+  import { untrack, type Snippet } from "svelte";
   import { api, ApiError } from "../lib/api";
-  import { canDownload, checkPath, downloadBody, downloadLabel, downloadPath, entryKey, installedPath, libraryQuery, recommendedPath, removePath, searchPath, sizesShown, variantsPath, type Entry } from "../lib/library";
+  import { bestVariant, canDownload, checkPath, downloadBody, downloadLabel, downloadPath, entryKey, installedPath, libraryQuery, recommendedPath, removePath, searchPath, sizesShown, variantsPath, type Entry } from "../lib/library";
   import { language, t, type MessageKey } from "../lib/messages";
   import { byUse } from "../lib/model_card";
+  import MachineSummary from "./MachineSummary.svelte";
   import ModelCard from "./ModelCard.svelte";
   import ModelHelp from "./ModelHelp.svelte";
   import ModelVariants from "./ModelVariants.svelte";
@@ -46,6 +47,8 @@
   let loaded = $state(""); // the model in the memory of this machine now, when the engine can say it
   let recommended = $state<Entry[] | null>(null); // null while it is looked for
   let recommendedProblem = $state("");
+  let detecting = $state(false); // the machine is being measured: the recommendations come a few seconds later
+  let detectTries = 0;
   let found = $state<Entry[] | null>(null); // null until a search is asked
   let more = $state(false);
   let page = $state(1);
@@ -104,7 +107,15 @@
   async function loadRecommended(): Promise<void> {
     recommendedProblem = "";
     try {
-      recommended = (await api<{ models: Entry[] }>("GET", recommendedPath(engine))).models;
+      const answer = await api<{ models: Entry[]; detecting?: boolean }>("GET", recommendedPath(engine));
+      detecting = !!answer.detecting && detectTries < 20; // about a minute at most: a machine that cannot be measured then says « nothing fits »
+      recommended = detecting ? null : answer.models;
+      if (detecting) {
+        detectTries += 1;
+        setTimeout(() => {
+          if (part === "recommended") void loadRecommended();
+        }, 3000);
+      }
     } catch (cause) {
       recommended = [];
       recommendedProblem = explain(cause);
@@ -120,8 +131,21 @@
     if (part === "recommended" && !external) void loadRecommended();
   });
 
-  const search = (next = 1): Promise<void> =>
-    act(async () => {
+  // The search shows what the source offers as soon as it opens, for every engine (the catalogue of Lutin then ollama.com, Hugging Face, the catalogue of
+  // the server), instead of an empty page until words are typed.
+  $effect(() => {
+    if (part === "search" && !external && found === null) untrack(() => void search()); // what is typed meanwhile does not start it again
+  });
+
+  // A search is not one of the actions that wait for each other: the one the page starts when it opens must not swallow the one the person asks for.
+  // A new search replaces the one running; the answer of a search that was replaced is dropped.
+  let searchSeq = 0;
+  let searching = $state(false);
+  async function search(next = 1): Promise<void> {
+    const seq = ++searchSeq;
+    searching = true;
+    problem = "";
+    try {
       const ordered = engine === "ollama" || (managed && engine !== "colibri");
       const path = searchPath(engine, {
         words: engine === "ollama" ? libraryQuery(words, uncensored) : words,
@@ -131,10 +155,16 @@
         capability: engine === "ollama" ? capability : "",
       });
       const answer = await api<{ models: Entry[]; more: boolean }>("GET", path);
+      if (seq !== searchSeq) return;
       found = next === 1 ? answer.models : [...(found ?? []), ...answer.models];
       more = answer.more;
       page = next;
-    });
+    } catch (cause) {
+      if (seq === searchSeq) problem = explain(cause);
+    } finally {
+      if (seq === searchSeq) searching = false;
+    }
+  }
 
   const showVariants = (entry: Entry): Promise<void> =>
     act(async () => {
@@ -197,30 +227,37 @@
   {/if}
 {/snippet}
 
-{#snippet precisionsOf(entry: Entry, prefix: string)}
+{#snippet precisionsOf(entry: Entry, prefix: string, primary: boolean)}
   {@const list = variants[entryKey(entry)]}
   {#if list}
-    {#if list.length === 0}<p class="muted">{t("emodels.no_variants")}</p>{/if}
+    {@const advised = bestVariant(list)}
+    {#if list.length === 0}<p class="muted">{t("emodels.no_variants")}</p>{:else}<p class="muted">{t("emodels.choose_precision")}</p>{/if}
     <ul class="precisions" aria-label={t("emodels.variants_of", entry.name)}>
-      {#each list as variant (entryKey(variant))}
-        <li class="line">
+      {#each advised ? [advised, ...list.filter((variant) => variant !== advised)] : list as variant (entryKey(variant))}
+        <li class="line" class:advised={variant === advised}>
           <span class="size">{variant.revision || variant.name}</span><span class="muted">{t("upkeep.size", gb(variant.size_gb))}</span>
+          {#if variant === advised}<span class="tag advice">{t("emodels.advised")}</span>{/if}
           {#if variant.fit}<span class={"fit " + variant.fit.level} title={variant.fit.text}>{t(("guide.fit." + variant.fit.level) as MessageKey)}</span>{/if}
           {#if variant.installed}<span class="tag">{t("variants.installed")}</span>{:else}{@render offer(prefix + entryKey(variant), variant)}{/if}
         </li>
       {/each}
     </ul>
+  {:else if primary}
+    <!-- A repository of Hugging Face (ExLlamaV3, LM Studio, llama.cpp) is downloaded in one of its precisions: the same « Download » as everywhere, which first
+         shows them, the advised one at the top (maintainer, 2026-11-22: « pas de bouton pour les télécharger, je fais comment ? »). -->
+    {#if canConfigure}<button type="button" class="button primary" disabled={busy} onclick={() => showVariants(entry)}>{t("emodels.download_choose")}<span class="visually-hidden"> {entry.name}</span></button>{/if}
   {:else}
-    <button type="button" class="button" disabled={busy} onclick={() => showVariants(entry)}>{variantsLabel()}<span class="visually-hidden"> {entry.name}</span></button>
+    <button type="button" class="button quiet" disabled={busy} onclick={() => showVariants(entry)}>{variantsLabel()}<span class="visually-hidden"> {entry.name}</span></button>
   {/if}
 {/snippet}
 
 {#snippet offered(entry: Entry, prefix: string)}
   <ModelCard name={entry.name} reference={entry.id} revision={entry.revision} sizeGb={entry.size_gb} approximate={entry.approximate} fit={entry.fit} installed={entry.installed}
-    inUse={entry.in_use} {engine} summary={entry.summary}>
+    inUse={entry.in_use} {engine} summary={entry.summary} strengths={entry.strengths ?? []}>
     {#snippet actions()}
       {#if !entry.installed && direct(entry)}{@render offer(prefix + entryKey(entry), entry)}{/if}
-      {#if entry.has_variants}{@render precisionsOf(entry, prefix + entryKey(entry) + ">")}{/if}
+      {#if entry.has_variants && !entry.installed && !direct(entry) && !canDownload(entry)}<span class="reason">{entry.download.reason}</span>
+      {:else if entry.has_variants}{@render precisionsOf(entry, prefix + entryKey(entry) + ">", !direct(entry) && !entry.installed)}{/if}
     {/snippet}
   </ModelCard>
 {/snippet}
@@ -232,7 +269,10 @@
       <p class="muted">{t("models.cat.unmanaged")}</p>
     {:else}
       <p class="muted">{t("emodels.recommended_help")}</p>
-      {#if recommended === null}
+      <MachineSummary onchanged={() => void loadRecommended()} />
+      {#if detecting}
+        <p class="muted" role="status">{t("emodels.detecting")}</p>
+      {:else if recommended === null}
         <p class="muted" role="status">{t("emodels.recommended_loading")}</p>
       {:else if recommendedProblem}
         <p class="problem" role="alert">{recommendedProblem}</p>
@@ -276,8 +316,9 @@
           <label><input type="checkbox" bind:checked={uncensored} /> {t("emodels.uncensored")}</label>
         {/if}
         {#if managed && engine !== "colibri"}<label><input type="checkbox" bind:checked={community} /> {t("emodels.community")}</label>{/if}
-        <button type="submit" class="button" disabled={busy}>{t("emodels.search")}</button>
+        <button type="submit" class="button">{t("emodels.search")}</button>
       </form>
+      {#if searching}<p class="muted" role="status">{t("emodels.searching")}</p>{/if}
       {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
       <p class="notice" role="status">{notice}</p>
       {#if found}
@@ -286,23 +327,38 @@
           {#if hidden > 0}<span class="muted">{t("emodels.hidden", hidden)}</span>{/if}
         </div>
         {#if found.length === 0}<p class="muted">{t("emodels.none")}</p>{/if}
-        <ul class="cards results" aria-label={t("emodels.results")}>
-          {#each shown as entry (entryKey(entry))}{@render offered(entry, "found:")}{/each}
-        </ul>
-        {#if more}<div class="line"><button type="button" class="button" disabled={busy} onclick={() => search(page + 1)}>{t("emodels.more")}</button></div>{/if}
+        {@const groups = byUse(shown, (entry) => entry.name)}
+        <div class="results" aria-label={t("emodels.results")} role="region">
+          {#each groups as group (group.use)}
+            {#if groups.length > 1}<h3 class="use-title">{t(("card.use." + group.use) as MessageKey)}</h3>{/if}
+            <ul class="cards">
+              {#each group.names as entry (entryKey(entry))}{@render offered(entry, "found:")}{/each}
+            </ul>
+          {/each}
+        </div>
+        {#if more}<div class="line"><button type="button" class="button" disabled={searching} onclick={() => search(page + 1)}>{t("emodels.more")}</button></div>{/if}
       {:else}
         {@render children?.()}
       {/if}
-      {#if managed && engine !== "colibri" && canConfigure}
+      <!-- A model by its name, for every engine that downloads (it was the « add by name » form of Ollama's Installed tab, and a form of its own for the
+           servers Lutin manages): an Ollama tag; a repository and its file for llama.cpp (or an Ollama tag); a repository and its quantisation otherwise. -->
+      {#if engine !== "colibri" && canConfigure}
         <h3>{t("emodels.other")}</h3>
         <div class="line">
-          <label class="field">{t("emodels.repo")}<input type="text" placeholder={engine === "lmstudio" ? "lmstudio-community/Qwen3-8B-GGUF" : "turboderp/Qwen3-8B-exl3"} bind:value={other.repo} /></label>
-          <label class="field">{t("emodels.revision")}<input type="text" placeholder={engine === "lmstudio" ? "Q4_K_M" : "4.0bpw"} bind:value={other.revision} /></label>
+          {#if engine === "ollama"}
+            <label class="field">{t("models.add_expert")}<input type="text" placeholder="qwen3:8b" autocomplete="off" spellcheck="false" bind:value={other.repo} /></label>
+          {:else}
+            <label class="field">{t("emodels.repo")}<input type="text" autocomplete="off" spellcheck="false" bind:value={other.repo}
+              placeholder={engine === "lmstudio" ? "lmstudio-community/Qwen3-8B-GGUF" : engine === "llamacpp" ? "bartowski/Qwen3-8B-GGUF" : "turboderp/Qwen3-8B-exl3"} /></label>
+            <label class="field">{t(engine === "llamacpp" ? "emodels.file" : "emodels.revision")}<input type="text" autocomplete="off" spellcheck="false" bind:value={other.revision}
+              placeholder={engine === "lmstudio" ? "Q4_K_M" : engine === "llamacpp" ? "Qwen3-8B-Q4_K_M.gguf" : "4.0bpw"} /></label>
+          {/if}
           {#if other.repo.trim()}
-            {@render offer("other", { id: other.repo.trim(), name: other.repo.trim(), revision: other.revision.trim(), size_gb: null, approximate: false, fit: null, installed: false, in_use: false, summary: "",
-                                      download: { possible: true, reason: "" }, has_variants: false, incomplete: false, removable: false })}
+            {@render offer("other", { id: other.repo.trim(), name: other.repo.trim(), revision: engine === "ollama" ? "" : other.revision.trim(), size_gb: null, approximate: false, fit: null,
+                                      installed: false, in_use: false, summary: "", download: { possible: true, reason: "" }, has_variants: false, incomplete: false, removable: false })}
           {/if}
         </div>
+        <p class="muted">{t("emodels.other_help." + (engine === "ollama" ? "ollama" : engine === "llamacpp" ? "llamacpp" : "repo") as MessageKey)}</p>
       {/if}
     {/if}
   {:else}
@@ -436,6 +492,26 @@
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+
+  .precisions li {
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-md);
+  }
+
+  .precisions li.advised {
+    background: var(--color-accent-soft); /* the advised precision, at the top: the one to take when unsure */
+  }
+
+  .tag.advice {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  .results {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
   }
 
   .variants {

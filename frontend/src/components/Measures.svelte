@@ -28,7 +28,8 @@
   type EngineMeasure = { engine: string; name: string; model: string; date: string; tokens_per_s: number | null; first_token_s: number | null; load_s: number | null; vram_bytes: number | null; rank: number | null };
   type EngineMeasures = { running: boolean; measuring: { engine: string; model: string } | null; error: string; ranking: EngineMeasure[]; candidates: { engine: string; name: string; model: string; models: string[] }[] };
 
-  let { installed, canConfigure }: { installed: string[]; canConfigure: boolean } = $props();
+  let { engine, engineName, installed, canConfigure }: { engine: string; engineName: string; installed: string[]; canConfigure: boolean } = $props();
+
 
   let perEngine = $state<EngineMeasures | null>(null);
   let measured = $state({ engine: "", model: "" });
@@ -42,6 +43,14 @@
   let busy = $state(false);
   let problem = $state("");
   let alive = true;
+
+  // The measures of the engine in use only (maintainer, 2026-11-22: with another engine, the measures of the Ollama models were shown). A measure made
+  // before the engine was recorded is one of Ollama, the only engine then. The comparison of the engines, below, is the one place that shows them all.
+  const ofEngine = (other: string | null): boolean => (other ?? "ollama") === engine;
+  const results = $derived(bench ? bench.results.filter((result) => ofEngine(result.engine)) : []);
+  const others = $derived((bench?.results.length ?? 0) - results.length);
+  const regressions = $derived(bench ? bench.regressions.filter((regression) => results.some((result) => result.model === regression.model)) : []);
+  const ranking = $derived(perEngine ? perEngine.ranking.filter((entry) => entry.engine === engine) : []);
 
   const number = (value: number | null | undefined, digits = 1): string => (value === null || value === undefined ? "—" : new Intl.NumberFormat(lang, { maximumFractionDigits: digits }).format(value));
 
@@ -91,7 +100,7 @@
 
   <section class="bench" aria-labelledby="bench-title">
     <h2 id="bench-title">{t("bench.title")}</h2>
-    <p class="muted">{t("bench.intro")}</p>
+    <p class="muted">{t("bench.intro")} {t("bench.of_engine", engineName)}</p>
     {#if installed.length}
       <fieldset disabled={busy || !!bench?.running}>
         <legend>{t("bench.which")}</legend>
@@ -107,10 +116,11 @@
     {#if bench}
       <p class="notice" role="status">{bench.running ? t("bench.running", bench.running, bench.step) + (bench.queue.length ? " " + t("bench.queue", bench.queue.join(", ")) : "") : ""}</p>
       {#if bench.error}<p class="problem">{bench.error}</p>{/if}
-      {#each bench.regressions as regression (regression.model + regression.kind)}
+      {#each regressions as regression (regression.model + regression.kind)}
         <p class="warn">{t("bench.regression", regression.model, t(("bench.kind." + regression.kind) as MessageKey), number(regression.before, 2), number(regression.after, 2))}{regression.engine_changed ? " " + t("bench.engine_changed") : ""}</p>
       {/each}
-      {#if bench.results.length}
+      {#if others > 0}<p class="muted">{t("bench.others_hidden", others)}</p>{/if}
+      {#if results.length}
         <div class="table">
           <table>
             <caption class="visually-hidden">{t("bench.title")}</caption>
@@ -118,7 +128,7 @@
               <tr><th scope="col">{t("bench.model")}</th><th scope="col">{t("bench.speed")}</th><th scope="col">{t("bench.load")}</th>{#each TESTS as test (test)}<th scope="col">{t(("bench.kind." + test) as MessageKey)}</th>{/each}</tr>
             </thead>
             <tbody>
-              {#each bench.results as result (result.model)}
+              {#each results as result (result.model)}
                 <tr>
                   <th scope="row">{result.model}<small>{result.date.replace("T", " ")}</small></th>
                   <td>{number(result.speed?.tokens_per_s)}</td>
@@ -129,7 +139,7 @@
             </tbody>
           </table>
         </div>
-        {#each bench.results.filter((result) => Object.keys(result.tests).length) as result (result.model)}
+        {#each results.filter((result) => Object.keys(result.tests).length) as result (result.model)}
           <details>
             <summary>{t("bench.details", result.model)}</summary>
             {#if result.error}<p class="problem">{result.error}</p>{/if}
@@ -150,13 +160,13 @@
       <p class="muted">{t("emeasure.intro")}</p>
       <p class="notice" role="status">{perEngine.running && perEngine.measuring ? t("bench.running", perEngine.measuring.model, perEngine.measuring.engine) : ""}</p>
       {#if perEngine.error}<p class="problem">{perEngine.error}</p>{/if}
-      {#if perEngine.ranking.length}
+      {#if ranking.length}
         <div class="table">
           <table>
             <caption class="visually-hidden">{t("emeasure.title")}</caption>
             <thead><tr><th scope="col">{t("compare.engine")}</th><th scope="col">{t("bench.model")}</th><th scope="col">{t("bench.speed")}</th><th scope="col">{t("compare.first")}</th><th scope="col">{t("bench.load")}</th></tr></thead>
             <tbody>
-              {#each perEngine.ranking as entry (entry.name + entry.model)}
+              {#each ranking as entry (entry.name + entry.model)}
                 <tr><th scope="row">{entry.name}<small>{entry.date}</small></th><td>{entry.model}</td><td>{number(entry.tokens_per_s)}</td><td>{number(entry.first_token_s, 2)}</td><td>{number(entry.load_s)}</td></tr>
               {/each}
             </tbody>

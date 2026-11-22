@@ -19,6 +19,7 @@ export interface Entry {
   has_variants: boolean;
   incomplete: boolean;
   removable: boolean;
+  strengths?: string[]; // the roles it is good at, when the source rates them (the catalogue of Lutin)
 }
 
 export interface SearchOptions {
@@ -79,3 +80,11 @@ export function sizesShown<T extends { fit: { level: string } | null }>(sizes: T
 
 /** The key of an entry in a list: the same repository can be offered with several files. */
 export const entryKey = (entry: Pick<Entry, "id" | "revision">): string => entry.id + "@" + entry.revision;
+
+/** The precision to take when a model has several (maintainer, 2026-11-22: « je vois des modèles mais pas de bouton pour les télécharger »): the
+ *  heaviest that runs « comfortable » or « good » here and can be downloaded, as the recommendations of the server choose (the larger is the more
+ *  capable). null when none does: the list is then shown without advice. */
+export function bestVariant<T extends Pick<Entry, "size_gb" | "fit" | "download" | "installed">>(variants: readonly T[]): T | null {
+  const fitting = variants.filter((variant) => (variant.fit?.level === "comfortable" || variant.fit?.level === "good") && variant.download.possible && !variant.installed);
+  return fitting.reduce<T | null>((best, variant) => (best === null || (variant.size_gb ?? 0) > (best.size_gb ?? 0) ? variant : best), null);
+}

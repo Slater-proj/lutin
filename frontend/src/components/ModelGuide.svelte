@@ -3,6 +3,7 @@
   // and a confirmation that shows the size before anything is downloaded. The verdicts come from the server; this only says them and refuses what they refuse.
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
+  import MachineSummary from "./MachineSummary.svelte";
   import { blocker, choices, freeAfter, splitFit, USES, type Choice, type Machine, type Recommendation, type Use } from "../lib/guide";
   import { formatBytes } from "../lib/format";
   import { language, t, type MessageKey } from "../lib/messages";
@@ -13,7 +14,6 @@
   const gb = (value: number): string => formatBytes(Math.round(value * 1e9), lang);
 
   let machine = $state<Machine | null>(null);
-  let machineFailed = $state(false);
   let use = $state<Use>("unsure");
   let recommendation = $state<Recommendation | null>(null);
   let selectedId = $state("");
@@ -33,18 +33,6 @@
     return t("error.generic", String(cause));
   }
 
-  const wait = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-  async function detect(): Promise<void> {
-    // The detection starts programs: the server answers at once and the page asks again, for 30 seconds at most.
-    for (let attempt = 0; attempt < 20 && alive; attempt += 1) {
-      machine = await api<Machine>("GET", "/machine");
-      if (machine.detected) return;
-      await wait(1500);
-    }
-    machineFailed = true;
-  }
-
   async function recommend(wanted: Use): Promise<void> {
     use = wanted;
     confirming = false;
@@ -58,32 +46,6 @@
     } catch (cause) {
       problem = explain(cause);
     }
-  }
-
-  let budgetDraft = $state<number | null>(null);
-
-  /** The memory a model may fill, given by the person (0 gives it back to the detection): the verdicts are asked again with the new figure. */
-  async function setBudget(value: number): Promise<void> {
-    busy = true;
-    try {
-      problem = "";
-      await api("PATCH", "/settings", { memory_budget_gb: value });
-      machine = await api<Machine>("GET", "/machine");
-      budgetDraft = null;
-      await recommend(use);
-    } catch (cause) {
-      problem = explain(cause);
-    }
-    busy = false;
-  }
-
-  function saveBudget(event: SubmitEvent): void {
-    event.preventDefault();
-    if (budgetDraft) void setBudget(budgetDraft);
-  }
-
-  function resetBudget(): void {
-    void setBudget(0);
   }
 
   async function begin(): Promise<void> {
@@ -101,18 +63,8 @@
     busy = false;
   }
 
-  onMount(() => {
-    void (async () => {
-      try {
-        await detect();
-        if (machine?.detected) await recommend(use);
-      } catch (cause) {
-        problem = explain(cause);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+  onMount(() => () => {
+    alive = false;
   });
 
   function pick(choice: Choice): void {
@@ -125,28 +77,7 @@
 <section class="guide" aria-labelledby="guide-title">
   <h2 id="guide-title">{t("guide.title")}</h2>
 
-  <div class="machine" aria-live="polite">
-    {#if machine?.detected}
-      <p class="muted">{t("guide.machine")}</p>
-      <p class="summary">{machine.summary}</p>
-      <details class="correct">
-        <summary>{t("guide.correct")}</summary>
-        <form onsubmit={saveBudget}>
-          <label for="budget">{t("guide.budget_label")}</label>
-          <input id="budget" type="number" min="1" max="4096" step="0.5" inputmode="decimal" bind:value={budgetDraft} aria-describedby="budget-help" />
-          <p id="budget-help" class="muted">{t("guide.budget_help", machine.budget_gb ?? 0)}</p>
-          <div class="actions">
-            <button type="submit" class="button primary" disabled={!budgetDraft || busy}>{t("guide.budget_save")}</button>
-            {#if machine.budget_set_gb}<button type="button" class="button" onclick={resetBudget} disabled={busy}>{t("guide.budget_reset")}</button>{/if}
-          </div>
-        </form>
-      </details>
-    {:else if machineFailed}
-      <p class="warn">{t("guide.detect_failed")}</p>
-    {:else}
-      <p class="muted"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> {t("guide.detecting")}</p>
-    {/if}
-  </div>
+  <MachineSummary bind:machine ondetected={() => void recommend(use)} onchanged={() => void recommend(use)} />
 
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 
@@ -245,17 +176,6 @@
     letter-spacing: -0.01em;
   }
 
-  .machine {
-    padding: var(--space-3) var(--space-4);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--color-surface);
-  }
-
-  .summary {
-    font-weight: 600;
-  }
-
   .muted,
   small,
   .estimate {
@@ -283,42 +203,6 @@
   .ok {
     color: var(--color-accent-text);
     font-weight: 600;
-  }
-
-  .correct {
-    margin-top: var(--space-2);
-    font-size: var(--text-sm);
-  }
-
-  .correct summary {
-    min-height: var(--target);
-    display: inline-flex;
-    align-items: center;
-    color: var(--color-accent-text);
-    cursor: pointer;
-  }
-
-  .correct form {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    max-width: 20rem;
-  }
-
-  .correct input {
-    min-height: var(--target);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    background: var(--color-surface);
-    color: var(--color-text);
-    font: inherit;
-  }
-
-  .correct .actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
   }
 
   .uses {

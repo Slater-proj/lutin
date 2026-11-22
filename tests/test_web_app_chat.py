@@ -201,7 +201,9 @@ class Chat(unittest.TestCase):
         p.evaluer("[...document.querySelectorAll('.health .loaded button')].find(b => b.innerText.startsWith('Décharger')).click()")
         p.attendre("document.querySelector('.health .notice').innerText.includes('Déchargé')")
         self.assertEqual(unloaded, ["ollama:qwen3:8b"])
-        p.evaluer("[...document.querySelectorAll('.health button')].find(b => b.innerText === 'Vérification rapide').click()")
+        quick = "[...document.querySelectorAll('.health button')].find(b => b.innerText === 'Vérification rapide')"
+        p.attendre("!%s?.disabled" % quick)          # the unloading just before may still hold the screen busy: a click then is lost (seen once in two runs)
+        p.evaluer(quick + ".click()")
         p.attendre("!!document.querySelector('.health .checks li')")
         self.assertIn("Moteur", p.evaluer("document.querySelector('.health .checks').innerText"))
         if AXE.is_file():
@@ -1045,16 +1047,19 @@ class Chat(unittest.TestCase):
             self.assertIn(said, card)
         self.press("document.querySelector('.engine-models .model-help summary')")
         self.picture("3w-model-card-and-help")
-        self.press("[...document.querySelectorAll('.engine-models .button')].find(b => b.innerText.startsWith('Voir les quantifications'))")
+        self.press("[...document.querySelectorAll('.engine-models .button')].find(b => b.innerText.startsWith('Télécharger…'))")          # one « Download » on every card: it shows the precisions first
         p.attendre("document.querySelectorAll('.engine-models .precisions li').length === 2")
+        first = p.evaluer("document.querySelector('.engine-models .precisions li').innerText")
+        self.assertIn("Q8_0", first, "the advised precision first: the heaviest that runs well here")
+        self.assertIn("Conseillée", first)
         self.press("document.querySelectorAll('.engine-models .precisions li')[0].querySelector('.button')")
         p.attendre("!!document.querySelector('.engine-models .precisions .button.primary')")
         self.assertEqual(started, [], "asking is not downloading")
         if AXE.is_file():
             self.axe("on the models of a managed server")
         self.press("document.querySelector('.engine-models .precisions .button.primary')")
-        p.attendre("document.querySelector('.engine-models .notice').innerText.includes('Q4_K_M')")
-        self.assertEqual(started, [("lmstudio", "lmstudio-community/Gemma-3-4B-GGUF", "Q4_K_M")])
+        p.attendre("document.querySelector('.engine-models .notice').innerText.includes('Q8_0')")
+        self.assertEqual(started, [("lmstudio", "lmstudio-community/Gemma-3-4B-GGUF", "Q8_0")])
         self.assertEqual(p.erreurs, [])
 
     def test_3wc_the_models_recommended_for_this_machine_are_listed_with_the_quantisation_and_downloaded_after_a_confirmation(self):
@@ -1093,11 +1098,11 @@ class Chat(unittest.TestCase):
         self.assertIn("installé", p.evaluer("document.querySelectorAll('.engine-models .cards .model-card')[1].innerText").lower(), "what is already on disk is marked, not offered again")
         self.picture("3wc-recommended-cards")
         self.press(first + ".querySelector('.button')")
-        p.attendre("!!document.querySelector('.engine-models .button.primary')")
+        p.attendre("!!document.querySelector('.engine-models .cards .button.primary')")
         self.assertEqual(started, [], "asking is not downloading")
         if AXE.is_file():
             self.axe("on the recommended models")
-        self.press("document.querySelector('.engine-models .button.primary')")
+        self.press("document.querySelector('.engine-models .cards .button.primary')")
         p.attendre("document.querySelector('.engine-models .notice').innerText.includes('5.0bpw')")
         self.assertEqual(started, [("exllamav3", "turboderp/Qwen3-27B-exl3", "5.0bpw")])
         self.assertEqual(p.erreurs, [])
@@ -1177,8 +1182,7 @@ class Chat(unittest.TestCase):
         p = self.page
         p.evaluer("location.hash = '#/models'")
         self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher')")
-        p.attendre("document.querySelectorAll('.catalog-models .card').length > 3")
-        p.evaluer("document.querySelector('#catalog-only').value = 'all'; document.querySelector('#catalog-only').dispatchEvent(new Event('change', {bubbles: true}))")
+        p.attendre("document.querySelectorAll('.engine-models .model-card').length > 3")          # the search shows what the source offers as soon as it opens
         p.attendre("document.querySelector('main').scrollHeight > window.innerHeight || document.querySelector('.models').scrollHeight > window.innerHeight")
         self.assertLessEqual(p.evaluer("document.documentElement.scrollHeight"), p.evaluer("window.innerHeight") + 1, "the page itself does not scroll")
         self.assertEqual(p.evaluer("document.querySelector('.rail').getBoundingClientRect().height"), p.evaluer("window.innerHeight"), "the navigation is as tall as the window")
@@ -1600,12 +1604,21 @@ class Chat(unittest.TestCase):
         p.evaluer("[...document.querySelectorAll('.models .card')].find(c => c.innerText.includes('other:7b')).querySelector('.button:not(.danger)').click()")
         self.eventually(lambda: T.A.reglages()["modele"] == "other:7b", "the model in use was changed on the server")
         p.attendre("document.querySelector('.models .card.current strong').innerText === 'other:7b'")
-        p.evaluer("(() => { const i = document.querySelector('#model-name'); i.value = 'gemma4:12b'; i.dispatchEvent(new Event('input', {bubbles: true})); })()")
-        p.attendre("!document.querySelector('.models .add .button').disabled")
-        p.evaluer("document.querySelector('.models .add .button').click()")
+        # A model by its name is in Search, the same block for every engine (2026-11-22, the screen unified); it waits for a second click, as every download.
+        tab = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === %s)"
+        p.evaluer(tab % json.dumps("Rechercher") + ".click()")
+        by_name = "document.querySelector('.engine-models input[placeholder=\"qwen3:8b\"]')"
+        p.attendre("!!" + by_name)
+        p.evaluer("(() => { const i = %s; i.value = 'gemma4:12b'; i.dispatchEvent(new Event('input', {bubbles: true})); })()" % by_name)
+        p.attendre("!%s.closest('.line').querySelector('.button')?.disabled" % by_name)          # the search that opens with the tab is over
+        p.evaluer("%s.closest('.line').querySelector('.button').click()" % by_name)
+        p.attendre("!!%s.closest('.line').querySelector('.button.primary')" % by_name)
+        self.assertNotIn("gemma4:12b", T.INSTALLES, "asking is not downloading")
+        p.evaluer("%s.closest('.line').querySelector('.button.primary').click()" % by_name)
         p.attendre("!!document.querySelector('.models .downloads .card')")
+        p.evaluer(tab % json.dumps("Installés") + ".click()")
         p.attendre("document.querySelectorAll('.models .cards:not(.downloads) .card').length === 3", 20)
-        self.assertEqual(p.evaluer("document.querySelector('.models .downloads .card').dataset.state"), "done")
+        p.attendre("document.querySelector('.models .downloads .card').dataset.state === 'done'")          # the screen reads the downloads every second
         card = "[...document.querySelectorAll('.models .card')].find(c => c.innerText.includes('gemma4:12b') && c.querySelector('.danger'))"
         p.evaluer(card + ".querySelector('.danger').click()")
         p.attendre("!!%s?.querySelector('.button.danger:not(.quiet)')" % card)
@@ -1657,8 +1670,11 @@ class Chat(unittest.TestCase):
             p.attendre("!!document.querySelector('.models')")
             self.axe("on the Models screen (%s)" % theme)
             p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
-            p.attendre("!!document.querySelector('.guide .pick h3')")
-            self.axe("on the guide of models (%s)" % theme)
+            p.attendre("!!document.querySelector('.engine-models[data-part=recommended] .machine .summary')")
+            self.axe("on the recommended models (%s)" % theme)
+            p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher').click()")
+            p.attendre("document.querySelectorAll('.engine-models[data-part=search] .model-card').length > 0")
+            self.axe("on the search of models (%s)" % theme)
             p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Installés').click()")
             for section, ready in SETTINGS_SECTIONS.items():          # one section is shown at a time: each one is checked
                 p.evaluer("location.hash = '#/settings/%s'" % section)
@@ -1684,12 +1700,15 @@ class Chat(unittest.TestCase):
         p.evaluer("location.hash = '#/chat'")
 
     def test_5d_the_guide_recommends_a_model_and_downloads_nothing_before_the_confirmation(self):
+        """The guide by roles lives in the first launch since the Models screen is the same for every engine (2026-11-22): it is tested there."""
         p = self.page
-        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
-        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model})))
-        p.evaluer("location.hash = '#/models'")
-        p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
+        self.addCleanup(lambda: (p.aller(T.BASE + "/app/"), p.attendre("!!document.querySelector('#message')")))          # registered first: runs once the first launch is undone
+        self.first_launch()
+        p.aller(T.BASE + "/app/")
+        p.attendre("!!document.querySelector('.setup h1')")
+        p.evaluer("document.querySelector('.setup .button.primary').click()")
+        p.attendre("!!document.querySelector('.setup .card .state.on')")
+        p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => b.innerText === 'Continuer').click()")
         p.attendre("!!document.querySelector('.guide .machine .summary')")
         self.assertIn("RTX 4070", p.evaluer("document.querySelector('.guide .machine .summary').innerText"), "the machine in plain words, from the fictive profile")
         p.attendre("!!document.querySelector('.guide .pick h3')")
@@ -1719,9 +1738,7 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.guide .confirm .button.primary').click()")
         p.attendre("!!document.querySelector('.guide .ok[role=status]')")
         self.eventually(lambda: any(wanted.split()[0].lower() in name.lower() or True for name in T.INSTALLES) and len(T.INSTALLES) == len(before) + 1, "the confirmed download reached the engine", 10)
-        p.attendre("!!document.querySelector('.models .downloads .card')")
         self.assertEqual(p.erreurs, [])
-        p.evaluer("location.hash = '#/chat'")
 
     def first_launch(self):
         """A machine that looks new: no history, no model, no flag. The engine is the fake one, which runs."""
@@ -1736,21 +1753,22 @@ class Chat(unittest.TestCase):
         return flag
 
     def test_5g_the_memory_given_to_models_can_be_corrected_in_the_guide(self):
+        """The block that says the machine is the same in the guide of the first launch and at the top of « Recommended » for every engine (MachineSummary)."""
         p = self.page
         self.addCleanup(lambda: T.A.enregistrer_reglages({"budget_go": 0.0}))
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.tabs')")
         p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
-        p.attendre("!!document.querySelector('.guide .correct summary')")
-        p.evaluer("document.querySelector('.guide .correct summary').click()")
-        self.assertIn("RTX 4070", p.evaluer("document.querySelector('.guide .machine .summary').innerText"))
+        p.attendre("!!document.querySelector('.engine-models .machine .correct summary')")
+        p.evaluer("document.querySelector('.engine-models .machine .correct summary').click()")
+        self.assertIn("RTX 4070", p.evaluer("document.querySelector('.engine-models .machine .summary').innerText"))
         p.evaluer("(() => { const box = document.querySelector('#budget'); box.value = '2'; box.dispatchEvent(new Event('input', {bubbles: true})); box.form.requestSubmit(); })()")
-        p.attendre("[...document.querySelectorAll('.guide .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
+        p.attendre("[...document.querySelectorAll('.engine-models .machine .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
         self.eventually(lambda: T.A.reglages()["budget_go"] == 2.0, "the figure is kept by the server")
         if AXE.is_file():
             self.axe("with the memory correction open")
-        p.evaluer("[...document.querySelectorAll('.guide .correct .button')].find(b => b.innerText.startsWith('Revenir')).click()")
-        p.attendre("![...document.querySelectorAll('.guide .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
+        p.evaluer("[...document.querySelectorAll('.engine-models .machine .correct .button')].find(b => b.innerText.startsWith('Revenir')).click()")
+        p.attendre("![...document.querySelectorAll('.engine-models .machine .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
         self.eventually(lambda: T.A.reglages()["budget_go"] == 0.0, "back to the detection")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
@@ -1971,34 +1989,33 @@ class Chat(unittest.TestCase):
 
     def test_5d2_the_catalogue_says_what_each_model_is_for_and_how_it_fits_here(self):
         """Asked by the maintainer: the new Models screen showed hardly any model, without its description, its strengths and weaknesses, or how it fits
-        the machine. The Catalogue tab shows every model of the catalogue that runs here (the fictive machine of setUpClass), and all of them on demand."""
+        the machine. Since 2026-11-22 the search is the same for every engine and shows what the source offers as soon as it opens (here the catalogue of
+        Lutin, the engine being Ollama): what each model is for, what it is good at, how it fits this machine; what runs here by default, all on demand."""
         p = self.page
-        posted = []
-        original = api_v1.install_model
+        installed, pulls = list(T.INSTALLES), dict(T.A.PULLS)
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.models .tabs')")
         p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher').click()")
-        p.attendre("document.querySelectorAll('.catalog-models .card').length > 0")
-        fits = p.evaluer("document.querySelectorAll('.catalog-models .card').length")
+        cards = "document.querySelectorAll('.engine-models[data-part=search] .model-card')"
+        p.attendre(cards + ".length > 0")
+        fits = p.evaluer(cards + ".length")
         self.assertGreaterEqual(fits, 5, "the models that run here are offered")
-        self.assertTrue(p.evaluer("[...document.querySelectorAll('.catalog-models .card')].every(c => c.querySelector('.summary').innerText.trim() && c.querySelector('.fit'))"),
-                        "each one says what it is for and how it fits this machine")
-        self.assertTrue(p.evaluer("!!document.querySelector('.catalog-models .card .plus')"), "and what it is good at")
-        self.assertFalse(p.evaluer("[...document.querySelectorAll('.catalog-models .fit')].some(f => f.classList.contains('too_big'))"), "only what runs here, by default")
-        self.assertGreater(p.evaluer("document.querySelectorAll('.catalog-models h3.family').length"), 1, "grouped by family")
-        self.assertTrue(p.evaluer("[...document.querySelectorAll('.catalog-models .card .button')].some(b => b.innerText.startsWith('Choisir la précision'))"), "an Ollama model offers its precisions")
+        self.assertTrue(p.evaluer("[...%s].every(c => c.querySelector('.summary').innerText.trim())" % cards), "each one says what it is for")
+        self.assertTrue(p.evaluer("[...%s].some(c => c.querySelector('.fit, .muted'))" % cards), "and how it fits this machine")
+        self.assertTrue(p.evaluer("!!document.querySelector('.engine-models .model-card .plus')"), "and what it is good at")
+        self.assertGreater(p.evaluer("document.querySelectorAll('.engine-models[data-part=search] h3.use-title').length"), 1, "grouped by use")
         self.picture("5d2-catalogue")
-        p.evaluer("(() => { const box = document.querySelector('#catalog-only'); box.value = 'all'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
-        p.attendre("document.querySelectorAll('.catalog-models .card').length > %d" % fits)
-        with mock.patch.object(api_v1, "install_model", lambda request: posted.append(request.body) or original(request)):
-            p.evaluer("[...document.querySelectorAll('.catalog-models .card .button')].find(b => b.innerText.startsWith('Télécharger')).click()")
-            p.attendre("!!document.querySelector('.catalog-models .confirm')")
-            self.assertIn("Go", p.evaluer("document.querySelector('.catalog-models .confirm').innerText"), "the confirmation says what it costs")
-            if AXE.is_file():
-                self.axe("on the catalogue of models")
-            p.evaluer("[...document.querySelectorAll('.catalog-models .confirm .button')].find(b => b.innerText === 'Annuler').click()")
-            p.attendre("!document.querySelector('.catalog-models .confirm')")
-        self.assertEqual(posted, [], "nothing is downloaded before the confirmation")
+        p.evaluer("(() => { const box = [...document.querySelectorAll('.engine-models label')].find(l => l.innerText.includes('Adapté à ma machine'))?.querySelector('input'); if (box) box.click(); })()")
+        p.attendre(cards + ".length >= %d" % fits)
+        download = "[...document.querySelectorAll('.engine-models[data-part=search] .model-card .button')].find(b => b.innerText.startsWith('Télécharger'))"
+        p.evaluer(download + ".click()")
+        p.attendre("!!document.querySelector('.engine-models [role=group]')")
+        self.assertIn("Go", p.evaluer("document.querySelector('.engine-models [role=group]').innerText"), "the confirmation says what it costs")
+        if AXE.is_file():
+            self.axe("on the search of models")
+        p.evaluer("[...document.querySelectorAll('.engine-models [role=group] .button')].find(b => b.innerText === 'Annuler').click()")
+        p.attendre("!document.querySelector('.engine-models [role=group]')")
+        self.assertEqual((T.INSTALLES, T.A.PULLS), (installed, pulls), "nothing is downloaded before the confirmation")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
@@ -2748,7 +2765,7 @@ class Chat(unittest.TestCase):
         repo = "[...document.querySelectorAll('.engine-models .results .model-card')].find(c => c.dataset.model === 'author/Qwen-GGUF')"
         p.attendre("!!" + repo)
         self.assertIn("author/Qwen-GGUF", p.evaluer(repo + ".innerText"))
-        p.evaluer("[...%s.querySelectorAll('.button')].find(b => b.innerText.startsWith('Voir les fichiers')).click()" % repo)
+        p.evaluer("[...%s.querySelectorAll('.button')].find(b => b.innerText.startsWith('Télécharger…')).click()" % repo)          # one « Download » on every card
         p.attendre("%s.querySelectorAll('.precisions li').length === 2" % repo)
         small, huge = repo + ".querySelectorAll('.precisions li')[0]", repo + ".querySelectorAll('.precisions li')[1]"
         self.assertTrue(p.evaluer("!!%s.querySelector('.fit') && !%s.querySelector('.fit.too_big')" % (small, small)), "the small file suits this machine")

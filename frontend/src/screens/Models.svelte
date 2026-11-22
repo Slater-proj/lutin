@@ -1,12 +1,12 @@
 <script lang="ts">
   // The Models screen: the models of the engine in use in three parts, the same for every engine (ADR 0020: Recommended, Search, Installed, drawn by
-  // EngineModels), the downloads of Ollama with their progress, the measures, the engines and the other machines.
+  // EngineModels), the downloads of Ollama with their progress, the measures, the engines and the other machines. One presentation whatever the engine
+  // (maintainer, 2026-11-22: « je veux quelque chose d'unifié en front, pareil peu importe le moteur et la source »): the guide by roles and the catalogue by
+  // family that only Ollama and llama.cpp had here are gone from this screen (the guide stays in the first launch); a model by its name is in Search.
   import { onMount } from "svelte";
   import Engines from "../components/Engines.svelte";
   import EngineModels from "../components/EngineModels.svelte";
   import Machines from "../components/Machines.svelte";
-  import ModelCatalog from "../components/ModelCatalog.svelte";
-  import ModelGuide from "../components/ModelGuide.svelte";
   import ModelProposals from "../components/ModelProposals.svelte";
   import Measures from "../components/Measures.svelte";
   import { api, ApiError } from "../lib/api";
@@ -15,13 +15,11 @@
   import type { Models, Status } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
-  // Ollama and llama.cpp share the catalogue of Lutin (Ollama tags, which llama.cpp downloads without Ollama): its guide, its families, a model by its name.
+  // Ollama and llama.cpp share the catalogue of Lutin (Ollama tags, which llama.cpp downloads without Ollama) and its proposals of the daily check.
   const CATALOGUE: readonly string[] = ["ollama", "llamacpp"];
 
   let models = $state<Models | null>(null);
   let problem = $state("");
-  let name = $state("");
-  let asking = $state(false);
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
   let tab = $state<"recommended" | "search" | "installed" | "measures" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the recommended models when nothing is installed, the list otherwise
 
@@ -55,27 +53,6 @@
   async function load(): Promise<void> {
     models = await api<Models>("GET", "/models");
     if (tab === "unset") tab = models.models.length === 0 ? "recommended" : "installed";
-  }
-
-  async function install(event: SubmitEvent): Promise<void> {
-    event.preventDefault();
-    const wanted = name.trim();
-    if (!wanted || asking) return;
-    asking = true;
-    await guarded(async () => {
-      await api("POST", "/models", { name: wanted });
-      name = "";
-      await load();
-    });
-    asking = false;
-  }
-
-  async function use(model: string): Promise<void> {
-    await guarded(async () => {
-      await api("PATCH", "/settings", { model });
-      await load();
-      onchanged();
-    });
   }
 
   onMount(() => {
@@ -134,31 +111,20 @@
   </div>
 
   {#if tab === "recommended"}
-    {#if catalogue}<ModelGuide onstarted={() => void guarded(load)} onuse={use} />{/if}
     <EngineModels {engine} {engineName} part="recommended" {canConfigure} onchanged={changed} onstarted={() => void guarded(load)} />
   {:else if tab === "engines"}
     {#key refresh}
       <Engines {canConfigure} onchanged={changed} />
     {/key}
   {:else if tab === "search"}
-    <EngineModels {engine} {engineName} part="search" {canConfigure} onchanged={changed} onstarted={() => { refresh += 1; void guarded(load); }}>
-      {#if catalogue}<ModelCatalog precisions={engine === "ollama"} onstarted={() => void guarded(load)} />{/if}
-    </EngineModels>
+    <EngineModels {engine} {engineName} part="search" {canConfigure} onchanged={changed} onstarted={() => { refresh += 1; void guarded(load); }} />
   {:else if tab === "measures"}
-    <Measures installed={models?.models.map((model) => model.name) ?? []} {canConfigure} />
+    <Measures {engine} {engineName} installed={models?.models.map((model) => model.name) ?? []} {canConfigure} />
   {:else if tab === "machines"}
     <Machines onchanged={changed} />
   {:else if tab === "installed"}
     {#if catalogue}
       <ModelProposals onchanged={changed} />
-      <form class="add" onsubmit={install}>
-        <label for="model-name">{t("models.add_expert")}</label>
-        <div class="row">
-          <input id="model-name" type="text" placeholder="qwen3:8b" autocomplete="off" spellcheck="false" bind:value={name} />
-          <button type="submit" class="button primary" disabled={!name.trim() || asking}>{t("models.download")}</button>
-        </div>
-        <p class="help">{t("models.add_help")}</p>
-      </form>
     {/if}
     <EngineModels {engine} {engineName} part="installed" {canConfigure} {installedKey} onchanged={changed} onstarted={() => void guarded(load)} />
   {/if}
@@ -258,37 +224,6 @@
     font-size: var(--text-sm);
   }
 
-  .add {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-4);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--color-surface);
-  }
-
-  .add label {
-    font-weight: 650;
-  }
-
-  .row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-  }
-
-  input[type="text"] {
-    flex: 1;
-    min-width: 10rem;
-    min-height: var(--target);
-    padding: 0 var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    background: var(--color-bg);
-  }
-
-  .help,
   .muted {
     color: var(--color-text-muted);
     font-size: var(--text-sm);
