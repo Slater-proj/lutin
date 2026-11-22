@@ -6,6 +6,7 @@ import threading
 import time
 
 from . import model_selection
+from . import i18n as _i18n
 from .i18n import t as _t
 
 LEVELS = ("ideal", "bien", "limite", "trop_gros")
@@ -21,6 +22,12 @@ def pseudo_model(m):
 
 
 MOE_RAM_COMFORT_GB = 4.0          # mémoire vive qui reste libre, réserve comprise, en dessous de laquelle un modèle à experts en partie en mémoire vive est « limite »
+
+
+def _gb(value):
+    """A size in Go for a sentence of the page: one decimal, with the decimal comma in French (« 13,2 Go »), as the page writes the other sizes."""
+    text = str(round(float(value), 1))
+    return text.replace(".", ",") if _i18n.language() == "fr" else text
 
 
 def judge(m, profil, ctx_voulu=0, experts_en_ram=True):
@@ -39,15 +46,15 @@ def judge(m, profil, ctx_voulu=0, experts_en_ram=True):
         besoin = model_selection.required_memory_gb(complet, model_selection.CTX_PLANCHER)
         if model_selection.expert_share(complet) and not profil.sans_gpu() and not experts_en_ram and model_selection.experts_split(complet, model_selection.CTX_PLANCHER, budget, ram_libre):
             return {"niveau": "trop_gros", "texte": _t("Trop gros pour la carte graphique avec ce moteur : il tiendrait en gardant ses experts en mémoire vive, ce que fait llama.cpp ou Ollama.")}
-        return {"niveau": "trop_gros", "texte": _t("Trop gros pour ta machine : il demande environ {} Go et tu en as {} d'utilisables.").format(round(besoin, 1), budget)}
+        return {"niveau": "trop_gros", "texte": _t("Trop gros pour ta machine : il demande environ {} Go et tu en as {} d'utilisables.").format(_gb(besoin), _gb(budget))}
     ctx, besoin, tient = place
     if tient == "partiel":
         # seul un modèle à experts « tient en partie » (model_selection.best_context) : ce qui travaille à chaque mot va sur la carte, les experts qui n'y tiennent pas attendent en mémoire vive
         en_ram = max(0.0, besoin - budget)
         reste = ram_libre - en_ram
         if reste < MOE_RAM_COMFORT_GB or ctx < 16384:
-            return {"niveau": "limite", "texte": _t("Modèle à experts, juste pour ta machine : {} Go d'experts attendent en mémoire vive et il n'en reste que {} Go de libres. Ferme les gros programmes ; conversation de {} jetons.").format(round(en_ram, 1), round(max(0.0, reste), 1), ctx)}
-        return {"niveau": "bien", "texte": _t("Modèle à experts : ce qui travaille à chaque mot va sur la carte graphique, {} Go d'experts attendent en mémoire vive. Il répond à un bon rythme, mais lit plus lentement les longs messages.").format(round(en_ram, 1))}
+            return {"niveau": "limite", "texte": _t("Modèle à experts, juste pour ta machine : {} Go d'experts attendent en mémoire vive et il n'en reste que {} Go de libres. Ferme les gros programmes ; conversation de {} jetons.").format(_gb(en_ram), _gb(max(0.0, reste)), ctx)}
+        return {"niveau": "bien", "texte": _t("Modèle à experts : ce qui travaille à chaque mot va sur la carte graphique, {} Go d'experts attendent en mémoire vive. Il répond à un bon rythme, mais lit plus lentement les longs messages.").format(_gb(en_ram))}
     if profil.sans_gpu():
         if m["go"] <= 3:
             return {"niveau": "bien", "texte": _t("Sans carte graphique, un petit modèle comme celui-ci répond à un rythme correct.")}
@@ -59,7 +66,7 @@ def judge(m, profil, ctx_voulu=0, experts_en_ram=True):
         return {"niveau": "limite", "texte": _t("Tient à peine : la mémoire ne laisse que {} jetons de conversation.").format(ctx)}
     if besoin <= budget * 0.6:
         return {"niveau": "ideal", "texte": _t("Très à l'aise sur ta machine : de la marge pour une longue conversation.")}
-    return {"niveau": "bien", "texte": _t("Convient à ta machine ({} Go sur {} utilisables).").format(round(besoin, 1), budget)}
+    return {"niveau": "bien", "texte": _t("Convient à ta machine ({} Go sur {} utilisables).").format(_gb(besoin), _gb(budget))}
 
 
 CARD_RESERVE_GB = 1.0          # ce que le bureau et les autres programmes gardent sur la carte graphique
