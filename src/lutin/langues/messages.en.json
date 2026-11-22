@@ -2417,5 +2417,10 @@
 "{} téléchargements": "{} downloads",
 "modèles d'Ollama": "Ollama models",
 "Ce moteur ne cherche pas ici les mises à jour de ses modèles.": "This engine does not look for the updates of its models here.",
-"Lutin n'a pas mis ce modèle ici : il ne le supprime pas.": "Lutin did not put this model here: it does not delete it."
+"Lutin n'a pas mis ce modèle ici : il ne le supprime pas.": "Lutin did not put this model here: it does not delete it.",
+"git n'est pas installé sur cette machine.": "git is not installed on this machine.",
+"Le dossier de travail n'est pas un dépôt git : il n'y a rien à montrer ici.": "The working folder is not a git repository: there is nothing to show here.",
+"git a échoué : {}": "git failed: {}",
+"git n'a pas répondu : {}": "git did not answer: {}",
+"git refuse encore ce dossier (propriétaire différent, fréquent sur un partage réseau), malgré l'autorisation donnée à chaque appel : ta version de git est peut-être trop ancienne. Mets git à jour, ou lance une fois dans un terminal : git config --global --add safe.directory \"{}\"": "git still refuses this folder (a different owner, common on a network share), despite the permission given with each call: your version of git may be too old. Update git, or run once in a terminal: git config --global --add safe.directory \"{}\""
 }

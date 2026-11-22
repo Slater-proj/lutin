@@ -111,15 +111,17 @@ GIT_STATES = {"??": "nouveau", "M": "modifié", "A": "ajouté", "D": "supprimé"
 def git_state():
     """Les changements en attente dans le dépôt du projet, pour l'écran Git."""
     if not shutil.which("git"):
-        return {"dispo": False, "raison": "git n'est pas installé sur cette machine."}
+        return {"dispo": False, "raison": _t("git n'est pas installé sur cette machine.")}
     try:
         code, sortie, erreur = _m.git(["status", "--porcelain=v1"])
     except (OSError, subprocess.TimeoutExpired) as e:
-        return {"dispo": False, "raison": "git n'a pas répondu : {}".format(e)}
+        return {"dispo": False, "raison": _t("git n'a pas répondu : {}").format(e)}
     if code != 0:
         if "dubious ownership" in erreur or "safe.directory" in erreur:
-            return {"dispo": False, "raison": "git refuse encore ce dossier (propriétaire différent, fréquent sur un partage réseau), malgré l'autorisation donnée à chaque appel : ta version de git est peut-être trop ancienne. Mets git à jour, ou lance une fois dans un terminal : git config --global --add safe.directory \"{}\"".format(str(_m.ROOT).replace("\\", "/"))}
-        return {"dispo": False, "raison": "Ce dossier n'est pas un dépôt git, ou git a échoué : " + erreur.strip()[:200]}
+            return {"dispo": False, "raison": _t("git refuse encore ce dossier (propriétaire différent, fréquent sur un partage réseau), malgré l'autorisation donnée à chaque appel : ta version de git est peut-être trop ancienne. Mets git à jour, ou lance une fois dans un terminal : git config --global --add safe.directory \"{}\"").format(str(_m.ROOT).replace("\\", "/"))}
+        if "not a git repository" in erreur:          # the usual case, said plainly: git's own sentence (in English, with its path) said nothing more
+            return {"dispo": False, "raison": _t("Le dossier de travail n'est pas un dépôt git : il n'y a rien à montrer ici.")}
+        return {"dispo": False, "raison": _t("git a échoué : {}").format(erreur.strip()[:200])}
     modifies = []
     for ligne in sortie.splitlines():
         if len(ligne) < 4:
