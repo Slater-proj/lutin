@@ -1294,35 +1294,54 @@
     scrollbar-width: thin;
   }
 
-  /* On the side of the thread, not in the middle of the text it covers (maintainer, 2026-11-21); on a phone too, at thumb's reach above the field. */
+  /* On the side of the thread, not in the middle of the text it covers (maintainer, 2026-11-21); on a phone too, at thumb's reach above the field.
+     Not glued to the edge either (maintainer, 2026-11-22): on a wide screen it stands just right of the column of text, otherwise a comfortable margin in. */
   .to-bottom {
     position: absolute;
-    right: var(--space-4);
-    bottom: var(--space-3);
+    right: max(var(--space-5), calc((100% - var(--measure)) / 2 - 3.5rem));
+    bottom: var(--space-5);
     display: grid;
     place-items: center;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
     padding: 0;
-    border: 1px solid var(--color-accent);
+    border: 1px solid var(--color-accent); /* an older browser without color-mix keeps these */
+    border: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
     border-radius: 50%;
     background: var(--color-surface-raised);
+    background: color-mix(in srgb, var(--color-surface-raised) 88%, transparent);
+    backdrop-filter: blur(6px);
     color: var(--color-accent-text);
-    box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.25), 0 1px 3px rgb(0 0 0 / 0.2);
     cursor: pointer;
-    transition: background 0.15s, transform 0.15s;
+    transition: background 0.15s, color 0.15s, transform 0.15s, box-shadow 0.15s;
   }
 
   @media (max-width: 40rem) {
     .to-bottom {
-      right: var(--space-3);
+      right: var(--space-4);
+      bottom: var(--space-4);
     }
   }
 
   .to-bottom:hover {
     background: var(--color-accent);
     color: var(--color-on-accent);
-    transform: translateY(1px);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px rgb(0 0 0 / 0.3), 0 1px 3px rgb(0 0 0 / 0.2);
+  }
+
+  .to-bottom:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .to-bottom,
+    .to-bottom:hover {
+      transition: none;
+      transform: none;
+    }
   }
 
   .to-bottom.writing {
