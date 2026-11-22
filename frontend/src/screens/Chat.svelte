@@ -797,7 +797,7 @@
       <button type="button" class="icon close" onclick={() => (listOpen = false)}><Icon name="close" /><span class="visually-hidden">{t("chat.hide_list")}</span></button>
     </div>
     <label class="visually-hidden" for="conversation-search">{t("chat.search")}</label>
-    <input id="conversation-search" class="search" type="search" placeholder={t("chat.search")} autocomplete="off" bind:value={query} oninput={onSearch} />
+    <input id="conversation-search" class="search" type="search" placeholder={t("chat.search_short")} autocomplete="off" bind:value={query} oninput={onSearch} />
     {#if query.trim()}
       {#if found && found.length === 0}<p class="empty">{t("chat.search_none")}</p>{/if}
       {#if found && found.length}

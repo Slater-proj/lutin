@@ -82,6 +82,11 @@ The working folders: list with the one in use, « use this folder », add by pat
 
 ## Models
 
+Six parts in the same menu on the left as Settings and Agents (`components/Sections.svelte`), kept in the address (`#/models/installed`,
+`recommended`, `search`, `measures`, `engines`, `machines`); with no part named, a wide screen opens the installed models, or the recommended ones
+when none is installed. It was a bar of tabs of its own, not in the address, on three lines on a phone (visual audit of 2026-11-22: one layout for
+every screen with parts). The downloads in progress stay above the parts.
+
 First version, on the v1 routes that exist (list, install, delete, setting of the model in use), verified in Chrome against the fake engine (`tests/test_web_app_chat.py`, test 5b):
 the engine state, the installed models with their size, the one in use, « use » and « delete » (with a confirmation), a download by name with its progress (the list is read again every second while something downloads), a failed download with its reason.
 

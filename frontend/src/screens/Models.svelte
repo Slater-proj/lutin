@@ -4,6 +4,7 @@
   // (maintainer, 2026-11-22: « je veux quelque chose d'unifié en front, pareil peu importe le moteur et la source »): the guide by roles and the catalogue by
   // family that only Ollama and llama.cpp had here are gone from this screen (the guide stays in the first launch); a model by its name is in Search.
   import { onMount } from "svelte";
+  import Sections from "../components/Sections.svelte";
   import Engines from "../components/Engines.svelte";
   import EngineModels from "../components/EngineModels.svelte";
   import Machines from "../components/Machines.svelte";
@@ -11,7 +12,8 @@
   import Measures from "../components/Measures.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
-  import { language, t } from "../lib/messages";
+  import { pageOf } from "../lib/address";
+  import { language, t, type MessageKey } from "../lib/messages";
   import type { Models, Status } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
@@ -21,7 +23,16 @@
   let models = $state<Models | null>(null);
   let problem = $state("");
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
-  let tab = $state<"recommended" | "search" | "installed" | "measures" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the recommended models when nothing is installed, the list otherwise
+  // The parts of the screen, laid out like Settings and Agents (a list on the left, each part an address `#/models/<part>`; maintainer, 2026-11-22:
+  // one presentation everywhere). With no part in the address, a wide screen opens the installed models, or the recommended ones when none is installed.
+  const TABS = ["installed", "recommended", "search", "measures", "engines", "machines"] as const;
+  type Tab = (typeof TABS)[number];
+  const LABELS: Record<Tab, MessageKey> = {
+    installed: "models.tab_installed", recommended: "models.tab_recommended", search: "models.tab_search",
+    measures: "models.tab_measures", engines: "models.tab_engines", machines: "models.tab_machines",
+  };
+  let chosen = $state<Tab | null>(pageOf(location.hash, TABS));
+  const tab = $derived<Tab>(chosen ?? (models && models.models.length === 0 ? "recommended" : "installed"));
 
   const lang = language();
   const engine = $derived(status?.engine.id ?? "");
@@ -52,7 +63,11 @@
 
   async function load(): Promise<void> {
     models = await api<Models>("GET", "/models");
-    if (tab === "unset") tab = models.models.length === 0 ? "recommended" : "installed";
+    // nothing installed and no part named: the recommended ones are the first useful part (the list of a wide screen marks it too)
+    if (chosen === null && models.models.length === 0 && !matchMedia("(max-width: 720px)").matches) {
+      history.replaceState(null, "", "#/models/recommended");
+      chosen = "recommended";
+    }
   }
 
   onMount(() => {
@@ -61,7 +76,12 @@
     const timer = setInterval(() => {
       if (downloading) void load().catch(() => undefined);
     }, 1000);
-    return () => clearInterval(timer);
+    const onHash = (): void => void (chosen = pageOf(location.hash, TABS));
+    addEventListener("hashchange", onHash);
+    return () => {
+      clearInterval(timer);
+      removeEventListener("hashchange", onHash);
+    };
   });
 </script>
 
@@ -77,7 +97,7 @@
   </header>
 
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
-  {#if models && !models.running}<p class="hint">{t("models.engine_hint")} <button type="button" class="link" onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button></p>{/if}
+  {#if models && !models.running}<p class="hint">{t("models.engine_hint")} <a href="#/models/engines">{t("models.tab_engines")}</a></p>{/if}
 
   {#if models && models.downloads.length}
     <h2>{t("models.downloads")}</h2>
@@ -101,15 +121,7 @@
     </ul>
   {/if}
 
-  <div class="tabs" role="group" aria-label={t("models.tabs")}>
-    <button type="button" class:on={tab === "recommended"} aria-pressed={tab === "recommended"} onclick={() => (tab = "recommended")}>{t("models.tab_recommended")}</button>
-    <button type="button" class:on={tab === "search"} aria-pressed={tab === "search"} onclick={() => (tab = "search")}>{t("models.tab_search")}</button>
-    <button type="button" class:on={tab === "installed"} aria-pressed={tab === "installed"} onclick={() => (tab = "installed")}>{t("models.tab_installed")}</button>
-    <button type="button" class:on={tab === "measures"} aria-pressed={tab === "measures"} onclick={() => (tab = "measures")}>{t("models.tab_measures")}</button>
-    <button type="button" class:on={tab === "engines"} aria-pressed={tab === "engines"} onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button>
-    <button type="button" class:on={tab === "machines"} aria-pressed={tab === "machines"} onclick={() => (tab = "machines")}>{t("models.tab_machines")}</button>
-  </div>
-
+  <Sections ids={TABS} label={(id) => t(LABELS[id as Tab])} base="#/models" navLabel={t("models.tabs")} backLabel={t("models.back")} {chosen}>
   {#if tab === "recommended"}
     <EngineModels {engine} {engineName} part="recommended" {canConfigure} onchanged={changed} onstarted={() => void guarded(load)} />
   {:else if tab === "engines"}
@@ -123,11 +135,12 @@
   {:else if tab === "machines"}
     <Machines onchanged={changed} />
   {:else if tab === "installed"}
-    {#if catalogue}
-      <ModelProposals onchanged={changed} />
-    {/if}
     <EngineModels {engine} {engineName} part="installed" {canConfigure} {installedKey} onchanged={changed} onstarted={() => void guarded(load)} />
+    {#if catalogue}
+      <ModelProposals onchanged={changed} /><!-- after the list: the models first, keeping them up to date second -->
+    {/if}
   {/if}
+  </Sections>
 </section>
 
 <style>
@@ -157,8 +170,7 @@
   }
 
   h2 {
-    font-size: var(--text-md);
-    font-weight: 650;
+    font-size: var(--text-lg);
   }
 
   .engine {
@@ -180,34 +192,6 @@
 
   .engine.down .dot {
     background: var(--color-danger);
-  }
-
-  .tabs {
-    display: flex;
-    flex-wrap: wrap; /* four tabs: on a phone they go on two lines rather than out of the screen */
-    gap: var(--space-1);
-    max-width: 100%;
-    padding: var(--space-1);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--color-surface);
-    align-self: flex-start;
-  }
-
-  .tabs button {
-    min-height: 2.5rem;
-    padding: 0 var(--space-4);
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: transparent;
-    color: var(--color-text-muted);
-    font-weight: 600;
-    cursor: pointer;
-  }
-
-  .tabs button.on {
-    background: var(--color-accent-soft);
-    color: var(--color-accent-text);
   }
 
   .problem {

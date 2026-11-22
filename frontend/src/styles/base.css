@@ -19,6 +19,7 @@ body {
   font-size: var(--text-md);
   line-height: var(--line);
   -webkit-text-size-adjust: 100%;
+  accent-color: var(--color-accent); /* every check box, radio and range in the colour of the application, not the browser's blue */
 }
 
 h1,
@@ -58,6 +59,13 @@ code {
   border-radius: var(--radius-md);
   background: var(--color-surface);
   cursor: pointer;
+  text-decoration: none; /* a link drawn as a button (« Details » of a model) looks like the other buttons */
+}
+
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .button:hover:not(:disabled) {

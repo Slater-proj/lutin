@@ -132,7 +132,7 @@
   }
 
   h2 {
-    font-size: var(--text-md);
+    font-size: var(--text-lg); /* like the other blocks of the Projects screen */
   }
 
   .muted {

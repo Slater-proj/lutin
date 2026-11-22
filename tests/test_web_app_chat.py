@@ -946,7 +946,7 @@ class Chat(unittest.TestCase):
         p.attendre("document.querySelector('.variants').innerText.includes('Télécharger qwen3:8b-fp16')")
         self.press("document.querySelector('.variants .button.primary')")
         self.eventually(lambda: "qwen3:8b-fp16" in T.A.PULLS, "the precision chosen is downloaded")
-        self.press(button("document.querySelector('.tabs')", "Rechercher"))
+        self.press("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher')")
         p.attendre("!!document.querySelector('#engine-models-words')")
         # words that no model of the catalogue of Lutin has: only what ollama.com gives (replaced above) is listed
         p.evaluer("(() => { const box = document.querySelector('#engine-models-words'); box.value = 'zzlibraryonly'; box.dispatchEvent(new Event('input', {bubbles: true}));"
@@ -993,7 +993,7 @@ class Chat(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
-        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Mesures')")
+        self.press("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Mesures')")
         p.attendre("document.querySelectorAll('.bench .choices input').length === 2 && !!document.querySelector('.comparison table')")
         self.assertIn("n'a pas démarré", p.evaluer("document.querySelector('.comparison table').innerText"))
         p.evaluer("document.querySelectorAll('.bench .choices input')[0].click()")
@@ -1042,7 +1042,7 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
         reload()
-        tab = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === %s)"
+        tab = "[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === %s)"
         # The Installed tab shows what is on this machine, and only that (maintainer, 2026-11-21: it was the whole Catalogue again)
         self.press(tab % json.dumps("Installés"))
         p.attendre("document.querySelectorAll('.engine-models .model-card').length === 1")
@@ -1100,7 +1100,7 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
         reload()
-        self.press("[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Recommandés pour toi')")
+        self.press("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Recommandés pour toi')")
         p.attendre("document.querySelectorAll('.engine-models .cards .model-card').length === 2", 20)
         text = p.evaluer("document.querySelector('.engine-models').innerText")
         self.assertIn("Recommandés pour cette machine", text)
@@ -1159,8 +1159,8 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
         reload()
-        catalogue = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Rechercher')"
-        engines_tab = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Moteurs')"
+        catalogue = "[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher')"
+        engines_tab = "[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Moteurs')"
         self.press(catalogue)
         p.attendre("document.querySelector('.models').innerText.includes(\"Lutin n'a pas de catalogue à proposer\")")
         self.assertFalse(p.evaluer("!!document.querySelector('.catalog-models')"), "not Ollama's catalogue: this engine cannot download Ollama's models")
@@ -1194,7 +1194,7 @@ class Chat(unittest.TestCase):
         """A screen longer than the window (the catalogue of the models) scrolls in <main>: the page itself never scrolls, so the navigation stays."""
         p = self.page
         p.evaluer("location.hash = '#/models'")
-        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher')")
+        self.press("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher')")
         p.attendre("document.querySelectorAll('.engine-models .model-card').length > 3")          # the search shows what the source offers as soon as it opens
         p.attendre("document.querySelector('main').scrollHeight > window.innerHeight || document.querySelector('.models').scrollHeight > window.innerHeight")
         self.assertLessEqual(p.evaluer("document.documentElement.scrollHeight"), p.evaluer("window.innerHeight") + 1, "the page itself does not scroll")
@@ -1252,7 +1252,7 @@ class Chat(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
-        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Moteurs')")
+        self.press("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Moteurs')")
         card = "[...document.querySelectorAll('.engines .card')].find(c => c.querySelector('strong').innerText.includes('llama.cpp'))"
         self.press("%s.querySelector('button[aria-expanded]')" % card)
         p.attendre("!!document.querySelector('.engine-settings input[type=number]')")
@@ -1268,7 +1268,7 @@ class Chat(unittest.TestCase):
         self.eventually(lambda: chosen == ["D:/IA/ollama"], "the models folder was chosen")
         if AXE.is_file():
             self.axe("on the settings of an engine and the folders")
-        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Mesures')")
+        self.press("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Mesures')")
         p.attendre("document.querySelector('.per-engine table')?.innerText.includes('41')")
 
         p.evaluer("location.hash = '#/settings/machine'")
@@ -1618,7 +1618,7 @@ class Chat(unittest.TestCase):
         self.eventually(lambda: T.A.settings()["modele"] == "other:7b", "the model in use was changed on the server")
         p.attendre("document.querySelector('.models .card.current strong').innerText === 'other:7b'")
         # A model by its name is in Search, the same block for every engine (2026-11-22, the screen unified); it waits for a second click, as every download.
-        tab = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === %s)"
+        tab = "[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === %s)"
         p.evaluer(tab % json.dumps("Rechercher") + ".click()")
         by_name = "document.querySelector('.engine-models input[placeholder=\"qwen3:8b\"]')"
         p.attendre("!!" + by_name)
@@ -1682,13 +1682,13 @@ class Chat(unittest.TestCase):
             p.evaluer("location.hash = '#/models'")
             p.attendre("!!document.querySelector('.models')")
             self.axe("on the Models screen (%s)" % theme)
-            p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
+            p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Recommandés pour toi').click()")
             p.attendre("!!document.querySelector('.engine-models[data-part=recommended] .machine .summary')")
             self.axe("on the recommended models (%s)" % theme)
-            p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher').click()")
+            p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher').click()")
             p.attendre("document.querySelectorAll('.engine-models[data-part=search] .model-card').length > 0")
             self.axe("on the search of models (%s)" % theme)
-            p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Installés').click()")
+            p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Installés').click()")
             for section, ready in SETTINGS_SECTIONS.items():          # one section is shown at a time: each one is checked
                 p.evaluer("location.hash = '#/settings/%s'" % section)
                 p.attendre("!!document.querySelector(%s)" % js(ready))
@@ -1703,7 +1703,7 @@ class Chat(unittest.TestCase):
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
         try:
             # Each screen is checked once it is drawn, as at 1280 px: half loaded, a long screen may scroll before its fields are there.
-            for screen, ready in (("chat", "#message"), ("models", ".models .tabs"), ("settings", ".settings .sections"), ("projects", "#project-path"), ("agents", ".agents .sections")):
+            for screen, ready in (("chat", "#message"), ("models", ".models .sections"), ("settings", ".settings .sections"), ("projects", "#project-path"), ("agents", ".agents .sections")):
                 p.evaluer("location.hash = '#/%s'" % screen)
                 p.attendre("!!document.querySelector(%s)" % js(ready))
                 self.axe("on the %s screen at 360 px (%s)" % (screen, theme))
@@ -1770,8 +1770,8 @@ class Chat(unittest.TestCase):
         p = self.page
         self.addCleanup(lambda: T.A.save_settings({"budget_go": 0.0}))
         p.evaluer("location.hash = '#/models'")
-        p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
+        p.attendre("!!document.querySelector('.models .sections')")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Recommandés pour toi').click()")
         p.attendre("!!document.querySelector('.engine-models .machine .correct summary')")
         p.evaluer("document.querySelector('.engine-models .machine .correct summary').click()")
         self.assertIn("RTX 4070", p.evaluer("document.querySelector('.engine-models .machine .summary').innerText"))
@@ -1918,17 +1918,17 @@ class Chat(unittest.TestCase):
         machines.CARDS.update(t=-999.0, v=None)
         T.A.save_settings({"cluster": False})
         p.evaluer("location.hash = '#/models'")
-        p.attendre("!!document.querySelector('.models .tabs')")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
+        p.attendre("!!document.querySelector('.models .sections')")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Machines').click()")
         p.attendre("!!document.querySelector('.machines .turn-on')")
         if AXE.is_file():
             self.axe("on the Machines tab, multi-machine mode off")
         p.evaluer("document.querySelector('.machines .turn-on').click()")
         p.attendre("!!document.querySelector('#machine-address')")
         self.assertTrue(T.A.settings()["cluster"], "the button turns the multi-machine mode on")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher').click()")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher').click()")
         self.eventually(lambda: not T.A.settings()["cluster"], "turned on then left with no machine paired: turned off again")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Machines').click()")
         p.attendre("!!document.querySelector('.machines .turn-on')")
         p.evaluer("document.querySelector('.machines .turn-on').click()")
         p.attendre("!!document.querySelector('#machine-address')")
@@ -1986,8 +1986,8 @@ class Chat(unittest.TestCase):
         self.picture("5h3-machine-off")
 
         p.evaluer("location.hash = '#/models'")
-        p.attendre("!!document.querySelector('.models .tabs')")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
+        p.attendre("!!document.querySelector('.models .sections')")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Machines').click()")
         p.attendre("!!document.querySelector('.machines .machine .unpair')")
         p.evaluer("document.querySelector('.machines .machine details').open = true")
         p.evaluer("document.querySelector('.machines .machine .unpair').click()")
@@ -2007,8 +2007,8 @@ class Chat(unittest.TestCase):
         p = self.page
         installed, pulls = list(T.INSTALLES), dict(T.A.PULLS)
         p.evaluer("location.hash = '#/models'")
-        p.attendre("!!document.querySelector('.models .tabs')")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher').click()")
+        p.attendre("!!document.querySelector('.models .sections')")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher').click()")
         cards = "document.querySelectorAll('.engine-models[data-part=search] .model-card')"
         p.attendre(cards + ".length > 0")
         fits = p.evaluer(cards + ".length")
@@ -2367,8 +2367,8 @@ class Chat(unittest.TestCase):
     def test_5k_the_engines_are_listed_and_an_action_that_changes_the_machine_waits_for_a_click(self):
         p = self.page
         p.evaluer("location.hash = '#/models'")
-        p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Moteurs').click()")
+        p.attendre("!!document.querySelector('.models .sections')")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Moteurs').click()")
         p.attendre("document.querySelectorAll('.engines .card').length >= 2")
         self.assertEqual(p.evaluer("document.querySelectorAll('.engines .card.current').length"), 1, "one engine is in use")
         if AXE.is_file():
@@ -2824,8 +2824,8 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: engines.TASKS.pop("llamacpp", None))
         p.evaluer("location.hash = '#/models'")
         p.evaluer("location.reload()")          # the engine in use is read once, when the page opens: read it again now that llama.cpp is in use
-        p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Rechercher').click()")
+        p.attendre("!!document.querySelector('.models .sections')")
+        p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher').click()")
         p.attendre("!!document.querySelector('#engine-models-words')")
         p.evaluer("(() => { const box = document.querySelector('#engine-models-words'); box.value = 'qwen'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.engine-models form.search').requestSubmit(); })()")
         repo = "[...document.querySelectorAll('.engine-models .results .model-card')].find(c => c.dataset.model === 'author/Qwen-GGUF')"
@@ -3040,8 +3040,8 @@ class Chat(unittest.TestCase):
         got a second scroll bar reaching down to the last of them, and scrolling on emptied the screen but for the navigation."""
         p = self.page
         p.aller(T.BASE + "/app/#/models")
-        p.attendre("!!document.querySelector('.models .tabs')")
-        self.press("[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Rechercher')")
+        p.attendre("!!document.querySelector('.models .sections')")
+        self.press("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher')")
         p.attendre("document.querySelectorAll('.models .card').length > 3")
         self.assertGreater(p.evaluer("(s => s.scrollHeight - s.clientHeight)(document.querySelector('.models'))"), 0, "the catalogue is longer than the window here")
         self.assertLessEqual(p.evaluer("(m => m.scrollHeight - m.clientHeight)(document.querySelector('main'))"), 1, "only the catalogue scrolls, never <main> around it")
@@ -3081,9 +3081,9 @@ class Chat(unittest.TestCase):
                 p.evaluer("location.hash = %s" % js(section))
                 check(section)
         p.evaluer("location.hash = '#/models'")
-        p.attendre("!!document.querySelector('.models .tabs')")
-        for index, tab in enumerate(p.evaluer("[...document.querySelectorAll('.models .tabs button')].map(b => b.innerText)")):
-            p.evaluer("document.querySelectorAll('.models .tabs button')[%d].click()" % index)
+        p.attendre("!!document.querySelector('.models .sections')")
+        for index, tab in enumerate(p.evaluer("[...document.querySelectorAll('.models .sections a')].map(b => b.innerText)")):
+            p.evaluer("document.querySelectorAll('.models .sections a')[%d].click()" % index)
             check("#/models " + tab)
         self.assertGreater(len(seen), 15, "every screen was looked at")
         p.evaluer("location.hash = '#/chat'")

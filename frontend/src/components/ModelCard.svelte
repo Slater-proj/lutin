@@ -65,7 +65,7 @@
     {#if fit}<span class={"fit " + fit.level} title={fit.text}>{t(("guide.fit." + fit.level) as MessageKey)}</span>{/if}
     {#if facts.uncensored}<span class="uncensored" title={t("card.uncensored_help")}>{t("card.uncensored")}</span>{/if}
   </div>
-  <p class="download-name">{t("card.download_name")} <code>{reference}{revision ? "@" + revision : ""}</code></p>
+  {#if !installed}<p class="download-name">{t("card.download_name")} <code>{reference}{revision ? "@" + revision : ""}</code></p>{/if}<!-- installed: its name is the title already -->
   <ul class="chips" aria-label={t("card.facts")}>
     {#if sizeGb}<li class="size">{approximate ? t("card.about_gb", number(sizeGb)) : t("card.gb", number(sizeGb))}</li>{/if}
     {#if facts.paramsB !== null}<li title={t("help.params")}>{t("card.params", number(facts.paramsB))}</li>{/if}

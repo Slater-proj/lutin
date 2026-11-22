@@ -16,7 +16,7 @@ export function pageOf<T extends string>(hash: string, pages: readonly T[]): T |
 // The tabs of the old page (`/#modeles`, `/#memoire`…) and its direct link to a conversation (`/#conv=<id>`): a bookmark made before 1.0 still leads
 // to the same place in the new interface.
 const LEGACY_TABS: Record<string, string> = {
-  chat: "#/chat", modeles: "#/models", machines: "#/models", reglages: "#/settings", memoire: "#/settings/knowledge", sante: "#/settings/health",
+  chat: "#/chat", modeles: "#/models", machines: "#/models/machines", reglages: "#/settings", memoire: "#/settings/knowledge", sante: "#/settings/health",
   acces: "#/settings/devices", auto: "#/agents",
 };
 
