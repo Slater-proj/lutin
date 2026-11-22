@@ -27,5 +27,5 @@ These records are technical documentation, written in English only (ADR 0001). T
 | [0018](0018-keeping-the-thread-on-a-small-window.md) | Keeping the thread of a long conversation on a small window | Accepted, first part implemented |
 | [0019](0019-one-memory-for-long-conversations.md) | One memory for long conversations: the progress sheet, kept out of the way | Accepted |
 | [0020](0020-every-engine-the-same-way.md) | Every engine is installed, chosen and fed with models the same way | Accepted, implemented (stages 1 to 4) |
-| [0021](0021-memory-checked-at-load-engine-by-engine.md) | Memory is checked when a model loads, engine by engine | Accepted, stages 1 to 6 implemented |
+| [0021](0021-memory-checked-at-load-engine-by-engine.md) | Memory is checked when a model loads, engine by engine | Accepted, stages 1 to 6 and the loading state implemented |
 | [0022](0022-the-old-page-goes-at-1.0.md) | The old page and its routes are removed at 1.0; the machine protocol stays | Accepted, implemented |

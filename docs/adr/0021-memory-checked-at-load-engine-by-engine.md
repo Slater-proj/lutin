@@ -1,7 +1,7 @@
 # ADR 0021 — Memory is checked when a model loads, engine by engine
 
 Status: accepted on 2026-11-22 (the maintainer asked for « a clean, optimised memory management, engine by engine, like the other applications or better »).
-Stages 1 to 6 are done; the rest is listed under « Not done yet ».
+Stages 1 to 6 are done, and the « loading » state of the memory pill (f3df2b7); the rest is listed under « Not done yet ».
 
 ## Context
 
@@ -56,8 +56,9 @@ that is already loaded.
 
 ## Not done yet
 
-- The memory pill of the Chat has two states; a third, « loading », with the progress of the load (the card's memory growing towards the need)
-  is the next step. While TabbyAPI is busy its `/v1/model` can take more than 3 s: the pill then says « not loaded ».
+- ~~The memory pill of the Chat has two states~~ — done (f3df2b7): `state` is loaded, loading (with `loading_bytes`, the card's memory grown
+  since the load began), not_loaded or unknown. Left: while TabbyAPI is busy its `/v1/model` can take more than 3 s, and the pill then says
+  « not loaded ».
 - llama.cpp's own cache for models outside Ollama's store is not read from the GGUF header (Ollama's is); the verdicts of llama.cpp use the catalogue
   or the cautious value.
 - Not measured on a real machine with these commits: the maintainer's installed Lutin is an older version.
