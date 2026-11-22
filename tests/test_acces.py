@@ -249,7 +249,7 @@ class VerifierLutin(Base):
 
     def test_version_plus_recente_annoncee(self):
         from lutin import updates
-        with mock.patch.object(updates, "derniere_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
+        with mock.patch.object(updates, "latest_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 200)
         self.assertEqual(r["derniere"], "99.0.0")
@@ -257,7 +257,7 @@ class VerifierLutin(Base):
 
     def test_hors_ligne_le_dit(self):
         from lutin import updates
-        with mock.patch.object(updates, "derniere_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
+        with mock.patch.object(updates, "latest_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 503)
         self.assertIn("GitHub", r["erreur"])
@@ -461,7 +461,7 @@ class Redemarrage(Base):
         from lutin import cli
         codes = iter([access.RESTART_CODE] * 8 + [0])
         lancements, messages = [], []
-        r = cli.superviser(lambda premiere: (lancements.append(premiere), next(codes))[1], attendre=lambda s: None, maximum=2, ecrire=messages.append)
+        r = cli.supervise(lambda premiere: (lancements.append(premiere), next(codes))[1], attendre=lambda s: None, maximum=2, ecrire=messages.append)
         self.assertEqual((r, len(lancements), lancements[0], any(lancements[1:])), (0, 9, True, False), "huit redémarrages d'affilée ne sont pas des pannes : le navigateur ne se rouvre pas")
         self.assertTrue(all("Redémarrage demandé" in m for m in messages))
 

@@ -87,8 +87,8 @@ class ChezSoi(unittest.TestCase):
 class RechercheEtJournal(unittest.TestCase):
     def setUp(self):
         outbound.clear()
-        web.CACHE_RECHERCHE.clear()
-        web.BLOQUES.clear()
+        web.SEARCH_CACHE.clear()
+        web.BLOCKED.clear()
 
     def test_le_service_exterieur_recoit_la_requete_nettoyee_et_l_envoi_est_note(self):
         recues = []
@@ -157,8 +157,8 @@ class Api(unittest.TestCase):
 
     def test_apercu_web_nettoie_et_ne_rend_que_des_resultats(self):
         outbound.clear()
-        web.CACHE_RECHERCHE.clear()
-        web.BLOQUES.clear()
+        web.SEARCH_CACHE.clear()
+        web.BLOCKED.clear()
         with mock.patch.object(web, "engines_of_search", lambda: [("tavily", lambda q: [{"titre": "T1", "url": "https://exemple.org/a?utm_source=x", "extrait": "e" * 500, "date": "2026-05-01"}])]):
             statut, r = self.appel("POST", "/api/web-apercu", {"q": "tarif électricité écrire à marie@example.com"})
         self.assertEqual(statut, 200)

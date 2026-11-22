@@ -100,7 +100,7 @@ class BoutEnBout(unittest.TestCase):
     def commande(self, *argv):
         sortie = io.StringIO()
         with mock.patch.dict(os.environ, {"LUTIN_HOME": self.t.name}), contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
-            code = cli.principal(list(argv))
+            code = cli.main(list(argv))
         return code, sortie.getvalue()
 
     def test_le_serveur_ecoute_seulement_en_local_et_le_fichier_console_existe(self):

@@ -42,7 +42,7 @@ class Meta(unittest.TestCase):
 
 class Conseil(unittest.TestCase):
     def test_conseil_general(self):
-        t = web.conseil_page_javascript("https://exemple.org/page")
+        t = web.javascript_page_advice("https://exemple.org/page")
         self.assertIn("JavaScript", t)
         self.assertIn("trombone", t)
         self.assertNotIn("Reddit", t)
@@ -50,11 +50,11 @@ class Conseil(unittest.TestCase):
     def test_conseil_reddit_dit_la_verite_sans_promettre_de_contournement(self):
         for adresse in ("https://www.reddit.com/r/LocalLLaMA/comments/abc/x/", "https://old.reddit.com/r/x/", "https://redd.it/abc"):
             with self.subTest(adresse=adresse):
-                t = web.conseil_page_javascript(adresse)
+                t = web.javascript_page_advice(adresse)
                 self.assertIn("Reddit refuse", t)
                 self.assertIn("je n'essaie pas de passer outre", t)
-        self.assertNotIn("Reddit", web.conseil_page_javascript("https://notreddit.com/x"), "un autre domaine n'est pas Reddit")
-        self.assertNotIn("Reddit", web.conseil_page_javascript("https://exemple.org/reddit.com"))
+        self.assertNotIn("Reddit", web.javascript_page_advice("https://notreddit.com/x"), "un autre domaine n'est pas Reddit")
+        self.assertNotIn("Reddit", web.javascript_page_advice("https://exemple.org/reddit.com"))
 
 
 if __name__ == "__main__":

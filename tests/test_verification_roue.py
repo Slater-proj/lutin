@@ -37,16 +37,16 @@ def http(statut, texte=""):
 class SommesAttendues(unittest.TestCase):
     def test_lecture_du_format_sha256sum(self):
         texte = "{}  lutin-1.2.3-py3-none-any.whl\n{} *lutin-1.2.3.tar.gz\nbidule\n".format(SOMME, "a" * 64)
-        self.assertEqual(m.somme_attendue(texte, "lutin-1.2.3-py3-none-any.whl"), SOMME)
-        self.assertEqual(m.somme_attendue(texte, "lutin-1.2.3.tar.gz"), "a" * 64, "le mode binaire « * » est accepté")
-        self.assertIsNone(m.somme_attendue(texte, "autre.whl"))
-        self.assertIsNone(m.somme_attendue(texte.upper().replace(SOMME.upper(), "ZZ"), "x"))
+        self.assertEqual(m.expected_digest(texte, "lutin-1.2.3-py3-none-any.whl"), SOMME)
+        self.assertEqual(m.expected_digest(texte, "lutin-1.2.3.tar.gz"), "a" * 64, "le mode binaire « * » est accepté")
+        self.assertIsNone(m.expected_digest(texte, "autre.whl"))
+        self.assertIsNone(m.expected_digest(texte.upper().replace(SOMME.upper(), "ZZ"), "x"))
 
 
 class Telechargement(unittest.TestCase):
     def appeler(self, statut, texte, donnees=CONTENU, url=URL):
         with tempfile.TemporaryDirectory() as d:
-            res = m.telecharger_roue_verifiee(url, d, http=http(statut, texte), ouvrir=lambda req, timeout=0: Flux(donnees), pauses=())
+            res = m.download_verified_wheel(url, d, http=http(statut, texte), ouvrir=lambda req, timeout=0: Flux(donnees), pauses=())
             return res[1], res[0].read_bytes() if res[0].exists() else None
 
     def test_somme_correcte(self):
@@ -56,13 +56,13 @@ class Telechargement(unittest.TestCase):
 
     def test_somme_fausse_refusee_et_fichier_supprime(self):
         with tempfile.TemporaryDirectory() as d:
-            with self.assertRaises(m.ErreurVerification) as e:
-                m.telecharger_roue_verifiee(URL, d, http=http(200, "{}  lutin-1.2.3-py3-none-any.whl".format("0" * 64)), ouvrir=lambda req, timeout=0: Flux(CONTENU))
+            with self.assertRaises(m.VerificationError) as e:
+                m.download_verified_wheel(URL, d, http=http(200, "{}  lutin-1.2.3-py3-none-any.whl".format("0" * 64)), ouvrir=lambda req, timeout=0: Flux(CONTENU))
             self.assertIn("SHA-256", str(e.exception))
             self.assertEqual(list(Path(d).iterdir()), [], "la roue douteuse ne reste pas sur le disque")
 
     def test_fichier_absent_de_la_liste_refuse(self):
-        with self.assertRaises(m.ErreurVerification):
+        with self.assertRaises(m.VerificationError):
             self.appeler(200, "{}  autre-chose.whl\n".format(SOMME))
 
     def test_publication_sans_sommes_signalee_mais_acceptee(self):
@@ -71,7 +71,7 @@ class Telechargement(unittest.TestCase):
         self.assertEqual(octets, CONTENU)
 
     def test_autre_erreur_http_refusee(self):
-        with self.assertRaises(m.ErreurVerification):
+        with self.assertRaises(m.VerificationError):
             self.appeler(403, "")
 
     def test_une_panne_passagere_de_github_est_patientee_puis_la_mise_a_jour_continue(self):
@@ -82,15 +82,15 @@ class Telechargement(unittest.TestCase):
             appels.append(url)
             return reponses.pop(0)
         with tempfile.TemporaryDirectory() as d, mock.patch.object(m.time, "sleep") as dormir:
-            chemin, verifie = m.telecharger_roue_verifiee(URL, d, http=http_instable, ouvrir=lambda req, timeout=0: Flux(CONTENU))
+            chemin, verifie = m.download_verified_wheel(URL, d, http=http_instable, ouvrir=lambda req, timeout=0: Flux(CONTENU))
             self.assertTrue(verifie, "la somme est bien lue puis vérifiée : patienter ne dispense jamais de vérifier")
             self.assertEqual(chemin.read_bytes(), CONTENU)
         self.assertEqual(len(appels), 3)
         self.assertEqual([c.args[0] for c in dormir.call_args_list], [2, 5])
 
     def test_github_toujours_en_panne_refuse_avec_un_message_clair_et_rien_n_est_installe(self):
-        with tempfile.TemporaryDirectory() as d, mock.patch.object(m.time, "sleep"), self.assertRaises(m.ErreurVerification) as e:
-            m.telecharger_roue_verifiee(URL, d, http=http(504, ""), ouvrir=lambda req, timeout=0: self.fail("ne doit pas télécharger sans somme"))
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(m.time, "sleep"), self.assertRaises(m.VerificationError) as e:
+            m.download_verified_wheel(URL, d, http=http(504, ""), ouvrir=lambda req, timeout=0: self.fail("ne doit pas télécharger sans somme"))
         self.assertIn("momentanément indisponible", str(e.exception))
         self.assertIn("504", str(e.exception))
 
@@ -103,25 +103,25 @@ class Telechargement(unittest.TestCase):
                 raise OSError("connexion coupée")
             return Flux(CONTENU)
         with tempfile.TemporaryDirectory() as d, mock.patch.object(m.time, "sleep"):
-            chemin, verifie = m.telecharger_roue_verifiee(URL, d, http=http(200, "{}  lutin-1.2.3-py3-none-any.whl\n".format(SOMME)), ouvrir=ouvrir)
+            chemin, verifie = m.download_verified_wheel(URL, d, http=http(200, "{}  lutin-1.2.3-py3-none-any.whl\n".format(SOMME)), ouvrir=ouvrir)
             self.assertTrue(verifie)
             self.assertEqual(chemin.read_bytes(), CONTENU)
         self.assertEqual(len(essais), 2)
 
     def test_adresses_et_noms_inattendus_refuses(self):
         for url in ("http://github.com/x/lutin-1.2.3-py3-none-any.whl", "https://github.com/x/pas-lutin.whl", "https://github.com/x/lutin-1.2.3-py3-none-any.whl;rm", "https://github.com/x/../lutin-1.0.0.tar.gz"):
-            with self.subTest(url=url), self.assertRaises(m.ErreurVerification):
+            with self.subTest(url=url), self.assertRaises(m.VerificationError):
                 self.appeler(200, "", url=url)
 
     def test_roue_anormalement_grosse_refusee(self):
-        with mock.patch.object(m, "MAX_SIZE_WHEEL", 1000), self.assertRaises(m.ErreurVerification):
+        with mock.patch.object(m, "MAX_SIZE_WHEEL", 1000), self.assertRaises(m.VerificationError):
             self.appeler(200, "{}  lutin-1.2.3-py3-none-any.whl".format(SOMME))
 
     def test_reseau_absent_est_une_oserror(self):
         def coupe(*a, **k):
             raise OSError("pas de réseau")
         with tempfile.TemporaryDirectory() as d, self.assertRaises(OSError):
-            m.telecharger_roue_verifiee(URL, d, http=coupe, pauses=())
+            m.download_verified_wheel(URL, d, http=coupe, pauses=())
 
 
 class DansLaMiseAJour(unittest.TestCase):
@@ -129,10 +129,10 @@ class DansLaMiseAJour(unittest.TestCase):
         appels = []
         sorties, erreurs = [], []
         with mock.patch.object(cli.config, "read_source", lambda: "github:Slater-proj/lutin"), mock.patch.object(cli, "__version__", "1.0.0"), \
-                mock.patch.object(cli.updates, "derniere_release", lambda depot: ("1.2.3", URL)), mock.patch.object(cli, "sauvegarde_avant_mise_a_jour", lambda dire=None: None), \
-                mock.patch.object(cli.updates, "telecharger_roue_verifiee", side_effect=m.ErreurVerification("somme fausse")), \
+                mock.patch.object(cli.updates, "latest_release", lambda depot: ("1.2.3", URL)), mock.patch.object(cli, "backup_before_update", lambda dire=None: None), \
+                mock.patch.object(cli.updates, "download_verified_wheel", side_effect=m.VerificationError("somme fausse")), \
                 mock.patch.object(cli.subprocess, "run", lambda c, **k: appels.append(c)):
-            code, avant, apres = cli.mise_a_jour_detaillee(dire=sorties.append, erreur=erreurs.append)
+            code, avant, apres = cli.detailed_update(dire=sorties.append, erreur=erreurs.append)
         self.assertEqual((code, apres, appels), (1, None, []), "pip n'est jamais lancé")
         self.assertTrue(any("somme fausse" in e for e in erreurs))
 

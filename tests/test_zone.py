@@ -43,11 +43,11 @@ class Serveur(unittest.TestCase):
             self.assertIn("--no-browser", popen.call_args[0][0], "les relances n'ouvrent pas le navigateur une deuxième fois")
 
     def test_redemarrer_rend_le_code_de_redemarrage_du_superviseur(self):
-        from lutin.cli import CODE_REDEMARRAGE
+        from lutin.cli import RESTART_CODE
         s = zone.Serveur(self.dossiers)
         s.redemarrage = True
         with mock.patch.object(zone.subprocess, "Popen", return_value=Enfant(1)):
-            self.assertEqual(s.lancer(False), CODE_REDEMARRAGE, "le superviseur relance sans compter une panne")
+            self.assertEqual(s.lancer(False), RESTART_CODE, "le superviseur relance sans compter une panne")
         self.assertFalse(s.redemarrage, "le drapeau est remis à zéro")
 
     def test_redemarrer_arrete_le_serveur_en_cours(self):
@@ -107,7 +107,7 @@ class PremiereUtilisation(unittest.TestCase):
     def test_la_configuration_de_base_ne_pose_aucune_question(self):
         """« lutin setup --yes --no-models --no-ollama » va au bout sans clavier, et n'installe ni moteur ni modèle."""
         from lutin import cli
-        args = cli.parseur().parse_args(zone.PREMIERE_CONFIGURATION)
+        args = cli.parser().parse_args(zone.PREMIERE_CONFIGURATION)
         self.assertTrue(args.oui and args.sans_modeles and args.sans_ollama)
 
     def test_python_console_prefere_python_exe_a_pythonw(self):
@@ -200,17 +200,17 @@ class MenuEtFenetre(unittest.TestCase):
         from lutin import cli
         z, _ = self.zone()
         z.hwnd = 1
-        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.2", "0.6.3")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter") as quitte:
+        with mock.patch.object(cli, "detailed_update", return_value=(0, "0.6.2", "0.6.3")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter") as quitte:
             z.mettre_a_jour()
         relance.assert_called_once()
         quitte.assert_called_once()
         boite.assert_called_once()
         # rien à installer ou échec : on ne quitte pas
-        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.3", None)), mock.patch.object(zone, "message"),                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter") as quitte:
+        with mock.patch.object(cli, "detailed_update", return_value=(0, "0.6.3", None)), mock.patch.object(zone, "message"),                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter") as quitte:
             z.mettre_a_jour()
         relance.assert_not_called()
         quitte.assert_not_called()
-        with mock.patch.object(cli, "mise_a_jour_detaillee", side_effect=OSError("pip absent")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter"):
+        with mock.patch.object(cli, "detailed_update", side_effect=OSError("pip absent")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter"):
             z.mettre_a_jour()
         relance.assert_not_called()
         self.assertIn("pip absent", boite.call_args[0][1], "l'erreur est dite dans la fenêtre")

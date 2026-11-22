@@ -247,12 +247,12 @@ class Modeles(Base):
 
 class Versions(Base):
     def test_la_derniere_version_de_la_bibliotheque_et_le_dernier_commit_se_lisent(self):
-        self.assertEqual(X.derniere_version_lib(http("x", "v1.7.0")), "1.7.0")
-        self.assertEqual(X.dernier_commit(http("b" * 40)), "b" * 40)
+        self.assertEqual(X.latest_lib_version(http("x", "v1.7.0")), "1.7.0")
+        self.assertEqual(X.latest_commit(http("b" * 40)), "b" * 40)
         with self.assertRaises(ValueError):
-            X.derniere_version_lib(http("x", "nimporte quoi"))
+            X.latest_lib_version(http("x", "nimporte quoi"))
         with self.assertRaises(ValueError):
-            X.dernier_commit(http("pas un sha"))
+            X.latest_commit(http("pas un sha"))
 
     def test_la_mise_a_jour_est_proposee_seulement_si_une_version_plus_recente_est_publiee(self):
         class Fausse:
@@ -261,7 +261,7 @@ class Versions(Base):
 
             def version(self):
                 return "1.6.6"
-        with mock.patch.object(X, "derniere_version_lib", lambda *a, **k: "1.7.0"):
+        with mock.patch.object(X, "latest_lib_version", lambda *a, **k: "1.7.0"):
             self.assertEqual(engine_updates._latest_exllamav3(Fausse()), ("1.6.6", "1.7.0"))
             self.assertTrue(engine_updates.latest("1.7.0", "1.6.6"))
             self.assertFalse(engine_updates.latest("1.6.6", "1.6.6"))

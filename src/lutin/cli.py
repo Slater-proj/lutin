@@ -34,20 +34,20 @@ HELP_GENERAL = """Lutin : un assistant IA local qui choisit les modèles adapté
 """
 
 # Codes de sortie d'un arrêt voulu (Ctrl+C, arrêt demandé) : pas de relance automatique.
-SORTIES_VOULUES = {0, 130, -2, -15, 3221225786, -1073741510}
-CODE_REDEMARRAGE = 75          # « relance-moi » demandé depuis la page (voir lutin.access) : relance immédiate, ce n'est pas une panne
+NORMAL_EXITS = {0, 130, -2, -15, 3221225786, -1073741510}
+RESTART_CODE = 75          # « relance-moi » demandé depuis la page (voir lutin.access) : relance immédiate, ce n'est pas une panne
 
 
-def superviser(lancer, attendre=time.sleep, horloge=time.time, maximum=5, fenetre=600, delai=3, ecrire=print):
+def supervise(lancer, attendre=time.sleep, horloge=time.time, maximum=5, fenetre=600, delai=3, ecrire=print):
     """Relance le serveur s'il s'arrête sur une erreur (au plus `maximum` fois par `fenetre` secondes), jamais s'il a été arrêté volontairement.
     `lancer(premiere_fois)` exécute le serveur et renvoie son code de sortie."""
     pannes, premiere = [], True
     while True:
         code = lancer(premiere)
         premiere = False
-        if code in SORTIES_VOULUES:
+        if code in NORMAL_EXITS:
             return 0
-        if code == CODE_REDEMARRAGE:
+        if code == RESTART_CODE:
             ecrire(_t("Redémarrage demandé : Lutin se relance."))
             continue
         maintenant = horloge()
@@ -59,7 +59,7 @@ def superviser(lancer, attendre=time.sleep, horloge=time.time, maximum=5, fenetr
         attendre(delai)
 
 
-def valeurs(table):
+def values(table):
     """Un choix qui accepte l'anglais (le nom officiel, montré dans l'aide) ET le français (l'ancien nom, toujours accepté). `table` : {valeur interne (français): (nom anglais, autres noms…)}.
     Renvoie (fonction de conversion pour `type=`, texte d'aide pour `metavar=`) ; le programme continue de travailler avec les valeurs internes."""
     connus = {}
@@ -77,20 +77,20 @@ def valeurs(table):
 
 
 # Chaque commande a un NOM ANGLAIS officiel et garde son ancien nom français comme alias : rien de ce qui est écrit dans un script ou une documentation d'avant ne casse.
-ALIAS_COMMANDES = {"models": "modeles", "devices": "appareils", "security": "securite", "workspaces": "travaux", "log": "journal", "bench-engines": "bench-moteurs", "backup": "sauvegarde",
+COMMAND_ALIASES = {"models": "modeles", "devices": "appareils", "security": "securite", "workspaces": "travaux", "log": "journal", "bench-engines": "bench-moteurs", "backup": "sauvegarde",
                    "restore": "restaurer", "offline": "hors-ligne", "autostart": "demarrage-auto", "migrate": "reprendre", "import-project": "importer", "language": "langue", "engine-trial": "essai-moteur",
                    "export": "exporter"}
 
 
-def parseur():
+def parser():
     p = argparse.ArgumentParser(prog="lutin", description=_t(HELP_GENERAL), formatter_class=argparse.RawDescriptionHelpFormatter, epilog=_t("« lutin <commande> --help » détaille chaque commande."))
     p.add_argument("--version", action="version", version="Lutin " + __version__)
     sp = p.add_subparsers(dest="commande", metavar="<command>")
 
     def commande(nom, **kw):
-        ancien = ALIAS_COMMANDES.get(nom)
+        ancien = COMMAND_ALIASES.get(nom)
         return sp.add_parser(nom, aliases=[ancien] if ancien else [], **kw)
-    niveaux, mv_niveaux = valeurs({"local": ("local",), "reseau": ("network", "lan"), "proxy": ("proxy",)})
+    niveaux, mv_niveaux = values({"local": ("local",), "reseau": ("network", "lan"), "proxy": ("proxy",)})
     s = commande("setup", help=_t("installation guidée"))
     s.add_argument("--yes", "--oui", dest="oui", action="store_true", help=_t("ne rien demander : valeurs conseillées ou options données"))
     s.add_argument("--level", "--niveau", dest="niveau", type=niveaux, metavar=mv_niveaux)
@@ -114,27 +114,27 @@ def parseur():
     u.add_argument("--rollback-to", "--revenir-a", dest="revenir_a", metavar="X.Y.Z", help=_t("réinstaller une version publiée (retour arrière), après une sauvegarde de tes données"))
     c = commande("chat", help=_t("discuter dans le terminal"))
     c.add_argument("message", nargs="*", help=_t("un message à envoyer tout de suite (sinon, mode interactif)"))
-    actions_modeles, mv_modeles = valeurs({"recommander": ("recommend", "suggest"), "lister": ("list",), "installer": ("install",), "supprimer": ("delete", "remove"), "maj": ("update",)})
+    actions_modeles, mv_modeles = values({"recommander": ("recommend", "suggest"), "lister": ("list",), "installer": ("install",), "supprimer": ("delete", "remove"), "maj": ("update",)})
     m = commande("models", help=_t("modèles"))
     m.add_argument("action", nargs="?", type=actions_modeles, metavar=mv_modeles, default="recommander")
     m.add_argument("modele", nargs="?", metavar="model")
     m.add_argument("--advanced", "--avance", dest="avance", action="store_true", help=_t("inclure les modèles avancés (sans filtre)"))
     m.add_argument("--engine", "--moteur", dest="moteur", default="", help=_t("recommander pour ce moteur (ollama, llamacpp…) : seuls les modèles qu'il sait faire tourner sont proposés"))
     commande("pin", help=_t("nouveau code PIN"))
-    actions_appareils, mv_appareils = valeurs({"lister": ("list",), "revoquer": ("revoke",)})
+    actions_appareils, mv_appareils = values({"lister": ("list",), "revoquer": ("revoke",)})
     a = commande("devices", help=_t("appareils connectés"))
     a.add_argument("action", nargs="?", type=actions_appareils, metavar=mv_appareils, default="lister")
     a.add_argument("id", nargs="?")
     se = commande("security", help=_t("niveau d'accès et administration à distance"))
     se.add_argument("--remote-admin", "--admin-distance", dest="admin_distance", choices=("on", "off"), help=_t("ouvre (on) ou ferme (off) la configuration depuis la page aux appareils déjà connectés"))
-    actions_travaux, mv_travaux = valeurs({"lister": ("list",), "ajouter": ("add",), "retirer": ("remove",), "actif": ("active",)})
+    actions_travaux, mv_travaux = values({"lister": ("list",), "ajouter": ("add",), "retirer": ("remove",), "actif": ("active",)})
     tr = commande("workspaces", help=_t("dossiers de travail"))
     tr.add_argument("action", nargs="?", type=actions_travaux, metavar=mv_travaux, default="lister")
     tr.add_argument("valeur", nargs="?", metavar="value", help=_t("chemin (ajouter) ou identifiant (retirer, actif)"))
     tr.add_argument("--name", "--nom", dest="nom", default="", help=_t("nom affiché (ajouter)"))
     jo = commande("log", help=_t("journal des actions"))
     jo.add_argument("-n", type=int, default=30, help=_t("nombre d'actions affichées (30)"))
-    modes_banc, mv_modes = valeurs({"rapide": ("fast", "quick"), "approfondi": ("deep", "thorough")})
+    modes_banc, mv_modes = values({"rapide": ("fast", "quick"), "approfondi": ("deep", "thorough")})
     bm = commande("bench-engines", help=_t("compare les moteurs (Ollama, llama.cpp) sur le même modèle"))
     bm.add_argument("modele", nargs="?", metavar="model", help=_t("modèle à mesurer (défaut : le modèle principal) ; il doit exister sur chaque moteur comparé"))
     bm.add_argument("--mode", type=modes_banc, metavar=mv_modes, default="rapide", help=_t("rapide (environ 1 minute) ou approfondi (environ 5 minutes)"))
@@ -150,20 +150,20 @@ def parseur():
     re_.add_argument("fichier", metavar="file")
     re_.add_argument("--yes", "--oui", dest="oui", action="store_true", help=_t("ne pas demander de confirmation"))
     re_.add_argument("--force", "--forcer", dest="forcer", action="store_true", help=_t("restaurer même si Lutin tourne (déconseillé)"))
-    etats_hl, mv_hl = valeurs({"oui": ("on", "yes", "true"), "non": ("off", "no", "false"), "etat": ("status",)})
+    etats_hl, mv_hl = values({"oui": ("on", "yes", "true"), "non": ("off", "no", "false"), "etat": ("status",)})
     hl = commande("offline", help=_t("mode hors ligne strict (aucune connexion vers Internet)"))
     hl.add_argument("etat", nargs="?", type=etats_hl, metavar=mv_hl, default="etat")
     commande("doctor", help=_t("diagnostic"))
     ex = commande("export", help=_t("écrire tes conversations en fichiers JSON de la version 0.x (retour arrière, lecture seule)"))
     ex.add_argument("--conversations", action="store_true", help=_t("les conversations de la base (seul export possible pour l'instant)"))
     ex.add_argument("dossier", nargs="?", metavar="folder", help=_t("dossier de destination (défaut : lutin-conversations-<date>)"))
-    actions_colibri, mv_colibri = valeurs({"etat": ("status",), "installer": ("install",), "demarrer": ("start",), "arreter": ("stop",)})
+    actions_colibri, mv_colibri = values({"etat": ("status",), "installer": ("install",), "demarrer": ("start",), "arreter": ("stop",)})
     co = commande("colibri", help=_t("Colibri (moteur expérimental) : installer avec somme vérifiée, démarrer, arrêter"))
     co.add_argument("action", nargs="?", type=actions_colibri, metavar=mv_colibri, default="etat")
     co.add_argument("--model", "--modele", dest="modele", help=_t("dossier de modèle préparé par Colibri (pour « demarrer »)"))
     co.add_argument("--port", type=int, default=8000, help=_t("port local (8000 par défaut)"))
     co.add_argument("--version", dest="version_colibri", help=_t("version à installer (la dernière par défaut)"))
-    actions_auto, mv_auto = valeurs({"etat": ("status",), "installer": ("install", "enable"), "retirer": ("remove", "disable")})
+    actions_auto, mv_auto = values({"etat": ("status",), "installer": ("install", "enable"), "retirer": ("remove", "disable")})
     da = commande("autostart", help=_t("démarrer Lutin à l'ouverture de ta session (Windows : clé « Run » de ta session, Linux : systemd)"))
     da.add_argument("action", nargs="?", type=actions_auto, metavar=mv_auto, default="etat")
     rp = commande("migrate", help=_t("reprendre les données d'un autre assistant (conversations, mémoire, skills, réglages)"))
@@ -195,7 +195,7 @@ def parseur():
     em.add_argument("--ctx", type=int, default=8192, help=_t("taille de la fenêtre de contexte"))
     em.add_argument("--variant", "--variante", dest="variante", choices=("auto", "cuda", "vulkan", "cpu"), help=_t("version du programme à installer (auto : d'après la carte graphique)"))
     em.add_argument("--folder", "--dossier", dest="dossier", help=_t("dossier d'installation et de modèles (par défaut : à côté de celui d'Ollama s'il a été déplacé, sinon le dossier de Lutin)"))
-    actions_mcp, mv_mcp = valeurs({"lister": ("list",), "ajouter": ("add",), "retirer": ("remove",), "actualiser": ("refresh",), "autoriser": ("allow",), "interdire": ("deny",), "ecriture": ("write",)})
+    actions_mcp, mv_mcp = values({"lister": ("list",), "ajouter": ("add",), "retirer": ("remove",), "actualiser": ("refresh",), "autoriser": ("allow",), "interdire": ("deny",), "ecriture": ("write",)})
     mc = commande("mcp", help=_t("connecteurs MCP (serveurs d'outils)"))
     mc.add_argument("action", nargs="?", type=actions_mcp, metavar=mv_mcp, default="lister")
     mc.add_argument("nom", nargs="?", metavar="name", help=_t("nom du connecteur"))
@@ -225,7 +225,7 @@ def command_setup(args, es=None):
     return 0
 
 
-def lancer_enfant(sans_navigateur):
+def start_child(sans_navigateur):
     """Exécute `lutin serve --no-supervisor` dans un processus séparé et renvoie son code ; s'il faut s'arrêter, le processus enfant s'arrête avec nous."""
     commande = [sys.executable, "-m", "lutin", "serve", "--no-supervisor"] + (["--no-browser"] if sans_navigateur else [])
     enfant = subprocess.Popen(commande, env=dict(os.environ, LUTIN_SUPERVISE="1"))
@@ -243,13 +243,13 @@ def lancer_enfant(sans_navigateur):
             enfant.kill()
 
 
-def commande_zone(args):
+def command_tray(args):
     from . import tray
     d, cfg = context()
     return tray.commande(d, cfg, ouvrir=not getattr(args, "no_browser", False))
 
 
-def commande_serve(args):
+def command_serve(args):
     from . import startup
     d, cfg = context()
     if not cfg["installe"]:
@@ -262,13 +262,13 @@ def commande_serve(args):
     if getattr(args, "sans_superviseur", False):
         startup.start_server(cfg, d, ouvrir_navigateur=not sans_navigateur)
         return 0
-    return superviser(lambda premiere: lancer_enfant(sans_navigateur or not premiere))          # le navigateur ne s'ouvre qu'au premier démarrage, pas à chaque relance
+    return supervise(lambda premiere: start_child(sans_navigateur or not premiere))          # le navigateur ne s'ouvre qu'au premier démarrage, pas à chaque relance
 
 
-AVANT_MAJ_GARDEES = 3
+KEPT_PRE_UPDATE_BACKUPS = 3
 
 
-def sauvegarde_avant_mise_a_jour(dire=print):
+def backup_before_update(dire=print):
     """Une sauvegarde des données avant de changer de version : on ne perd rien si la nouvelle version se comporte mal (voir « lutin restore »). Les trois dernières sont gardées.
     Ne bloque jamais la mise à jour : si la sauvegarde échoue, on le dit et on continue. Renvoie le chemin du fichier, ou None."""
     try:
@@ -276,7 +276,7 @@ def sauvegarde_avant_mise_a_jour(dire=print):
         dossier.mkdir(parents=True, exist_ok=True)
         fichier = dossier / "lutin-{}-{}.zip".format(__version__, time.strftime("%Y%m%d-%H%M%S"))
         backup.export(config.folders(), fichier)
-        for ancien in sorted(dossier.glob("lutin-*.zip"), key=lambda p: p.stat().st_mtime)[:-AVANT_MAJ_GARDEES]:
+        for ancien in sorted(dossier.glob("lutin-*.zip"), key=lambda p: p.stat().st_mtime)[:-KEPT_PRE_UPDATE_BACKUPS]:
             ancien.unlink(missing_ok=True)
         dire(_t("Sauvegarde de tes données avant la mise à jour : {}").format(fichier))
         return fichier
@@ -285,7 +285,7 @@ def sauvegarde_avant_mise_a_jour(dire=print):
         return None
 
 
-def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=None):
+def detailed_update(dire=print, erreur=None, capturer=False, revenir_a=None):
     """Met Lutin à jour d'après la source mémorisée à l'installation : « github:propriétaire/dépôt » (dernière publication, comparée à la version installée) ou une adresse / une roue
     donnée à pip. Ne fait rien si Lutin est déjà à jour. `dire` / `erreur` : où vont les messages (la console par défaut, la page ou l'icône ailleurs) ; `capturer` : cache la sortie de pip.
     `revenir_a` : un numéro de version publiée (« 0.22.0 ») à réinstaller à la place de la dernière (retour arrière).
@@ -300,7 +300,7 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
             erreur(_t("✘ Le retour à une version précise n'est possible que pour une installation faite depuis GitHub."))
             return 1, __version__, None
         try:
-            version, source = updates.roue_de_version(revenir_a, source[len("github:"):])
+            version, source = updates.wheel_of_version(revenir_a, source[len("github:"):])
         except ValueError as e:
             erreur("✘ " + str(e))
             return 1, __version__, None
@@ -308,22 +308,22 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
             dire(_t("Lutin est déjà en version {}.").format(version))
             return 0, __version__, None
     elif source.startswith("github:"):
-        version, roue = updates.derniere_release(source[len("github:"):])
+        version, roue = updates.latest_release(source[len("github:"):])
         if not roue:
             erreur(_t("✘ Impossible de lire la dernière version de Lutin sur GitHub (pas d'internet, ou aucune publication)."))
             return 1, __version__, None
-        if not updates.plus_recente(version, __version__):
+        if not updates.newer(version, __version__):
             dire(_t("Lutin est déjà à jour ({}).").format(__version__))
             return 0, __version__, None
         source = roue
     avant = __version__
     verifier = source.startswith("https://github.com/") and source.endswith(".whl")          # une publication de GitHub : sa somme est vérifiée ; une source choisie à la main (chemin, autre adresse) l'est par son auteur
-    sauvegarde_avant_mise_a_jour(dire)
+    backup_before_update(dire)
     with tempfile.TemporaryDirectory(prefix="lutin-maj-") as dossier:
         if verifier:
             try:
-                chemin, verifie = updates.telecharger_roue_verifiee(source, dossier)
-            except updates.ErreurVerification as e:
+                chemin, verifie = updates.download_verified_wheel(source, dossier)
+            except updates.VerificationError as e:
                 erreur("✘ " + str(e))
                 return 1, avant, None
             except OSError as e:
@@ -343,8 +343,8 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
     return 0, avant, apres
 
 
-def mettre_a_jour_lutin(revenir_a=None):
-    return mise_a_jour_detaillee(revenir_a=revenir_a)[0]
+def update_lutin(revenir_a=None):
+    return detailed_update(revenir_a=revenir_a)[0]
 
 
 def command_update(args):
@@ -354,9 +354,9 @@ def command_update(args):
     if (args.app or tout) and offline.is_active(Path(config.folders()["config"]) / "config.json"):
         print(_t("Mode hors ligne strict : Lutin n'est pas mis à jour (lutin offline off pour le permettre)."))
     elif getattr(args, "revenir_a", None):
-        code = mettre_a_jour_lutin(args.revenir_a)
+        code = update_lutin(args.revenir_a)
     elif args.app or tout:
-        code = mettre_a_jour_lutin()
+        code = update_lutin()
     if args.modeles or tout:
         d, cfg = context()
         r = updates.check(hardware.detecter(), cfg, d, ollama_client.Ollama(), force=True)
@@ -368,7 +368,7 @@ def command_update(args):
     return code
 
 
-def client_pret():
+def ready_client():
     d, _ = context()
     c = client.ClientLocal(d["donnees"])
     if not c.disponible():
@@ -377,8 +377,8 @@ def client_pret():
     return c
 
 
-def commande_chat(args):
-    c = client_pret()
+def command_chat(args):
+    c = ready_client()
     if not c:
         return 1
     t = terminal_chat.Terminal(c)
@@ -456,7 +456,7 @@ def command_models(args):
 
 
 def command_pin(args):
-    c = client_pret()
+    c = ready_client()
     if not c:
         return 1
     try:
@@ -469,7 +469,7 @@ def command_pin(args):
 
 
 def command_devices(args):
-    c = client_pret()
+    c = ready_client()
     if not c:
         return 1
     try:
@@ -488,7 +488,7 @@ def command_devices(args):
     return 0
 
 
-def commande_hors_ligne(args):
+def command_offline(args):
     d, _ = context()
     chemin = Path(d["config"]) / "config.json"
     if args.etat != "etat":
@@ -528,7 +528,7 @@ def command_works(args):
     return 0
 
 
-def commande_bench_moteurs(args):
+def command_bench_engines(args):
     """Compare les moteurs disponibles (Ollama, llama.cpp) sur le même modèle et conserve un résultat lisible et partageable (voir engine_bench.py)."""
     d, cfg = context()
     os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
@@ -574,7 +574,7 @@ def command_trial_engine(args):
     return 0 if resultat["reussi"] else 1
 
 
-def commande_mcp(args):
+def command_mcp(args):
     """Les connecteurs MCP en ligne de commande (utile dans Docker, où la page ne peut pas les modifier)."""
     d, cfg = context()
     actif = workspaces.active(cfg)          # le moteur lit ces dossiers à l'import : on les fixe sans rien créer (ni dossier de travail, ni réglage)
@@ -632,7 +632,7 @@ def command_log(args):
     return 0
 
 
-def commande_bench(args):
+def command_bench(args):
     d, cfg = context()
     if getattr(args, "moteur", "ollama") != "ollama":          # le banc ne dépend pas d'Ollama : n'importe quel moteur de Lutin se mesure de la même façon
         os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
@@ -730,7 +730,7 @@ def command_security(args):
     return 0
 
 
-def commande_reprendre(args, entree=input):
+def command_takeover(args, entree=input):
     """Reprend les données d'un autre assistant, au choix. Rien n'est écrasé sans --overwrite ; l'état actuel de Lutin est gardé dans un zip avant."""
     d, cfg = context()
     try:
@@ -764,7 +764,7 @@ def commande_reprendre(args, entree=input):
     return 0
 
 
-def commande_importer(args, entree=input):
+def command_import(args, entree=input):
     """Reprend un projet Claude : ce que Lutin y trouve, puis « travailler dedans » ou « en faire une copie » (copie par défaut : l'original reste intact)."""
     d, cfg = context()
     source = Path(args.chemin).expanduser()
@@ -805,7 +805,7 @@ def commande_importer(args, entree=input):
     return 0
 
 
-NOMS_LANGUES = {"fr": "Français", "en": "English"}
+LANGUAGE_NAMES = {"fr": "Français", "en": "English"}
 
 
 def command_language(args):
@@ -818,7 +818,7 @@ def command_language(args):
         except ValueError as e:
             print("✘ " + str(e), file=sys.stderr)
             return 2
-    print(_t("Langue : {}").format(NOMS_LANGUES[i18n.language()]))
+    print(_t("Langue : {}").format(LANGUAGE_NAMES[i18n.language()]))
     imposee = os.environ.get("LUTIN_LANGUE", "").strip().lower()
     if imposee in i18n.LANGUAGES:
         print(_t("La variable LUTIN_LANGUE ({}) l'emporte sur ce réglage.").format(imposee))
@@ -851,7 +851,7 @@ def diagnostic(cfg, dossiers, profil, ollama):
     return lignes
 
 
-def commande_demarrage_auto(args):
+def command_autostart(args):
     from . import power
     try:
         e = power.install_startup() if args.action == "installer" else power.remove_startup() if args.action == "retirer" else power.startup_state()
@@ -940,7 +940,7 @@ def diagnostic_base(dossier_donnees):
     return lignes
 
 
-def commande_doctor(args):
+def command_doctor(args):
     d, cfg = context()
     from . import docker_doctor
     for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + diagnostic_base(d["donnees"]) + docker_doctor.diagnose():
@@ -957,21 +957,24 @@ def utf8():
             pass
 
 
-def principal(argv=None):
+def main(argv=None):
     utf8()
-    args = parseur().parse_args(argv)
+    args = parser().parse_args(argv)
     os.environ["LUTIN_CONFIG"] = str(Path(config.folders()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
-    commandes = {"setup": command_setup, "serve": commande_serve, "update": command_update, "chat": commande_chat, "modeles": command_models, "pin": command_pin,
-                 "appareils": command_devices, "securite": command_security, "langue": command_language, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": command_works, "journal": command_log, "bench": commande_bench, "sauvegarde": command_backup, "restaurer": command_restore, "doctor": commande_doctor, "exporter": command_export, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": command_trial_engine, "bench-moteurs": commande_bench_moteurs, "colibri": command_colibri}
+    commandes = {"setup": command_setup, "serve": command_serve, "update": command_update, "chat": command_chat, "modeles": command_models, "pin": command_pin,
+                 "appareils": command_devices, "securite": command_security, "langue": command_language, "importer": command_import, "reprendre": command_takeover, "hors-ligne": command_offline,
+                 "travaux": command_works, "journal": command_log, "bench": command_bench, "sauvegarde": command_backup, "restaurer": command_restore, "doctor": command_doctor, "exporter": command_export, "demarrage-auto": command_autostart, "zone": command_tray, "mcp": command_mcp, "essai-moteur": command_trial_engine, "bench-moteurs": command_bench_engines, "colibri": command_colibri}
     try:
         if args.commande is None:
-            return commande_serve(argparse.Namespace(sans_navigateur=False))
-        return commandes[ALIAS_COMMANDES.get(args.commande, args.commande)](args) or 0          # le nom anglais ou l'ancien nom français : la même commande
+            return command_serve(argparse.Namespace(sans_navigateur=False))
+        return commandes[COMMAND_ALIASES.get(args.commande, args.commande)](args) or 0          # le nom anglais ou l'ancien nom français : la même commande
     except KeyboardInterrupt:
         print()
         return 130
 
 
+principal = main          # the `lutin` console script of a version installed before 1.0 imports this name, until pip writes the new one
+
+
 if __name__ == "__main__":
-    sys.exit(principal())
+    sys.exit(main())

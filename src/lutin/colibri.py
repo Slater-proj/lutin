@@ -62,7 +62,7 @@ def latest_version(http=updates.http_get):
     except OSError as e:
         cause = str(e)
     try:          # l'API de GitHub refuse (limite de requêtes : HTTP 403) ou ne répond pas : la page publique des publications dit la même chose
-        version = (updates.version_par_page(REPO, http) or "").lstrip("v")
+        version = (updates.version_from_page(REPO, http) or "").lstrip("v")
         if RE_VERSION.match(version):
             return version
     except OSError:
@@ -125,7 +125,7 @@ def install(version=None, dossiers=None, http=updates.http_get, ouvrir=urllib.re
         url = "{}v{}/{}".format(PREFIX, version, nom)
         with tempfile.TemporaryDirectory(prefix="lutin-colibri-") as tmp:
             dire(_t("Téléchargement de {} …").format(nom))
-            archive, _ = updates.telecharger_roue_verifiee(url, tmp, http=http, ouvrir=ouvrir, nom_valide=RE_NAME, exiger_sommes=True, prefixe=PREFIX)
+            archive, _ = updates.download_verified_wheel(url, tmp, http=http, ouvrir=ouvrir, nom_valide=RE_NAME, exiger_sommes=True, prefixe=PREFIX)
             dire(_t("✔ Somme SHA-256 vérifiée."))
             partiel = base / ("v" + version + ".partiel")
             shutil.rmtree(partiel, ignore_errors=True)

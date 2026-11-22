@@ -158,7 +158,7 @@ class Serveur:
         self.redemarrage = False
 
     def lancer(self, premiere):
-        from .cli import CODE_REDEMARRAGE
+        from .cli import RESTART_CODE
         if self.arret:
             return 0
         commande = [sys.executable, "-m", "lutin", "serve", "--no-supervisor"] + ([] if premiere and self.ouvrir else ["--no-browser"])
@@ -171,7 +171,7 @@ class Serveur:
             return 0
         if self.redemarrage:
             self.redemarrage = False
-            return CODE_REDEMARRAGE
+            return RESTART_CODE
         return code
 
     def tuer(self):
@@ -287,7 +287,7 @@ class Zone:
         from . import cli
         lignes = []
         try:
-            code, _, apres = cli.mise_a_jour_detaillee(lignes.append, lignes.append, capturer=True)
+            code, _, apres = cli.detailed_update(lignes.append, lignes.append, capturer=True)
         except Exception as erreur:  # noqa: BLE001 — pas de console : la fenêtre dit ce qui s'est passé
             code, apres = 1, None
             lignes.append(str(erreur)[:300])
@@ -352,7 +352,7 @@ def commande(dossiers, cfg, ouvrir=True):
         zone = Zone(cfg, dossiers, serveur)
         zone.creer()
         from . import cli
-        threading.Thread(target=lambda: cli.superviser(serveur.lancer, ecrire=lambda t: log(dossiers, t)) or user32.PostMessageW(zone.hwnd, WM_CLOSE, 0, 0),
+        threading.Thread(target=lambda: cli.supervise(serveur.lancer, ecrire=lambda t: log(dossiers, t)) or user32.PostMessageW(zone.hwnd, WM_CLOSE, 0, 0),
                          daemon=True, name="zone-serveur").start()
         zone.boucle()
         serveur.arreter()

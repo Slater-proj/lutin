@@ -199,7 +199,7 @@ class Modeles(Base):
     def test_l_installation_annonce_ses_etapes(self):
         textes, etapes = [], []
         self.installer(dire=textes.append, etape=lambda n, total: etapes.append((n, total)))
-        self.assertEqual(etapes, [(n, X.ETAPES_INSTALLATION) for n in range(1, X.ETAPES_INSTALLATION + 1)])
+        self.assertEqual(etapes, [(n, X.INSTALL_STEPS) for n in range(1, X.INSTALL_STEPS + 1)])
         self.assertTrue(any(t.startswith("Étape 4/5") and "dépendances" in t for t in textes), textes)
         self.assertTrue(any("Successfully installed" in t for t in textes), "ce que pip dit est montré")
 

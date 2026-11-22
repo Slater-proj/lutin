@@ -338,16 +338,16 @@ def faux_http(routes):
 
 class MisesAJour(unittest.TestCase):
     def test_separer(self):
-        self.assertEqual(updates.separer("qwen3:8b"), ("library", "qwen3", "8b"))
-        self.assertEqual(updates.separer("huihui_ai/Qwen3.8-abliterated:27b"), ("huihui_ai", "Qwen3.8-abliterated", "27b"))
-        self.assertEqual(updates.separer("llama3"), ("library", "llama3", "latest"))
+        self.assertEqual(updates.split_model_name("qwen3:8b"), ("library", "qwen3", "8b"))
+        self.assertEqual(updates.split_model_name("huihui_ai/Qwen3.8-abliterated:27b"), ("huihui_ai", "Qwen3.8-abliterated", "27b"))
+        self.assertEqual(updates.split_model_name("llama3"), ("library", "llama3", "latest"))
 
     def test_digest_registre(self):
         h = faux_http({updates.REGISTRY: (200, {"docker-content-digest": "sha256:abc"}, b"{}")})
-        self.assertEqual(updates.digest_registre("qwen3:8b", h), "abc")
+        self.assertEqual(updates.registry_digest("qwen3:8b", h), "abc")
         self.assertIn("/library/qwen3/manifests/8b", h.appels[0][0])
-        self.assertIsNone(updates.digest_registre("x", faux_http({})))
-        self.assertIsNone(updates.digest_registre("x", faux_http({updates.REGISTRY: OSError("hors ligne")})))
+        self.assertIsNone(updates.registry_digest("x", faux_http({})))
+        self.assertIsNone(updates.registry_digest("x", faux_http({updates.REGISTRY: OSError("hors ligne")})))
 
     def test_detecte_une_mise_a_jour(self):
         h = faux_http({updates.REGISTRY: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
@@ -391,17 +391,17 @@ class MisesAJour(unittest.TestCase):
             nouveau["version"] += 1
             corps = json.dumps(nouveau).encode()
             h = faux_http({"https://ex.org/c.json": (200, {"etag": "v2"}, corps)})
-            self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, h), "maj")
+            self.assertEqual(updates.download_catalogue("https://ex.org/c.json", t, h), "maj")
             self.assertEqual(model_catalog.load(Path(t) / "catalogue.json")["version"], CAT["version"] + 1)
             h2 = faux_http({"https://ex.org/c.json": (304, {}, b"")})
-            self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, h2), "inchange")
+            self.assertEqual(updates.download_catalogue("https://ex.org/c.json", t, h2), "inchange")
             self.assertEqual(h2.appels[0][1].get("If-None-Match"), "v2")
-            self.assertEqual(updates.telecharger_catalogue("", t, h), "absent")
+            self.assertEqual(updates.download_catalogue("", t, h), "absent")
 
     def test_catalogue_invalide_ou_reseau_absent_jamais_applique(self):
         with tempfile.TemporaryDirectory() as t:
             for rep in ((200, {}, b"{pas du json"), (200, {}, b'{"version":1,"modeles":[{}]}'), (500, {}, b""), (200, {}, b"x" * (updates.MAX_SIZE + 1)), OSError("hors ligne")):
-                self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, faux_http({"https://ex.org/c.json": rep})), "echec")
+                self.assertEqual(updates.download_catalogue("https://ex.org/c.json", t, faux_http({"https://ex.org/c.json": rep})), "echec")
             self.assertFalse((Path(t) / "catalogue.json").exists())
 
     def test_verification_complete_limitee_a_une_fois_par_jour_et_sure_hors_ligne(self):
@@ -418,7 +418,7 @@ class MisesAJour(unittest.TestCase):
             self.assertEqual(len(hors_ligne.appels), appels, "pas de nouvelle vérification avant 24 h")
             updates.check(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0 + updates.INTERVAL_S + 1)
             self.assertGreater(len(hors_ligne.appels), appels)
-            self.assertEqual(len(updates.lire_propositions(d)["propositions"]), 1)
+            self.assertEqual(len(updates.read_proposals(d)["propositions"]), 1)
             INSTALLES.clear(); INSTALLES.update({"qwen3:8b": "aaa111"})
 
     def test_ollama_arrete_ne_leve_pas_d_exception(self):
@@ -434,24 +434,24 @@ class PublicationsGitHub(unittest.TestCase):
 
     def test_derniere_publication(self):
         h = faux_http({"https://api.github.com/repos/Slater-proj/lutin/releases/latest": (200, {}, self.CORPS)})
-        self.assertEqual(updates.derniere_release("Slater-proj/lutin", h), ("1.4.2", "https://x/lutin-1.4.2-py3-none-any.whl"))
+        self.assertEqual(updates.latest_release("Slater-proj/lutin", h), ("1.4.2", "https://x/lutin-1.4.2-py3-none-any.whl"))
         self.assertIn("application/vnd.github+json", h.appels[0][1]["Accept"])
 
     def test_pas_de_publication_reseau_absent_ou_reponse_cassee(self):
         for rep in ((404, {}, b""), (200, {}, b"{pas du json"), (200, {}, b'{"tag_name": "v1"}'), OSError("hors ligne")):
-            r = updates.derniere_release("a/b", faux_http({"https://api.github.com": rep}))
+            r = updates.latest_release("a/b", faux_http({"https://api.github.com": rep}))
             self.assertTrue(r == (None, None) or r[1] is None, rep)
 
     def test_comparaison_de_versions(self):
-        self.assertEqual(updates.numeros("1.2.3rc4+x"), (1, 2, 3))
-        self.assertEqual(updates.numeros("n'importe quoi"), ())
-        self.assertTrue(updates.plus_recente("0.10.0", "0.9.9"), "comparaison numérique, pas alphabétique")
-        self.assertTrue(updates.plus_recente("1.0.0", "0.0.0+source"))
-        self.assertTrue(updates.plus_recente("1.0.0", "illisible"))
-        self.assertFalse(updates.plus_recente("1.2.3", "1.2.3"))
-        self.assertFalse(updates.plus_recente("1.2.2", "1.2.3"), "jamais de retour en arrière")
-        self.assertFalse(updates.plus_recente("", "1.0.0"))
-        self.assertFalse(updates.plus_recente(None, "1.0.0"))
+        self.assertEqual(updates.numbers("1.2.3rc4+x"), (1, 2, 3))
+        self.assertEqual(updates.numbers("n'importe quoi"), ())
+        self.assertTrue(updates.newer("0.10.0", "0.9.9"), "comparaison numérique, pas alphabétique")
+        self.assertTrue(updates.newer("1.0.0", "0.0.0+source"))
+        self.assertTrue(updates.newer("1.0.0", "illisible"))
+        self.assertFalse(updates.newer("1.2.3", "1.2.3"))
+        self.assertFalse(updates.newer("1.2.2", "1.2.3"), "jamais de retour en arrière")
+        self.assertFalse(updates.newer("", "1.0.0"))
+        self.assertFalse(updates.newer(None, "1.0.0"))
 
 
 class Portee(unittest.TestCase):

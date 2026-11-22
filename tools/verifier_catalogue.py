@@ -17,9 +17,9 @@ def disparus(cat, http=updates.http_get):
     """[(identifiant, raison)] pour les modèles que le registre ne connaît plus."""
     manquants, incertains = [], []
     for m in cat["modeles"]:
-        espace, nom, tag = updates.separer(m["id"])
+        espace, nom, tag = updates.split_model_name(m["id"])
         try:
-            statut, _, _ = http("{}/{}/{}/manifests/{}".format(updates.REGISTRY, espace, nom, tag), {"Accept": updates.ACCEPT_MANIFESTE})
+            statut, _, _ = http("{}/{}/{}/manifests/{}".format(updates.REGISTRY, espace, nom, tag), {"Accept": updates.ACCEPT_MANIFEST})
         except OSError as e:
             incertains.append((m["id"], "réseau : {}".format(e)))
             continue

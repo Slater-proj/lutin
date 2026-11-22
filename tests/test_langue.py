@@ -249,7 +249,7 @@ class LigneDeCommandeEnAnglais(unittest.TestCase):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
             try:
-                code = cli.principal(list(argv))
+                code = cli.main(list(argv))
             except SystemExit as e:
                 code = e.code
         return code, sortie.getvalue()

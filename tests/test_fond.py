@@ -78,7 +78,7 @@ class Fond(unittest.TestCase):
 
     def tout_traiter(self, n=20):
         for _ in range(n):
-            if not background_jobs.un_pas():
+            if not background_jobs.one_step():
                 break
 
     def test_seuls_les_dossiers_de_travail_sont_permis_et_les_champs_sont_verifies(self):
@@ -118,7 +118,7 @@ class Fond(unittest.TestCase):
         self.assertIn("## a.txt", texte)
         self.assertIn("Résumé du document", texte)
         self.assertIn("2 document(s) traité(s)", texte)
-        self.assertFalse(background_jobs.un_pas(), "rien de plus à faire")
+        self.assertFalse(background_jobs.one_step(), "rien de plus à faire")
 
     def test_un_travail_a_valider_s_arrete_apres_les_premiers_documents(self):
         """Une consigne mal comprise ne doit pas gâcher tout le dossier : après les premiers documents, le travail attend que tu aies lu leurs résultats."""
@@ -130,13 +130,13 @@ class Fond(unittest.TestCase):
         background_jobs.action(t["id"], "supprimer")
         RECUES.clear()
         self.tout_traiter(50)
-        self.assertEqual(len(RECUES), background_jobs.ESSAI_DOCUMENTS, "trois documents seulement, pas les huit")
+        self.assertEqual(len(RECUES), background_jobs.TRIAL_DOCUMENTS, "trois documents seulement, pas les huit")
         p = background_jobs.progression(background_jobs.find(avec_essai["id"]))
-        self.assertEqual((p["etat"], p["faits"], p["valide"]), ("a_valider", background_jobs.ESSAI_DOCUMENTS, False))
+        self.assertEqual((p["etat"], p["faits"], p["valide"]), ("a_valider", background_jobs.TRIAL_DOCUMENTS, False))
         self.assertIn("premiers résultats", p["dernier_message"])
-        self.assertFalse(background_jobs.un_pas(), "rien ne se fait tant que tu n'as pas validé")
-        self.assertEqual(len(RECUES), background_jobs.ESSAI_DOCUMENTS)
-        self.assertTrue(background_jobs.rapport(background_jobs.find(avec_essai["id"])), "le rapport des premiers résultats se lit")
+        self.assertFalse(background_jobs.one_step(), "rien ne se fait tant que tu n'as pas validé")
+        self.assertEqual(len(RECUES), background_jobs.TRIAL_DOCUMENTS)
+        self.assertTrue(background_jobs.report(background_jobs.find(avec_essai["id"])), "le rapport des premiers résultats se lit")
         background_jobs.action(avec_essai["id"], "valider")
         self.tout_traiter(50)
         p = background_jobs.progression(background_jobs.find(avec_essai["id"]))
@@ -161,13 +161,13 @@ class Fond(unittest.TestCase):
         a.write_text("premier", encoding="utf-8")
         b.write_text("second", encoding="utf-8")
         t = self.travail(regulier=True, intervalle_h=1)
-        background_jobs.un_pas()                                                            # un seul document, puis « arrêt de Lutin »
+        background_jobs.one_step()                                                            # un seul document, puis « arrêt de Lutin »
         self.assertEqual(len(RECUES), 1)
         RECUES.clear()
         self.tout_traiter()                                                      # « redémarrage » : l'état est relu depuis le disque
         self.assertEqual(len(RECUES), 1, "le document déjà fait n'est pas refait après la reprise")
         RECUES.clear()
-        self.assertFalse(background_jobs.un_pas(), "régulier : pas avant l'intervalle")
+        self.assertFalse(background_jobs.one_step(), "régulier : pas avant l'intervalle")
         a.write_text("premier, modifié", encoding="utf-8")
         (self.docs / "c.txt").write_text("troisième", encoding="utf-8")
         e = background_jobs.read_state(t["id"])
@@ -205,12 +205,12 @@ class Fond(unittest.TestCase):
         t = self.travail()
         _m.TOURS_ACTIFS["conv-en-cours"] = threading.Event()
         try:
-            self.assertFalse(background_jobs.un_pas(), "une conversation est en cours : rien n'est traité")
+            self.assertFalse(background_jobs.one_step(), "une conversation est en cours : rien n'est traité")
             self.assertEqual(RECUES, [])
         finally:
             _m.TOURS_ACTIFS.clear()
         MODE["v"] = "lent"
-        fil = threading.Thread(target=background_jobs.un_pas)
+        fil = threading.Thread(target=background_jobs.one_step)
         fil.start()
         for _ in range(50):
             if background_jobs.ALIVE["document"]:
@@ -239,7 +239,7 @@ class Fond(unittest.TestCase):
         (self.docs / "long.txt").write_text("mot " * 100000, encoding="utf-8")
         t = self.travail()
         background_jobs.action(t["id"], "pause")
-        self.assertFalse(background_jobs.un_pas(), "en pause : rien n'est traité")
+        self.assertFalse(background_jobs.one_step(), "en pause : rien n'est traité")
         background_jobs.action(t["id"], "reprendre")
         self.tout_traiter()
         self.assertLess(len(RECUES[0]["messages"][1]["content"]), 100000, "le texte est borné à la fenêtre de contexte")

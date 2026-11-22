@@ -24,7 +24,7 @@ Depot = "https://github.com/Slater-proj/lutin"
 Signaler = "https://github.com/Slater-proj/lutin/issues"
 
 [project.scripts]
-lutin = "lutin.cli:principal"
+lutin = "lutin.cli:main"
 
 [tool.setuptools_scm]
 fallback_version = "0.0.0+inconnue"    # source sans historique git (archive, copie) : version factice, jamais publiée

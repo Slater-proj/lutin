@@ -703,7 +703,7 @@ def _maj_disponible(version_distante):
     if not version_distante:
         return False
     from . import updates, core as _m
-    return updates.plus_recente(str(_m.VERSION), version_distante)
+    return updates.newer(str(_m.VERSION), version_distante)
 
 
 def _etape(m, r, allumee):

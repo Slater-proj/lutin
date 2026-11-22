@@ -230,10 +230,10 @@ class DansLeMoteurEtLaLigneDeCommande(Base):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
             if reponse is None:
-                code = cli.principal(list(argv))
+                code = cli.main(list(argv))
             else:
-                args = cli.parseur().parse_args(list(argv))
-                code = cli.commande_reprendre(args, entree=lambda invite: reponse)
+                args = cli.parser().parse_args(list(argv))
+                code = cli.command_takeover(args, entree=lambda invite: reponse)
         return code, sortie.getvalue()
 
     def test_ligne_de_commande(self):

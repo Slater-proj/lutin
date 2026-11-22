@@ -17,12 +17,12 @@ from . import model_catalog as cat
 from . import offline, model_selection
 from .i18n import t as _t
 
-CATALOGUE_URL_DEFAUT = "https://raw.githubusercontent.com/Slater-proj/lutin/main/src/lutin/data/modeles.json"          # le catalogue de la branche principale ; `catalogue_url` dans la configuration le remplace ("" = pas de catalogue en ligne)
+DEFAULT_CATALOGUE_URL = "https://raw.githubusercontent.com/Slater-proj/lutin/main/src/lutin/data/modeles.json"          # le catalogue de la branche principale ; `catalogue_url` dans la configuration le remplace ("" = pas de catalogue en ligne)
 REPO = "Slater-proj/lutin"
 REGISTRY = "https://registry.ollama.ai/v2"
 INTERVAL_S = 24 * 3600
 MAX_SIZE = 1_000_000
-ACCEPT_MANIFESTE = "application/vnd.docker.distribution.manifest.v2+json"
+ACCEPT_MANIFEST = "application/vnd.docker.distribution.manifest.v2+json"
 
 
 def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen, taille_max=None):
@@ -46,18 +46,18 @@ def followup_error(cause):
     return _github.error_followup(cause)
 
 
-def separer(modele):
+def split_model_name(modele):
     """« huihui_ai/x:27b » -> (« huihui_ai », « x », « 27b ») ; « qwen3:8b » -> (« library », « qwen3 », « 8b »)."""
     nom, _, tag = modele.partition(":")
     espace, _, court = nom.rpartition("/")
     return espace or "library", court, tag or "latest"
 
 
-def digest_registre(modele, http=http_get):
+def registry_digest(modele, http=http_get):
     """Empreinte (hexadécimale) du manifeste du modèle dans le registre, ou None (modèle inconnu, hors ligne)."""
-    espace, nom, tag = separer(modele)
+    espace, nom, tag = split_model_name(modele)
     try:
-        statut, entetes, corps = http("{}/{}/{}/manifests/{}".format(REGISTRY, espace, nom, tag), {"Accept": ACCEPT_MANIFESTE})
+        statut, entetes, corps = http("{}/{}/{}/manifests/{}".format(REGISTRY, espace, nom, tag), {"Accept": ACCEPT_MANIFEST})
     except OSError:
         return None
     if statut != 200:
@@ -71,7 +71,7 @@ def available_updates(installes, http=http_get):
     sortie = []
     for nom, info in installes.items():
         local = (info.get("digest") or "").split(":", 1)[-1]
-        distant = digest_registre(nom, http)
+        distant = registry_digest(nom, http)
         if local and distant and local != distant:
             sortie.append({"cle": "maj:" + nom, "type": "maj", "modele": nom, "raison": _t("Une version plus récente de ce modèle est disponible.")})
     return sortie
@@ -123,7 +123,7 @@ def news(profil, catalogue, choisis, installes, ignores=()):
     return sortie
 
 
-def telecharger_catalogue(url, cache, http=http_get):
+def download_catalogue(url, cache, http=http_get):
     """Catalogue en ligne -> cache/catalogue.json (seulement s'il est valide). Renvoie 'maj' | 'inchange' | 'echec' | 'absent'."""
     if not url:
         return "absent"
@@ -151,7 +151,7 @@ def telecharger_catalogue(url, cache, http=http_get):
     return "maj"
 
 
-def version_par_page(depot=REPO, http=http_get):
+def version_from_page(depot=REPO, http=http_get):
     """La dernière version d'après la page publique des publications (github.com/…/releases/latest redirige vers …/tag/vX.Y.Z), sans passer par l'API de GitHub. Lève OSError."""
     _, entetes, _ = http("https://github.com/{}/releases/latest".format(depot), {"Accept": "text/html"})
     m = re.search(r"/releases/tag/v?(\d+\.\d+\.\d+[^/?#]*)$", entetes.get("x-lutin-url-finale", ""))
@@ -161,7 +161,7 @@ def version_par_page(depot=REPO, http=http_get):
 RE_LABEL = re.compile(r"/releases/tag/([^/?#]+)$")
 
 
-def publication_par_page(depot, etiquette="", http=http_get):
+def release_from_page(depot, etiquette="", http=http_get):
     """Une publication GitHub reconstruite depuis les pages PUBLIQUES de github.com, sans l'API : {tag_name, assets: [{name, browser_download_url}]} (tailles et empreintes inconnues).
     L'API de GitHub limite à 60 requêtes par heure et par adresse (HTTP 403 ensuite : un réseau partagé, une installation répétée) ; ces pages n'ont pas cette limite. Lève OSError ou ValueError."""
     if not etiquette:
@@ -183,7 +183,7 @@ def publication_par_page(depot, etiquette="", http=http_get):
     return {"tag_name": etiquette, "assets": [{"name": n, "browser_download_url": "https://github.com/{}/releases/download/{}/{}".format(depot, jeton, urllib.parse.quote(n))} for n in noms]}
 
 
-def publications_par_page(depot, motif=r".+", nombre=4, etiquette="", http=http_get):
+def releases_from_page(depot, motif=r".+", nombre=4, etiquette="", http=http_get):
     """Les dernières publications d'un dépôt (étiquette conforme à `motif`, la plus récente d'abord), reconstruites sans l'API de GitHub : le flux public des publications donne les étiquettes, la page
     de chacune ses fichiers. Utile quand « la dernière publication » n'est pas une version à installer (un dépôt qui publie aussi des étiquettes de maintenance). Lève ValueError si rien n'est lisible."""
     if etiquette:
@@ -201,7 +201,7 @@ def publications_par_page(depot, motif=r".+", nombre=4, etiquette="", http=http_
     publications = []
     for e in etiquettes:
         try:
-            publications.append(publication_par_page(depot, e, http))
+            publications.append(release_from_page(depot, e, http))
         except (OSError, ValueError):
             continue
     if not publications:
@@ -209,7 +209,7 @@ def publications_par_page(depot, motif=r".+", nombre=4, etiquette="", http=http_
     return publications
 
 
-def derniere_release_detail(depot=REPO, http=http_get):
+def latest_release_detail(depot=REPO, http=http_get):
     """(version sans « v », adresse de la roue, cause de l'échec) de la dernière publication. L'API de GitHub d'abord ; si elle ne répond pas (réseau d'entreprise, API bloquée),
     la page publique des publications. Sans réponse : (None, None, texte de l'erreur)."""
     erreur = ""
@@ -230,7 +230,7 @@ def derniere_release_detail(depot=REPO, http=http_get):
     except (OSError, ValueError) as e:
         erreur = "api.github.com : {}".format(e)
     try:
-        version = version_par_page(depot, http)
+        version = version_from_page(depot, http)
         if version:
             return version, "https://github.com/{0}/releases/download/v{1}/lutin-{1}-py3-none-any.whl".format(depot, version), ""
     except OSError as e:
@@ -238,13 +238,13 @@ def derniere_release_detail(depot=REPO, http=http_get):
     return None, None, erreur
 
 
-def derniere_release(depot=REPO, http=http_get):
+def latest_release(depot=REPO, http=http_get):
     """(version sans « v », adresse de la roue) de la dernière publication GitHub ; (None, None) si le réseau ou la publication manque."""
-    version, roue, _ = derniere_release_detail(depot, http)
+    version, roue, _ = latest_release_detail(depot, http)
     return version, roue
 
 
-class ErreurVerification(ValueError):
+class VerificationError(ValueError):
     """La roue téléchargée n'est pas celle que la publication annonce : on ne l'installe pas."""
 
 
@@ -252,11 +252,11 @@ MAX_SIZE_WHEEL = 60_000_000
 PAUSES = (2, 5, 12)          # secondes entre les essais quand GitHub est momentanément indisponible (504, 502, 503, 429, coupure) : 4 essais en tout
 
 
-def _panne_passagere(statut):
+def _transient_failure(statut):
     return statut >= 500 or statut == 429
 
 
-def _avec_reprises(action, pauses=PAUSES, dormir=None):
+def _with_retries(action, pauses=PAUSES, dormir=None):
     """`action()` -> (statut, en-têtes, corps) ; recommence quand GitHub répond par une panne passagère (5xx, 429) ou que le réseau coupe un instant. Le dernier résultat est rendu tel quel : jamais de contournement,
     seulement de la patience (la vérification de la somme reste obligatoire)."""
     for pause in (*pauses, None):
@@ -266,13 +266,13 @@ def _avec_reprises(action, pauses=PAUSES, dormir=None):
             if pause is None:
                 raise
         else:
-            if not _panne_passagere(statut) or pause is None:
+            if not _transient_failure(statut) or pause is None:
                 return statut, entetes, corps
         (dormir or time.sleep)(pause)
 RE_NAME_WHEEL = re.compile(r"^lutin-[0-9A-Za-z.+_-]+-py3-none-any\.whl$")
 
 
-def somme_attendue(texte, nom_fichier):
+def expected_digest(texte, nom_fichier):
     """La somme SHA-256 de `nom_fichier` dans un SHA256SUMS.txt (« <64 chiffres hexa>  nom », comme `sha256sum`), ou None si le fichier n'y figure pas."""
     for ligne in str(texte).splitlines():
         m = re.match(r"^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$", ligne)
@@ -281,24 +281,24 @@ def somme_attendue(texte, nom_fichier):
     return None
 
 
-def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.request.urlopen, nom_valide=RE_NAME_WHEEL, exiger_sommes=False, prefixe="https://", pauses=PAUSES):
+def download_verified_wheel(url_roue, dossier, http=http_get, ouvrir=urllib.request.urlopen, nom_valide=RE_NAME_WHEEL, exiger_sommes=False, prefixe="https://", pauses=PAUSES):
     """Télécharge la roue dans `dossier`, calcule sa somme SHA-256 pendant la lecture et la compare au SHA256SUMS.txt publié à côté. Renvoie (chemin, verifie).
     `verifie` est faux seulement quand la publication n'a pas de SHA256SUMS.txt (anciennes versions) : l'appelant le dit. Une somme qui ne correspond pas, un fichier absent de la liste ou une roue trop grosse lèvent ErreurVerification ;
     le réseau absent lève OSError. L'installation se fait ensuite depuis CE fichier : aucun octet non vérifié n'est installé."""
     nom = str(url_roue).rsplit("/", 1)[-1]
     if not str(url_roue).startswith(prefixe) or not nom_valide.match(nom):
-        raise ErreurVerification(_t("Adresse de roue inattendue : {}").format(str(url_roue)[:120]))
+        raise VerificationError(_t("Adresse de roue inattendue : {}").format(str(url_roue)[:120]))
     adresse_sommes = str(url_roue).rsplit("/", 1)[0] + "/SHA256SUMS.txt"
-    statut, _, corps = _avec_reprises(lambda: http(adresse_sommes, delai=20), pauses)          # GitHub a parfois un 504 d'une minute : on patiente avant de renoncer
+    statut, _, corps = _with_retries(lambda: http(adresse_sommes, delai=20), pauses)          # GitHub a parfois un 504 d'une minute : on patiente avant de renoncer
     attendue = None
     if statut == 200:
-        attendue = somme_attendue(corps.decode("utf-8", "replace"), nom)
+        attendue = expected_digest(corps.decode("utf-8", "replace"), nom)
         if attendue is None:
-            raise ErreurVerification(_t("{} ne figure pas dans SHA256SUMS.txt : mise à jour refusée.").format(nom))
+            raise VerificationError(_t("{} ne figure pas dans SHA256SUMS.txt : mise à jour refusée.").format(nom))
     elif statut != 404 or exiger_sommes:          # `exiger_sommes` : pour un programme d'un tiers, pas de somme publiée = pas de téléchargement
-        if _panne_passagere(statut):
-            raise ErreurVerification(_t("GitHub est momentanément indisponible (HTTP {}) : la somme de contrôle de la mise à jour n'a pas pu être lue après plusieurs essais. Rien n'a été installé ; réessaie dans quelques minutes.").format(statut))
-        raise ErreurVerification(_t("SHA256SUMS.txt illisible (HTTP {}) : mise à jour refusée.").format(statut))
+        if _transient_failure(statut):
+            raise VerificationError(_t("GitHub est momentanément indisponible (HTTP {}) : la somme de contrôle de la mise à jour n'a pas pu être lue après plusieurs essais. Rien n'a été installé ; réessaie dans quelques minutes.").format(statut))
+        raise VerificationError(_t("SHA256SUMS.txt illisible (HTTP {}) : mise à jour refusée.").format(statut))
     offline.guard(url_roue)
     requete = urllib.request.Request(url_roue, headers={"User-Agent": "lutin"})
     chemin = Path(dossier) / nom
@@ -312,7 +312,7 @@ def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.re
                     break
                 total += len(bloc)
                 if total > MAX_SIZE_WHEEL:
-                    raise ErreurVerification(_t("Roue anormalement grosse : mise à jour refusée."))
+                    raise VerificationError(_t("Roue anormalement grosse : mise à jour refusée."))
                 h.update(bloc)
                 sortie.write(bloc)
         return h
@@ -327,11 +327,11 @@ def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.re
             time.sleep(pause)
     if attendue and h.hexdigest() != attendue:
         chemin.unlink(missing_ok=True)
-        raise ErreurVerification(_t("La somme SHA-256 de {} ne correspond pas à celle de la publication : mise à jour refusée.").format(nom))
+        raise VerificationError(_t("La somme SHA-256 de {} ne correspond pas à celle de la publication : mise à jour refusée.").format(nom))
     return chemin, bool(attendue)
 
 
-def roue_de_version(version, depot=REPO):
+def wheel_of_version(version, depot=REPO):
     """L'adresse de la roue d'une version publiée (retour arrière), ou ValueError si le numéro n'a pas la forme X.Y.Z (rien d'autre n'est jamais passé à pip)."""
     v = str(version or "").strip().lstrip("v")
     if not re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}", v):
@@ -339,27 +339,27 @@ def roue_de_version(version, depot=REPO):
     return v, "https://github.com/{0}/releases/download/v{1}/lutin-{1}-py3-none-any.whl".format(depot, v)
 
 
-def numeros(version):
+def numbers(version):
     """(1, 2, 3) pour « 1.2.3rc4+x » ; () si illisible."""
     m = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(version or ""))
     return tuple(int(x) for x in m.groups()) if m else ()
 
 
-def plus_recente(distante, locale):
+def newer(distante, locale):
     """Vrai si la version distante est strictement plus récente (jamais de retour en arrière, même si la version locale est une candidate ou illisible)."""
-    return bool(numeros(distante)) and numeros(distante) > (numeros(locale) or (0, 0, 0))
+    return bool(numbers(distante)) and numbers(distante) > (numbers(locale) or (0, 0, 0))
 
 
-def commande_mise_a_jour():
+def update_command():
     """La commande à donner pour se mettre à jour : dans un conteneur, c'est l'image qu'on remplace."""
     return "docker compose pull && docker compose up -d" if os.path.exists("/.dockerenv") or os.environ.get("LUTIN_DOCKER") else "lutin update"
 
 
-def fichier_version(dossiers):
+def version_file(dossiers):
     return Path(dossiers["cache"]) / "lutin-version.json"
 
 
-def lire_fichier_version(chemin):
+def read_version_file(chemin):
     try:
         d = json.loads(Path(chemin).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -370,11 +370,11 @@ def lire_fichier_version(chemin):
 def check_lutin(dossiers, depot=REPO, http=http_get, maintenant=time.time, force=False):
     """Y a-t-il une version de Lutin plus récente ? Au plus une fois par 24 h, jamais bloquant (une seule requête GET anonyme vers l'API de GitHub), silencieux hors ligne.
     Le résultat est gardé dans cache/lutin-version.json ; la page l'affiche, rien n'est installé sans toi."""
-    chemin = fichier_version(dossiers)
-    d = lire_fichier_version(chemin)
+    chemin = version_file(dossiers)
+    d = read_version_file(chemin)
     if not force and maintenant() - float(d.get("date") or 0) < INTERVAL_S:
         return d
-    version, _, erreur = derniere_release_detail(depot, http)
+    version, _, erreur = latest_release_detail(depot, http)
     if version:
         d.update(date=maintenant(), version=version, depot=depot)
         d.pop("erreur", None)
@@ -388,24 +388,24 @@ def check_lutin(dossiers, depot=REPO, http=http_get, maintenant=time.time, force
     return d
 
 
-def nouvelle_version(chemin, locale):
+def new_version(chemin, locale):
     """{version, actuelle, page, commande} si le fichier du cache annonce une version plus récente que la locale et que tu ne l'as pas ignorée ; None sinon. Jamais de réseau."""
-    d = lire_fichier_version(chemin)
+    d = read_version_file(chemin)
     v = str(d.get("version") or "")
-    if not plus_recente(v, locale) or v == d.get("ignoree"):
+    if not newer(v, locale) or v == d.get("ignoree"):
         return None
-    return {"version": v, "actuelle": locale, "page": "https://github.com/{}/releases/tag/v{}".format(d.get("depot") or REPO, v), "commande": commande_mise_a_jour()}
+    return {"version": v, "actuelle": locale, "page": "https://github.com/{}/releases/tag/v{}".format(d.get("depot") or REPO, v), "commande": update_command()}
 
 
-def ignorer_version(chemin, version):
+def ignore_version(chemin, version):
     """« Ignorer cette version » : plus de rappel pour elle (la suivante sera annoncée)."""
-    d = lire_fichier_version(chemin)
+    d = read_version_file(chemin)
     d["ignoree"] = str(version)
     Path(chemin).parent.mkdir(parents=True, exist_ok=True)
     Path(chemin).write_text(json.dumps(d, indent=1), encoding="utf-8")
 
 
-PORTEES = ("maj", "nouveaux", "tout")
+SCOPES = ("maj", "nouveaux", "tout")
 
 
 def check(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time, force=False, portee="tout"):
@@ -413,7 +413,7 @@ def check(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time, fo
 
     portee « maj » : seulement les mises à jour des modèles installés ; « nouveaux » : le catalogue en ligne puis les meilleurs modèles pour cette machine ; « tout » : les deux.
     Une vérification partielle garde les propositions de l'autre sorte. Seule la vérification complète automatique est limitée à une fois par 24 h."""
-    if portee not in PORTEES:
+    if portee not in SCOPES:
         raise ValueError(_t("portée inconnue : {}").format(portee))
     cache = Path(dossiers["cache"])
     cache.mkdir(parents=True, exist_ok=True)
@@ -421,10 +421,10 @@ def check(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time, fo
     if not force:
         try:
             if maintenant() - json.loads(etat.read_text(encoding="utf-8")).get("date", 0) < INTERVAL_S:
-                return lire_propositions(dossiers)
+                return read_proposals(dossiers)
         except (OSError, ValueError):
             pass
-    ancien = lire_propositions(dossiers)
+    ancien = read_proposals(dossiers)
     resultat = {"date": maintenant(), "propositions": [], "erreurs": [], "catalogue": "absent", "portee": portee}
     hors_ligne = offline.is_active(Path(dossiers.get("config", "")) / "config.json" if dossiers.get("config") else None)
     if hors_ligne:
@@ -435,7 +435,7 @@ def check(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time, fo
     try:
         if portee in ("nouveaux", "tout") and portee_reseau:
             url = cfg.get("catalogue_url")
-            resultat["catalogue"] = telecharger_catalogue(CATALOGUE_URL_DEFAUT if url is None else url, cache, http)
+            resultat["catalogue"] = download_catalogue(DEFAULT_CATALOGUE_URL if url is None else url, cache, http)
             if resultat["catalogue"] == "echec":
                 resultat["erreurs"].append(_t("catalogue en ligne indisponible : copie locale utilisée"))
         catalogue = cat.load(cache / "catalogue.json")
@@ -463,7 +463,7 @@ def check(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time, fo
     return resultat
 
 
-def lire_propositions(dossiers):
+def read_proposals(dossiers):
     try:
         d = json.loads((Path(dossiers["cache"]) / "propositions.json").read_text(encoding="utf-8"))
         return d if isinstance(d, dict) else {"propositions": [], "erreurs": [], "date": 0}

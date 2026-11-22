@@ -33,12 +33,12 @@ API_COMMIT = "https://api.github.com/repos/{}/commits/main".format(REPO_TABBY)
 API_LIB = "https://api.github.com/repos/{}/releases/latest".format(REPO_LIB)
 URL_ZIP = "https://codeload.github.com/{}/zip/{{}}".format(REPO_TABBY)
 HOST = "127.0.0.1"          # jamais une autre adresse
-PORT_DEFAUT = 5000
+DEFAULT_PORT = 5000
 RE_SHA = re.compile(r"^[0-9a-f]{40}$")
 RE_VERSION = re.compile(r"^\d{1,3}(\.\d{1,4}){1,3}$")
 RE_REPO_MODEL = re.compile(r"^[A-Za-z0-9][\w.-]{0,60}/[A-Za-z0-9][\w.-]{0,100}$")
 RE_REVISION = re.compile(r"^[A-Za-z0-9][\w./-]{0,40}$")
-TAILLE_ARCHIVE_MAX = 80_000_000
+ARCHIVE_MAX_SIZE = 80_000_000
 INTERVAL_PROGRESS_S = 1.5          # la progression d'un téléchargement est relue toutes les 1,5 s
 FILE_ORIGIN = ".lutin.json"          # dans le dossier d'un modèle : d'où il vient
 PYTHON_MIN, PYTHON_MAX = (3, 10), (3, 14)
@@ -64,7 +64,7 @@ def python_venv(dossiers=None):
     return venv / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
 
 
-def lire_version(dossiers=None):
+def read_version(dossiers=None):
     try:
         d = json.loads((folder(dossiers) / "version.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -74,7 +74,7 @@ def lire_version(dossiers=None):
 
 def installed(dossiers=None):
     """{tabby (commit), lib (version d'ExLlamaV3)} si TabbyAPI et son environnement sont là, sinon None."""
-    v = lire_version(dossiers)
+    v = read_version(dossiers)
     if (folder_tabby(dossiers) / "main.py").is_file() and python_venv(dossiers).is_file() and v.get("tabby"):
         return {"tabby": str(v.get("tabby", "")), "lib": str(v.get("lib", ""))}
     return None
@@ -85,7 +85,7 @@ def python_compatible(version=None):
     return PYTHON_MIN <= v <= PYTHON_MAX
 
 
-def derniere_version_lib(http=updates.http_get):
+def latest_lib_version(http=updates.http_get):
     """La dernière version publiée d'ExLlamaV3 (X.Y.Z). ValueError si illisible, OSError sans réseau."""
     cause = ""
     try:
@@ -99,7 +99,7 @@ def derniere_version_lib(http=updates.http_get):
     except OSError as e:
         cause = str(e)
     try:          # l'API de GitHub refuse (limite de requêtes) : la page publique des publications
-        version = (updates.version_par_page(REPO_LIB, http) or "").lstrip("v")
+        version = (updates.version_from_page(REPO_LIB, http) or "").lstrip("v")
         if RE_VERSION.match(version):
             return version
     except OSError:
@@ -107,7 +107,7 @@ def derniere_version_lib(http=updates.http_get):
     raise ValueError(_t("Impossible de lire la dernière version d'ExLlamaV3 ({}). {}").format(cause, updates.followup_error(cause)))
 
 
-def dernier_commit(http=updates.http_get):
+def latest_commit(http=updates.http_get):
     cause = ""
     try:
         statut, _, corps = http(API_COMMIT, {"Accept": "application/vnd.github+json"})
@@ -172,8 +172,8 @@ def _download_zip(sha, destination, ouvrir=urllib.request.urlopen):
     with ouvrir(req, timeout=60) as r:
         if urllib.parse.urlparse(str(r.geturl())).hostname not in ("codeload.github.com", "github.com"):
             raise ValueError(_t("Le code de TabbyAPI a été redirigé hors de GitHub : refusé."))
-        corps = r.read(TAILLE_ARCHIVE_MAX + 1)
-    if len(corps) > TAILLE_ARCHIVE_MAX or len(corps) < 100:
+        corps = r.read(ARCHIVE_MAX_SIZE + 1)
+    if len(corps) > ARCHIVE_MAX_SIZE or len(corps) < 100:
         raise ValueError(_t("L'archive de TabbyAPI est vide ou trop grosse : refusée."))
     Path(destination).write_bytes(corps)
 
@@ -188,10 +188,10 @@ def version_lib(dossiers=None, lancer=subprocess.run):
     return m.group(1) if m and RE_VERSION.match(m.group(1)) else ""
 
 
-ETAPES_INSTALLATION = 5
+INSTALL_STEPS = 5
 
 
-def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None, etape=None,
+def install(dossiers=None, port=DEFAULT_PORT, dire=print, http=updates.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None, etape=None,
             contexte=0):
     """Installe (ou met à jour) TabbyAPI + ExLlamaV3. Renvoie {tabby, lib}. Longue : torch pèse plusieurs Go. ValueError claire à chaque étape qui échoue.
     `etape(n, total)` est appelée au début de chacune des ETAPES_INSTALLATION étapes : la page en fait une barre, et chaque texte annonce « Étape n/total »."""
@@ -202,12 +202,12 @@ def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, 
     def passer(n, texte):
         courante[0] = n
         if etape:
-            etape(n, ETAPES_INSTALLATION)
-        dire(_t("Étape {}/{} : {}").format(n, ETAPES_INSTALLATION, texte))
+            etape(n, INSTALL_STEPS)
+        dire(_t("Étape {}/{} : {}").format(n, INSTALL_STEPS, texte))
     base = folder(dossiers)
     base.mkdir(parents=True, exist_ok=True)
     passer(1, _t("recherche du dernier code de TabbyAPI…"))
-    sha = dernier_commit(http)
+    sha = latest_commit(http)
     cible = folder_tabby(dossiers)
     with tempfile.TemporaryDirectory(prefix="lutin-tabby-") as tmp:
         archive = Path(tmp) / "tabby.zip"
@@ -233,7 +233,7 @@ def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, 
         passer(3, _t("environnement Python dédié déjà là."))
     passer(4, _t("installation des dépendances (torch et ExLlamaV3 : plusieurs Go, plusieurs minutes — la ligne ci-dessous montre ce que pip fait)…"))
     proc = lancer([str(python_venv(dossiers)), "-m", "pip", "install", "-U", ".[cu12]"], cwd=str(cible), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
-    code, fin = _follow(proc, lambda ligne: dire(_t("Étape {}/{} : installation des dépendances — {}").format(4, ETAPES_INSTALLATION, ligne)), annule)
+    code, fin = _follow(proc, lambda ligne: dire(_t("Étape {}/{} : installation des dépendances — {}").format(4, INSTALL_STEPS, ligne)), annule)
     if code != 0 and not annule():
         raise ValueError(_t("L'installation des dépendances a échoué (code {}). Fin du message :\n{}").format(code, "\n".join(fin[-6:])))
     passer(5, _t("vérification et réglages…"))
@@ -244,7 +244,7 @@ def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, 
     return {"tabby": sha, "lib": lib}
 
 
-def repond(port):
+def responds(port):
     try:
         with urllib.request.urlopen("http://{}:{}/v1/models".format(HOST, int(port)), timeout=3) as r:
             return r.status == 200
@@ -252,7 +252,7 @@ def repond(port):
         return False
 
 
-def start(port=PORT_DEFAUT, dossiers=None, attente_s=240, lancer=subprocess.Popen, repond_=repond, dormir=time.sleep, contexte=0):
+def start(port=DEFAULT_PORT, dossiers=None, attente_s=240, lancer=subprocess.Popen, repond_=responds, dormir=time.sleep, contexte=0):
     """Écrit le config.yml (port demandé), lance `main.py` de TabbyAPI dans son environnement, attend que /v1/models réponde (le premier démarrage charge torch : long)."""
     if repond_(port):
         return port
@@ -368,7 +368,7 @@ def _follow_size(cible, total, dire, progres, arret):
         dire(texte)
 
 
-def download_model(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=updates.http_get, progres=None, port=PORT_DEFAUT, contexte=0):
+def download_model(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=updates.http_get, progres=None, port=DEFAULT_PORT, contexte=0):
     """`main.py download <propriétaire/modèle> [--revision X]` : le téléchargeur de TabbyAPI (Hugging Face) dans le dossier des modèles. `progres(octets, total)` : l'avancement réel.
     Le téléchargeur lit le dossier des modèles dans config.yml : il est réécrit avec le port et la fenêtre de conversation du serveur (`port`, `contexte`), pas avec
     les valeurs par défaut, sinon le prochain démarrage ne réserverait plus ce que les réglages demandent."""
@@ -440,10 +440,10 @@ def clean_removals(dossiers=None):
         pass
 
 
-_TRONQUES = {}          # (chemin, taille, date) -> le fichier est-il plus court que ce que son en-tête annonce
+_TRUNCATED = {}          # (chemin, taille, date) -> le fichier est-il plus court que ce que son en-tête annonce
 
 
-def safetensors_tronque(f):
+def truncated_safetensors(f):
     """Vrai si ce fichier .safetensors annonce des données au-delà de sa fin : un téléchargement coupé. TabbyAPI échouait alors au chargement sur « Tensor … extends past
     end of file: needs 6212421986 bytes » (mainteneur, 2026-11-22), avec un modèle listé comme complet. Faux si l'en-tête est illisible : inconnu n'est pas tronqué."""
     try:
@@ -451,8 +451,8 @@ def safetensors_tronque(f):
     except OSError:
         return False
     cle = (str(f), etat.st_size, etat.st_mtime)
-    if cle in _TRONQUES:
-        return _TRONQUES[cle]
+    if cle in _TRUNCATED:
+        return _TRUNCATED[cle]
     tronque = False
     try:
         with open(f, "rb") as h:
@@ -464,7 +464,7 @@ def safetensors_tronque(f):
                 tronque = 8 + n + fin > etat.st_size
     except (OSError, ValueError, struct.error, AttributeError):
         tronque = False
-    _TRONQUES[cle] = tronque
+    _TRUNCATED[cle] = tronque
     return tronque
 
 
@@ -479,6 +479,6 @@ def modeles(dossiers=None):
         return []
     for p in sous:
         taille = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
-        incomplet = not (p / "config.json").is_file() or any(safetensors_tronque(f) for f in p.glob("*.safetensors"))
+        incomplet = not (p / "config.json").is_file() or any(truncated_safetensors(f) for f in p.glob("*.safetensors"))
         sortie.append(dict({"nom": p.name, "taille_go": round(taille / 1e9, 1), "depot": "", "revision": "", "commit": "", "incomplet": incomplet}, **origin_model(dossiers, p.name)))
     return sortie

@@ -1179,7 +1179,7 @@ class MoteurLlamaCpp(OpenAIEngine):
             if http_json is None:          # l'API de GitHub refuse (limite de requêtes, HTTP 403) : les pages publiques des publications donnent les mêmes fichiers
                 try:
                     from . import updates
-                    releases = updates.publications_par_page("ggml-org/llama.cpp", r"b\d+", 4, epinglee)
+                    releases = updates.releases_from_page("ggml-org/llama.cpp", r"b\d+", 4, epinglee)
                 except (OSError, ValueError):
                     releases = None
             if releases is None:
@@ -1435,7 +1435,7 @@ class MoteurExterne(OpenAIEngine):
             p = int(self.config().get("port_exllamav3") or 0)
         except (TypeError, ValueError):
             p = 0
-        return p if 1024 <= p <= 65535 else exllamav3.PORT_DEFAUT
+        return p if 1024 <= p <= 65535 else exllamav3.DEFAULT_PORT
 
     def _exl(self):
         """{tabby, lib} si ExLlamaV3 est installé par Lutin, sinon None."""
@@ -1609,7 +1609,7 @@ class MoteurExterne(OpenAIEngine):
                     raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
                 if self.exllamav3_choisi() and OpenAIEngine.actif(self):
                     exllamav3.stop(dossiers)          # on ne remplace pas un programme qui tourne
-                avancement = {"fait": 0, "total": exllamav3.ETAPES_INSTALLATION + 1}          # les étapes de l'installation, puis le démarrage : une barre qui avance de vrai
+                avancement = {"fait": 0, "total": exllamav3.INSTALL_STEPS + 1}          # les étapes de l'installation, puis le démarrage : une barre qui avance de vrai
                 progression(_t("Installation d'ExLlamaV3 (TabbyAPI)…"), 0, avancement["total"])
                 r = exllamav3.install(dossiers, self.port_exllamav3(), lambda texte: progression(texte, avancement["fait"], avancement["total"]), annule=annule,
                                         etape=lambda n, total: avancement.update(fait=n - 1), contexte=self._contexte())

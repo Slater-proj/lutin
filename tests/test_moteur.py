@@ -228,7 +228,7 @@ sys.path.insert(0, str(ICI.parent / "src"))
 from lutin import core as A  # noqa: E402
 from lutin import web as _web  # noqa: E402
 
-_web.LIRE_AUTO = 0          # les tests n'ouvrent aucune page du vrai internet : la lecture automatique des premiers résultats a son propre test
+_web.AUTO_READ = 0          # les tests n'ouvrent aucune page du vrai internet : la lecture automatique des premiers résultats a son propre test
 from lutin.storage import DOSSIER_COPIES  # noqa: E402
 
 S_ASSISTANT = lancer(A.Handler)
@@ -1617,9 +1617,9 @@ class Assistant(unittest.TestCase):
         """Une recherche d'actualité ne rend plus seulement des liens : le début des premières pages est joint, pour qu'un petit modèle puisse faire une synthèse au lieu de recopier des adresses."""
         pages = {"https://exemple.org/doc": "Le gouvernement a annoncé hier un plan de rénovation des écoles, doté de deux milliards d'euros sur trois ans.",
                  "https://autre.example/page": ""}
-        vrai, vrai_auto = _web.extrait_page, _web.LIRE_AUTO
-        _web.extrait_page = lambda url: pages.get(url, "")
-        _web.LIRE_AUTO = 3
+        vrai, vrai_auto = _web.page_excerpt, _web.AUTO_READ
+        _web.page_excerpt = lambda url: pages.get(url, "")
+        _web.AUTO_READ = 3
         try:
             res = A.tool_web_search("plan écoles", 5, {"web": True})
             self.assertIn("Début de la page : Le gouvernement a annoncé hier", res)
@@ -1627,23 +1627,23 @@ class Assistant(unittest.TestCase):
             self.assertEqual(res.count("Début de la page"), 1, "une page illisible ne casse rien et n'ajoute rien")
             res0 = A.tool_web_search("plan écoles", 5, {"web": True}, 0)
             self.assertNotIn("Début de la page", res0, "lire=0 : l'ancien comportement")
-            _web.extrait_page = lambda url: (_ for _ in ()).throw(RuntimeError("panne"))
+            _web.page_excerpt = lambda url: (_ for _ in ()).throw(RuntimeError("panne"))
             self.assertIn("1. Doc officielle", A.tool_web_search("plan écoles", 5, {"web": True}), "même si toutes les lectures échouent, les résultats sont rendus")
         finally:
-            _web.extrait_page, _web.LIRE_AUTO = vrai, vrai_auto
+            _web.page_excerpt, _web.AUTO_READ = vrai, vrai_auto
 
     def test_extrait_de_page_ignore_les_menus_et_borne_la_longueur(self):
         vrai = _web.web_download
         page = "<html><body><nav>Accueil</nav><p>Menu</p><p>" + "Un vrai paragraphe d'information sur l'actualité du jour. " * 40 + "</p></body></html>"
         _web.web_download = lambda url, donnees=None, **_: (url, "text/html", page)
         try:
-            e = _web.extrait_page("https://exemple.org/x")
+            e = _web.page_excerpt("https://exemple.org/x")
             self.assertTrue(e.startswith("Un vrai paragraphe"), e[:40])
             self.assertLessEqual(len(e), _web.EXCERPT_CHARACTERS)
             _web.web_download = lambda url, donnees=None, **_: (url, "image/png", "x")
-            self.assertEqual(_web.extrait_page("https://exemple.org/y"), "")
-            self.assertEqual(_web.extraits_en_parallele([], lambda u: "x"), {})
-            self.assertEqual(_web.extraits_en_parallele(["a", "b"], lambda u: "texte " + u), {0: "texte a", 1: "texte b"})
+            self.assertEqual(_web.page_excerpt("https://exemple.org/y"), "")
+            self.assertEqual(_web.parallel_excerpts([], lambda u: "x"), {})
+            self.assertEqual(_web.parallel_excerpts(["a", "b"], lambda u: "texte " + u), {0: "texte a", 1: "texte b"})
         finally:
             _web.web_download = vrai
 
@@ -3106,8 +3106,8 @@ class Assistant(unittest.TestCase):
             access.can_restart = lambda: True
             vrai_redem = access.restart
             access.restart = lambda: redem.append(1)
-            vrai_cli = cli.mise_a_jour_detaillee
-            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("✔ Lutin mis à jour : 0.6.2 → 0.6.3."), (0, "0.6.2", "0.6.3"))[1]
+            vrai_cli = cli.detailed_update
+            cli.detailed_update = lambda dire, erreur, capturer=False: (dire("✔ Lutin mis à jour : 0.6.2 → 0.6.3."), (0, "0.6.2", "0.6.3"))[1]
             post("/api/mettre-a-jour", {})
             fin = time.time() + 10
             while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours"):
@@ -3117,14 +3117,14 @@ class Assistant(unittest.TestCase):
             time.sleep(2.2)
             self.assertEqual(redem, [1], "Lutin se redémarre tout seul après la mise à jour")
             # déjà à jour
-            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("Lutin est déjà à jour (0.6.3)."), (0, "0.6.3", None))[1]
+            cli.detailed_update = lambda dire, erreur, capturer=False: (dire("Lutin est déjà à jour (0.6.3)."), (0, "0.6.3", None))[1]
             post("/api/mettre-a-jour", {})
             fin = time.time() + 10
             while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours", "redemarrage"):
                 time.sleep(0.05)
             self.assertEqual(lire("/api/mettre-a-jour-etat")["etat"], "a_jour")
             # échec
-            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (erreur("✘ La mise à jour de Lutin a échoué (pip)."), (1, "0.6.3", None))[1]
+            cli.detailed_update = lambda dire, erreur, capturer=False: (erreur("✘ La mise à jour de Lutin a échoué (pip)."), (1, "0.6.3", None))[1]
             post("/api/mettre-a-jour", {})
             fin = time.time() + 10
             while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours", "a_jour"):
@@ -3132,7 +3132,7 @@ class Assistant(unittest.TestCase):
             self.assertEqual(lire("/api/mettre-a-jour-etat")["etat"], "erreur")
             # pas de redémarrage possible : on le dit
             access.can_restart = lambda: False
-            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("ok"), (0, "0.6.3", "0.6.4"))[1]
+            cli.detailed_update = lambda dire, erreur, capturer=False: (dire("ok"), (0, "0.6.3", "0.6.4"))[1]
             post("/api/mettre-a-jour", {})
             fin = time.time() + 10
             while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours", "erreur"):
@@ -3143,7 +3143,7 @@ class Assistant(unittest.TestCase):
         finally:
             access.can_restart = vrai_peut
             access.restart = vrai_redem
-            cli.mise_a_jour_detaillee = vrai_cli
+            cli.detailed_update = vrai_cli
             access.UPDATE.update(etat="", lignes=[], avant="", apres="")
 
     def test_etat_emplacements_et_apercu_par_l_api(self):

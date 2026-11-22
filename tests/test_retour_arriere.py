@@ -50,14 +50,14 @@ class Base(unittest.TestCase):
     def lancer(self, source="github:Slater-proj/lutin", faux=None, **kw):
         faux = faux or Faux()
         self.telechargees = []
-        with mock.patch.object(cli.config, "read_source", lambda: source), mock.patch.object(cli.subprocess, "run", faux),                 mock.patch.object(cli.updates, "telecharger_roue_verifiee", self.telecharger):
-            res = cli.mise_a_jour_detaillee(dire=self.sorties.append, erreur=self.erreurs.append, **kw)
+        with mock.patch.object(cli.config, "read_source", lambda: source), mock.patch.object(cli.subprocess, "run", faux),                 mock.patch.object(cli.updates, "download_verified_wheel", self.telecharger):
+            res = cli.detailed_update(dire=self.sorties.append, erreur=self.erreurs.append, **kw)
         return res, faux
 
 
 class SauvegardeAvant(Base):
     def test_une_sauvegarde_est_faite_avant_pip(self):
-        with mock.patch.object(cli.updates, "derniere_release", lambda depot: ("0.23.0", "https://exemple/lutin.whl")):
+        with mock.patch.object(cli.updates, "latest_release", lambda depot: ("0.23.0", "https://exemple/lutin.whl")):
             (code, avant, apres), faux = self.lancer(faux=Faux(version_apres="0.23.0"))
         self.assertEqual((code, apres), (0, "0.23.0"))
         zips = list((self.dossiers["cache"] / "avant-mise-a-jour").glob("lutin-*.zip"))
@@ -71,27 +71,27 @@ class SauvegardeAvant(Base):
             f = d / "lutin-0.1.{}-20200101-00000{}.zip".format(i, i)
             f.write_bytes(b"x")
             os.utime(f, (1000 + i, 1000 + i))
-        cli.sauvegarde_avant_mise_a_jour(self.sorties.append)
+        cli.backup_before_update(self.sorties.append)
         restes = sorted(p.name for p in d.glob("lutin-*.zip"))
         self.assertEqual(len(restes), 3)
         self.assertNotIn("lutin-0.1.0-20200101-000000.zip", restes, "les plus anciennes partent")
 
     def test_une_sauvegarde_impossible_ne_bloque_pas_la_mise_a_jour(self):
         with mock.patch.object(cli.backup, "export", side_effect=OSError("disque plein")), \
-                mock.patch.object(cli.updates, "derniere_release", lambda depot: ("0.23.0", "https://exemple/lutin.whl")):
+                mock.patch.object(cli.updates, "latest_release", lambda depot: ("0.23.0", "https://exemple/lutin.whl")):
             (code, avant, apres), faux = self.lancer(faux=Faux(version_apres="0.23.0"))
         self.assertEqual(code, 0)
         self.assertTrue(any("disque plein" in s for s in self.sorties), "l'utilisateur est prévenu")
         self.assertTrue(any("pip" in c for c in faux.commandes[0]))
 
     def test_rien_n_est_sauvegarde_quand_deja_a_jour(self):
-        with mock.patch.object(cli.updates, "derniere_release", lambda depot: ("0.22.0", "https://exemple/lutin.whl")):
+        with mock.patch.object(cli.updates, "latest_release", lambda depot: ("0.22.0", "https://exemple/lutin.whl")):
             (code, avant, apres), faux = self.lancer()
         self.assertEqual((code, apres, faux.commandes), (0, None, []))
         self.assertFalse((self.dossiers["cache"] / "avant-mise-a-jour").exists())
 
     def test_echec_de_pip_garde_la_version_actuelle(self):
-        with mock.patch.object(cli.updates, "derniere_release", lambda depot: ("0.23.0", "https://exemple/lutin.whl")):
+        with mock.patch.object(cli.updates, "latest_release", lambda depot: ("0.23.0", "https://exemple/lutin.whl")):
             (code, avant, apres), faux = self.lancer(faux=Faux(pip=1))
         self.assertEqual((code, apres), (1, None))
         self.assertTrue(any("reste en place" in e for e in self.erreurs))
@@ -124,7 +124,7 @@ class RetourArriere(Base):
         self.assertTrue(self.erreurs)
 
     def test_la_mise_a_jour_normale_ne_revient_jamais_en_arriere(self):
-        self.assertFalse(updates.plus_recente("0.21.0", "0.22.0"))
+        self.assertFalse(updates.newer("0.21.0", "0.22.0"))
 
 
 if __name__ == "__main__":

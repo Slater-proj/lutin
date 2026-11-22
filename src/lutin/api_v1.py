@@ -2978,13 +2978,13 @@ def third_party_skills(request):
 def add_skill_source(request):
     """{"repo": "owner/name" or its address}: adds a repository to search (30 at most). Nothing is read from GitHub yet. Answers `{"sources"}`."""
     _skill_body(request.body, ("repo",), ())
-    return 201, {"sources": _skill_sources(_skills.ajouter_source(request.body.get("repo")))}
+    return 201, {"sources": _skill_sources(_skills.add_source(request.body.get("repo")))}
 
 
 @route("DELETE", "/third-party-skills/sources", CONFIGURATOR)
 def remove_skill_source(request):
     """`?repo=owner/name`: removes a repository that was added (the ones offered at the start stay). Answers `{"sources"}`."""
-    return {"sources": _skill_sources(_skills.retirer_source(request.query.get("repo", "")))}
+    return {"sources": _skill_sources(_skills.remove_source(request.query.get("repo", "")))}
 
 
 @route("GET", "/github", SESSION)
@@ -3043,7 +3043,7 @@ def index_skill_repository(request):
     _require_online(_t("lire les descriptions des skills"))
     if not (_skills.INDEXING.get(repo) or {}).get("fini", True):
         return {"started": False}
-    threading.Thread(target=lambda: _skills.indexer(repo), daemon=True, name="skills-indexing").start()
+    threading.Thread(target=lambda: _skills.build_index(repo), daemon=True, name="skills-indexing").start()
     return 202, {"started": True}
 
 
@@ -3125,7 +3125,7 @@ def remove_third_party_skill(request):
     project, root = _skill_project(request.query.get("project", ""))
     if not any(skill["nom"] == request.params["name"] for skill in _skills.installed({project: root})):
         raise ApiError(404, "not_found", _t("Ce skill n'a pas été installé par Lutin."))
-    _skills.retirer(root, request.params["name"])
+    _skills.remove(root, request.params["name"])
     _m.journaliser(_t("Skill tiers retiré : {}.").format(request.params["name"][:60]))
     return installed_third_party_skills(request)
 
@@ -3264,7 +3264,7 @@ def delete_conversation(request):
     conversation = _read(identifier)
     _not_running(identifier)
     with _operations.track("conversation", conversation.get("titre") or identifier, "remove"):          # seen by the activity bar of every screen
-        _mission.oublier_conversation(identifier)          # its mission, if any, ends with it
+        _mission.forget_conversation(identifier)          # its mission, if any, ends with it
         _m.conv_supprimer(identifier)
     return {"deleted": True}
 
@@ -3341,7 +3341,7 @@ def _update_view():
     from . import updates as _updates
     state = _access.update_state()
     return {"state": UPDATE_STATES.get(state["etat"], "failed"), "lines": [str(line) for line in state["lignes"]], "before": state["avant"],
-            "after": state["apres"], "command": _updates.commande_mise_a_jour(), "can_update": not _access.in_docker(),
+            "after": state["apres"], "command": _updates.update_command(), "can_update": not _access.in_docker(),
             "can_check": bool(os.environ.get("LUTIN_VERSION_CACHE")), "can_restart": _access.can_restart()}
 
 
@@ -3377,11 +3377,11 @@ def lutin_check(request):
     GET /status: null when up to date or ignored). 409 `not_available` when this launch keeps no version cache, 503 `unreachable` with the reason."""
     path = _version_cache()
     from . import updates as _updates
-    before = _updates.lire_fichier_version(path).get("date") or 0
+    before = _updates.read_version_file(path).get("date") or 0
     checked = _updates.check_lutin({"cache": str(Path(path).parent)}, force=True)
     if (checked.get("date") or 0) <= before:
         raise ApiError(503, "unreachable", _t("Impossible de joindre GitHub : {}").format(checked.get("erreur") or "?"))
-    return {"current": _m.VERSION, "latest": str(_updates.lire_fichier_version(path).get("version", "")), "new_version": _new_version()}
+    return {"current": _m.VERSION, "latest": str(_updates.read_version_file(path).get("version", "")), "new_version": _new_version()}
 
 
 @route("POST", "/lutin/ignored-version", SESSION)
@@ -3391,7 +3391,7 @@ def lutin_ignore_version(request):
     if not version:
         raise ApiError(400, "invalid_request", _t("Indique la version à ignorer."))
     from . import updates as _updates
-    _updates.ignorer_version(_version_cache(), version)
+    _updates.ignore_version(_version_cache(), version)
     return {"new_version": _new_version()}
 
 
@@ -4335,7 +4335,7 @@ def background_job_report(request):
         job = _jobs.find(request.params["id"])
     except ValueError as missing:
         raise ApiError(404, "not_found", str(missing)) from None
-    return {"text": _jobs.rapport(job)}
+    return {"text": _jobs.report(job)}
 
 
 # ------------------------------------------------------------------------------------------------------------- approvals

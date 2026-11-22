@@ -143,9 +143,9 @@ class Base(unittest.TestCase):
         del RECU[:]
         ETAT.update(searxng="json", page503=1)
         web_search.save("", "")
-        web.CACHE_RECHERCHE.clear()
+        web.SEARCH_CACHE.clear()
         web.CACHE_PAGES.clear()
-        web.BLOQUES.clear()
+        web.BLOCKED.clear()
 
     def tearDown(self):
         web_search.save("", "")
@@ -388,15 +388,15 @@ class Legerete(Base):
         web.web_download = lambda url, donnees=None, **_: (url, "text/plain", "x" * 1_400_000)
         try:
             for i in range(40):
-                web.page_en_cache("https://exemple.org/%d" % i, maintenant=lambda i=i: 1000 + i)
+                web.cached_page("https://exemple.org/%d" % i, maintenant=lambda i=i: 1000 + i)
             poids = sum(len(v[1][2]) for v in web.CACHE_PAGES.values())
             self.assertLessEqual(len(web.CACHE_PAGES), web.CACHE_PAGES_MAX)
-            self.assertLessEqual(poids, web.CACHE_PAGES_OCTETS)
+            self.assertLessEqual(poids, web.CACHE_PAGES_BYTES)
             self.assertIn("https://exemple.org/39", web.CACHE_PAGES, "le plus récent est gardé")
             self.assertNotIn("https://exemple.org/0", web.CACHE_PAGES, "le plus ancien est parti")
             web.CACHE_PAGES.clear()
             web.web_download = lambda url, donnees=None, **_: (url, "text/plain", "x" * 12_000_000)
-            web.page_en_cache("https://exemple.org/enorme")
+            web.cached_page("https://exemple.org/enorme")
             self.assertEqual(len(web.CACHE_PAGES), 0, "une page énorme n'entre pas dans le cache")
         finally:
             web.web_download = vrai
@@ -406,7 +406,7 @@ class Legerete(Base):
         vrai = web.web_download
         web.web_download = lambda url, donnees=None, **kw: (vues.append(kw), (url, "text/html", "<p>" + "un texte assez long pour faire un extrait lisible " * 5 + "</p>"))[1]
         try:
-            self.assertTrue(web.extrait_page("https://exemple.org/x"))
+            self.assertTrue(web.page_excerpt("https://exemple.org/x"))
         finally:
             web.web_download = vrai
         self.assertEqual(vues, [{"max_octets": web.EXCERPT_BYTES}])
@@ -428,7 +428,7 @@ class Test(Base):
         vrai = web.engines_of_search
         web.engines_of_search = lambda: web_search.configured_providers() + [("muet", lambda q: [])]
         try:
-            res = web.tester_moteurs("x")
+            res = web.check_engines("x")
             etat = web.state_engines()
         finally:
             web.engines_of_search = vrai

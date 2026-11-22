@@ -352,7 +352,7 @@ def _call_tool(nom, args, ctx):
         from . import mission
         if not ctx.get("mission"):
             raise _m.ErreurOutil("Cet outil n'existe que pendant une mission longue.")
-        return mission.signaler(ctx["mission"], "terminee" if nom == "mission_terminer" else "bloquee", args.get("bilan") or args.get("question") or "")
+        return mission.report(ctx["mission"], "terminee" if nom == "mission_terminer" else "bloquee", args.get("bilan") or args.get("question") or "")
     if nom == "suivi":
         from . import progress_sheet
         conv = ctx.get("conv")

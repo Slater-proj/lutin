@@ -46,15 +46,15 @@ class Bing(unittest.TestCase):
 
 class Relais(unittest.TestCase):
     def setUp(self):
-        web.BLOQUES.clear()
-        web.CACHE_RECHERCHE.clear()
+        web.BLOCKED.clear()
+        web.SEARCH_CACHE.clear()
         self.vrai = web.engines_of_search
         self.appels = []
 
     def tearDown(self):
         web.engines_of_search = self.vrai
-        web.BLOQUES.clear()
-        web.CACHE_RECHERCHE.clear()
+        web.BLOCKED.clear()
+        web.SEARCH_CACHE.clear()
 
     def moteurs(self, **comportements):
         def fabrique(nom, f):
@@ -77,7 +77,7 @@ class Relais(unittest.TestCase):
         web.search_results("une autre requête", 5, maintenant=lambda: 1200)
         self.assertEqual(self.appels, [], "la même recherche vient du cache")
         self.appels.clear()
-        web.search_results("encore une autre", 5, maintenant=lambda: 1000 + web.PAUSE_BLOQUE_S + 1)
+        web.search_results("encore une autre", 5, maintenant=lambda: 1000 + web.BLOCKED_PAUSE_S + 1)
         self.assertEqual(self.appels[0], "duckduckgo", "la pause finie, DuckDuckGo est retenté en premier")
 
     def test_une_erreur_reseau_d_un_moteur_ne_bloque_pas_les_autres(self):

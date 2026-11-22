@@ -81,7 +81,7 @@ def _latest_exllamav3(mo):
     if not hasattr(mo, "exllamav3_choisi") or not mo.exllamav3_choisi() or not mo.version():
         return None
     from . import exllamav3
-    return mo.version(), exllamav3.derniere_version_lib()
+    return mo.version(), exllamav3.latest_lib_version()
 
 
 def _latest_server(mo):

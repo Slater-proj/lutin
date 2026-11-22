@@ -233,17 +233,17 @@ class Cli(unittest.TestCase):
     def lancer(self, *argv):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
-            code = cli.principal(list(argv))
+            code = cli.main(list(argv))
         return code, sortie.getvalue()
 
     def test_aide_et_version(self):
         with self.assertRaises(SystemExit) as e, contextlib.redirect_stdout(io.StringIO()):
-            cli.parseur().parse_args(["--version"])
+            cli.parser().parse_args(["--version"])
         self.assertEqual(e.exception.code, 0)
-        p = cli.parseur().parse_args(["setup", "--oui", "--niveau", "proxy", "--proxy-ip", "1.2.3.4", "--proxy-ip", "5.6.7.8", "--roles", "code,rapide"])
+        p = cli.parser().parse_args(["setup", "--oui", "--niveau", "proxy", "--proxy-ip", "1.2.3.4", "--proxy-ip", "5.6.7.8", "--roles", "code,rapide"])
         self.assertEqual((p.niveau, p.proxy_ips, p.roles), ("proxy", ["1.2.3.4", "5.6.7.8"], "code,rapide"))
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-            cli.parseur().parse_args(["setup", "--niveau", "ouvert"])
+            cli.parser().parse_args(["setup", "--niveau", "ouvert"])
 
     def test_setup_automatique_de_bout_en_bout(self):
         with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"),                 mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
@@ -388,7 +388,7 @@ class Superviseur(unittest.TestCase):
             horloge[0] += 10
             return next(suite)
         sortie = []
-        code = cli.superviser(lancer, attendre=lambda s: None, horloge=lambda: horloge[0], maximum=maximum, ecrire=sortie.append)
+        code = cli.supervise(lancer, attendre=lambda s: None, horloge=lambda: horloge[0], maximum=maximum, ecrire=sortie.append)
         return code, journal, sortie
 
     def test_arret_volontaire_pas_de_relance(self):
@@ -415,7 +415,7 @@ class Superviseur(unittest.TestCase):
             journal.append(1)
             horloge[0] += 700          # plus de 10 minutes entre deux pannes
             return next(suite)
-        self.assertEqual(cli.superviser(lancer, attendre=lambda s: None, horloge=lambda: horloge[0], maximum=1, fenetre=600, ecrire=lambda s: None), 0)
+        self.assertEqual(cli.supervise(lancer, attendre=lambda s: None, horloge=lambda: horloge[0], maximum=1, fenetre=600, ecrire=lambda s: None), 0)
         self.assertEqual(len(journal), 5)
 
 
@@ -433,7 +433,7 @@ class Update(unittest.TestCase):
     def lancer(self, *argv):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
-            code = cli.principal(list(argv))
+            code = cli.main(list(argv))
         return code, sortie.getvalue()
 
     def test_sans_source_connue_explique_quoi_faire_sans_rien_changer(self):
@@ -468,7 +468,7 @@ class Update(unittest.TestCase):
         faux = mock.MagicMock()
         faux.run.return_value = mock.Mock(returncode=0, stdout="Lutin 9.9.9\n")
         with mock.patch.object(config, "read_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux), \
-                mock.patch.object(updates, "derniere_release", return_value=("9.9.9", "https://github.com/Slater-proj/lutin/releases/download/v9.9.9/lutin-9.9.9-py3-none-any.whl")),                 mock.patch.object(updates, "telecharger_roue_verifiee", lambda url, dossier, **k: (Path(dossier) / url.rsplit("/", 1)[-1], True)):          # jamais de vrai téléchargement dans un test
+                mock.patch.object(updates, "latest_release", return_value=("9.9.9", "https://github.com/Slater-proj/lutin/releases/download/v9.9.9/lutin-9.9.9-py3-none-any.whl")),                 mock.patch.object(updates, "download_verified_wheel", lambda url, dossier, **k: (Path(dossier) / url.rsplit("/", 1)[-1], True)):          # jamais de vrai téléchargement dans un test
             code, sortie = self.lancer("update", "--app")
         self.assertEqual(code, 0, sortie)
         self.assertIn("→ 9.9.9", sortie)
@@ -481,11 +481,11 @@ class Update(unittest.TestCase):
         faux = mock.MagicMock()
         faux.run.side_effect = AssertionError("pas de pip")
         with mock.patch.object(config, "read_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux):
-            with mock.patch.object(updates, "derniere_release", return_value=("0.0.0", "https://x/y.whl")):
+            with mock.patch.object(updates, "latest_release", return_value=("0.0.0", "https://x/y.whl")):
                 code, sortie = self.lancer("update", "--app")
                 self.assertEqual(code, 0)
                 self.assertIn("déjà à jour", sortie)
-            with mock.patch.object(updates, "derniere_release", return_value=(None, None)):
+            with mock.patch.object(updates, "latest_release", return_value=(None, None)):
                 code, sortie = self.lancer("update", "--app")
                 self.assertEqual(code, 1)
                 self.assertIn("Impossible de lire", sortie)
@@ -524,9 +524,9 @@ class CommandesDuQuotidien(unittest.TestCase):
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
             if entree is not None:
                 with mock.patch("builtins.input", return_value=entree):
-                    code = cli.principal(list(argv))
+                    code = cli.main(list(argv))
             else:
-                code = cli.principal(list(argv))
+                code = cli.main(list(argv))
         return code, sortie.getvalue()
 
     def dossier(self, nom):

@@ -226,10 +226,10 @@ class LigneDeCommande(unittest.TestCase):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
             if reponse is None:
-                code = cli.principal(list(argv))
+                code = cli.main(list(argv))
             else:
-                args = cli.parseur().parse_args(list(argv))
-                code = cli.commande_importer(args, entree=lambda invite: reponse)
+                args = cli.parser().parse_args(list(argv))
+                code = cli.command_import(args, entree=lambda invite: reponse)
         return code, sortie.getvalue()
 
     def travaux(self):

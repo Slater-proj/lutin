@@ -125,14 +125,14 @@ class Store(unittest.TestCase):
         shutil.copy(self.data / "lutin.db", home / "donnees" / "lutin.db")
         shutil.copytree(self.data / "conversations", home / "donnees" / "conversations")
         with mock.patch.dict("os.environ", {"LUTIN_HOME": str(home)}), contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(cli.principal(["export", "--conversations", str(target)]), 0)
+            self.assertEqual(cli.main(["export", "--conversations", str(target)]), 0)
         self.assertIn("1 conversation(s)", out.getvalue())
         self.assertEqual(sorted(p.name for p in (target / "conversations").iterdir()), ["0000000a.json"], "only what the database holds")
         self.assertEqual(json.loads((target / "options" / "0000000a.json").read_text(encoding="utf-8")), {"web": True})
         self.assertTrue((home / "donnees" / "conversations" / "0000000c.json").is_file(), "the waiting 0.x file is not imported nor moved")
         with mock.patch.dict("os.environ", {"LUTIN_HOME": str(home)}), contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(cli.principal(["export", "--conversations", str(target)]), 1, "a folder that is not empty is refused")
-            self.assertEqual(cli.principal(["export"]), 2, "say what to export")
+            self.assertEqual(cli.main(["export", "--conversations", str(target)]), 1, "a folder that is not empty is refused")
+            self.assertEqual(cli.main(["export"]), 2, "say what to export")
         self.assertIn("--conversations", err.getvalue())
         self.assertRaises(ValueError, store.export_database, target / "other", home / "donnees" / "absent.db")
 

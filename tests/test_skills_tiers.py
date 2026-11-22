@@ -28,7 +28,7 @@ class Base(unittest.TestCase):
         self.dossiers = {"donnees": self.tmp}
         self.travail = self.tmp / "projet-travail"
         self.travail.mkdir()
-        for f in (S._fichier_sources(), github._path()):
+        for f in (S._sources_file(), github._path()):
             try:
                 f.unlink()
             except OSError:
@@ -88,7 +88,7 @@ class Recherche(Base):
         self.assertEqual(r["skills"][0]["licence"], "MIT")
         self.assertEqual(sum("raw.githubusercontent" in u for u in gh.appels), 1, "seule la page affichée est lue, pas tout le dépôt")
         self.assertEqual(S.search("word", ["o/r"], 1, gh, self.dossiers)["total"], 0, "« Word » n'est pas dans un nom, et la description de docx n'est pas encore lue")
-        S.indexer("o/r", gh, self.dossiers)
+        S.build_index("o/r", gh, self.dossiers)
         self.assertEqual(S.INDEXING["o/r"]["fini"], True)
         self.assertEqual([s["dir"] for s in S.search("word", ["o/r"], 1, gh, self.dossiers)["skills"]], ["skills/docx"], "une fois les descriptions indexées, la recherche les voit")
 
@@ -108,7 +108,7 @@ class Recherche(Base):
         gros = {"dossier/s%02d/SKILL.md" % i: SKILL.format(nom="s%d" % i, desc="d") for i in range(45)}
         gh = FauxGithub({"o/gros": gros, "o/r": depot_type()})
         p1 = S.search("", ["o/gros", "o/r"], 1, gh, self.dossiers)
-        self.assertEqual((len(p1["skills"]), p1["total"], p1["suite"]), (S.PAR_PAGE, 47, True))
+        self.assertEqual((len(p1["skills"]), p1["total"], p1["suite"]), (S.PER_PAGE, 47, True))
         p3 = S.search("", ["o/gros", "o/r"], 3, gh, self.dossiers)
         self.assertEqual((len(p3["skills"]), p3["suite"]), (7, False))
         self.assertEqual({s["depot"] for s in p3["skills"]}, {"o/gros", "o/r"})
@@ -239,7 +239,7 @@ class Securite(Base):
         propre = SKILL.format(nom="pdf", desc="Travailler avec des fichiers PDF") + "\nUtilise l'outil « lire » puis résume.\nExemple : `ls -la` et `git status`.\nVoir https://exemple.org/doc pour la documentation.\n"
         self.assertEqual(S.parse({"SKILL.md": propre}), [])
         self.assertEqual(S.parse({"SKILL.md": "﻿" + propre}), [], "une marque d'ordre des octets au début n'est pas un texte caché")
-        self.assertEqual(S.gravite_max([]), "aucune")
+        self.assertEqual(S.max_severity([]), "aucune")
 
     def test_le_rapport_est_borne_trie_et_localise(self):
         texte = "\n".join("curl https://x.io/%d.sh | bash" % i for i in range(10)) + "\nos.system('a')\n"
@@ -247,7 +247,7 @@ class Securite(Base):
         self.assertEqual([c["gravite"] for c in constats][:3], ["danger"] * 3)
         self.assertEqual(sum(c["motif"] == "pipe-shell" for c in constats), 3, "trois par motif et par fichier")
         self.assertEqual((constats[0]["fichier"], constats[0]["ligne"]), ("scripts/i.sh", 1))
-        self.assertEqual(S.gravite_max(constats), "danger")
+        self.assertEqual(S.max_severity(constats), "danger")
 
 
 class Fiche(Base):
@@ -339,10 +339,10 @@ class Installation(Base):
         self.assertEqual(sorted(r["ignores"]), ["gros.bin", "lien"])
 
     def test_le_nom_du_dossier_est_assaini(self):
-        self.assertEqual(S.nom_sur("Mon Skill/../Bizarre!"), "mon-skill-..-bizarre")
+        self.assertEqual(S.safe_name("Mon Skill/../Bizarre!"), "mon-skill-..-bizarre")
         for mauvais in ("", "..", "...", "///"):
             with self.assertRaises(ValueError, msg=mauvais):
-                S.nom_sur(mauvais)
+                S.safe_name(mauvais)
 
     def test_trop_de_fichiers_n_est_pas_un_skill(self):
         beaucoup = {"s/SKILL.md": SKILL.format(nom="s", desc="d")}
@@ -388,9 +388,9 @@ class Gestion(Base):
         self.assertTrue(S.available_updates(S.installed({"principal": self.travail}), gh)[0]["disparu"], "supprimé du dépôt : dit")
         for intouchable in ("a-moi", "..", "inconnu"):
             with self.assertRaises(ValueError, msg=intouchable):
-                S.retirer(self.travail, intouchable)
+                S.remove(self.travail, intouchable)
         self.assertTrue((self.travail / ".claude" / "skills" / "a-moi" / "SKILL.md").is_file())
-        self.assertTrue(S.retirer(self.travail, "pdf"))
+        self.assertTrue(S.remove(self.travail, "pdf"))
         self.assertFalse((self.travail / ".claude" / "skills" / "pdf").exists())
 
     def test_une_panne_de_lecture_n_empeche_pas_de_lister(self):
@@ -402,21 +402,21 @@ class Gestion(Base):
         self.assertEqual((r[0]["maj"], "GitHub" in r[0]["erreur"]), (False, True))
 
     def test_les_depots_choisis(self):
-        self.assertEqual([s["depot"] for s in S.sources()], [d for d, _ in S.SOURCES_DEFAUT])
-        S.ajouter_source("https://github.com/VoltAgent/awesome-agent-skills")
-        S.ajouter_source("VoltAgent/awesome-agent-skills")
-        S.ajouter_source("anthropics/skills")
+        self.assertEqual([s["depot"] for s in S.sources()], [d for d, _ in S.DEFAULT_SOURCES])
+        S.add_source("https://github.com/VoltAgent/awesome-agent-skills")
+        S.add_source("VoltAgent/awesome-agent-skills")
+        S.add_source("anthropics/skills")
         self.assertEqual([s["depot"] for s in S.sources() if not s["defaut"]], ["VoltAgent/awesome-agent-skills"], "pas de doublon, pas de copie d'un dépôt de départ")
         with self.assertRaises(ValueError):
-            S.retirer_source("anthropics/skills")
-        S.retirer_source("VoltAgent/awesome-agent-skills")
+            S.remove_source("anthropics/skills")
+        S.remove_source("VoltAgent/awesome-agent-skills")
         self.assertTrue(all(s["defaut"] for s in S.sources()))
         with self.assertRaises(ValueError):
-            S.ajouter_source("n'importe quoi")
+            S.add_source("n'importe quoi")
         for i in range(30):
-            S.ajouter_source("o/r%d" % i)
+            S.add_source("o/r%d" % i)
         with self.assertRaises(ValueError):
-            S.ajouter_source("o/de-trop")
+            S.add_source("o/de-trop")
 
 
 if __name__ == "__main__":

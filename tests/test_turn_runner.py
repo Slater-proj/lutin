@@ -107,7 +107,7 @@ class Missions(Clean):
         m = mission.create("Game", "Make a small game.", "principal", 8, True, conv_id=conv["id"])
         person = self.person_writes_in(conv["id"], (_TEMP / "work").resolve())          # the same folder: only the conversation is busy
         with mock.patch.object(_m, "tour", refusing):
-            self.assertFalse(mission._tour(mission.find(m["id"])), "no turn: the mission tries again at its next round")
+            self.assertFalse(mission._turn(mission.find(m["id"])), "no turn: the mission tries again at its next round")
         self.assertIs(_m.TOURS_ACTIFS.get(conv["id"]), person)
         self.assertNotIn(m["id"], mission.ALIVE["arrets"])
 

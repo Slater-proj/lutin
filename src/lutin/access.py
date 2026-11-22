@@ -113,7 +113,7 @@ def update():
     def travail():
         from . import cli
         try:
-            code, avant, apres = cli.mise_a_jour_detaillee(UPDATE["lignes"].append, UPDATE["lignes"].append, capturer=True)
+            code, avant, apres = cli.detailed_update(UPDATE["lignes"].append, UPDATE["lignes"].append, capturer=True)
         except Exception as erreur:  # noqa: BLE001 — la page doit toujours apprendre comment ça s'est fini
             UPDATE.update(etat="erreur")
             UPDATE["lignes"].append(str(erreur)[:300])

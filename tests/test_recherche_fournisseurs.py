@@ -119,8 +119,8 @@ class Fournisseurs(unittest.TestCase):
 
     def test_recherche_complete_passe_par_le_fournisseur_et_le_nettoie(self):
         web_search.save(tavily_cle="tvly-abcdefghij1234")
-        web.CACHE_RECHERCHE.clear()
-        web.BLOQUES.clear()
+        web.SEARCH_CACHE.clear()
+        web.BLOCKED.clear()
         trouves, raisons = web.search_results("lutin assistant local", 5)
         self.assertEqual(trouves[0]["source"], "tavily")
         self.assertEqual(trouves[0]["url"], "https://exemple.org/a", "l'adresse est nettoyée de son suivi")

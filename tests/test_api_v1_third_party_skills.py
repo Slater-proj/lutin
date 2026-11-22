@@ -34,9 +34,9 @@ class Base(unittest.TestCase):
     def setUp(self):
         S.CACHE.clear()
         S.INDEXING.clear()
-        for file in (S._fichier_sources(), github._path()):
+        for file in (S._sources_file(), github._path()):
             file.unlink(missing_ok=True)
-        self.addCleanup(lambda: [file.unlink(missing_ok=True) for file in (S._fichier_sources(), github._path())])
+        self.addCleanup(lambda: [file.unlink(missing_ok=True) for file in (S._sources_file(), github._path())])
         env = mock.patch.dict("os.environ")
         env.start()
         self.addCleanup(env.stop)
@@ -50,7 +50,7 @@ class Base(unittest.TestCase):
     def online(self, depots=None):
         """Strict offline mode off and GitHub replaced by a fake serving `depots` (default: the usual repository under `anthropics/skills`)."""
         if depots is None:          # the three default sources must all be readable: a search without `repos` goes through every one
-            depots = {repo: {"README.md": "# nothing here"} for repo, _name in S.SOURCES_DEFAUT}
+            depots = {repo: {"README.md": "# nothing here"} for repo, _name in S.DEFAULT_SOURCES}
             depots["anthropics/skills"] = depot_type()
         self.github = FauxGithub(depots)
         for patch in (mock.patch.object(api_v1._offline, "is_active", return_value=False), mock.patch.object(S, "default_http", self.github)):
@@ -71,7 +71,7 @@ class Page(Base):
         status, answer = call("GET", BASE)
         self.assertEqual(status, 200)
         self.assertEqual(sorted(answer), ["current", "github", "indexing", "offline", "projects", "sources"])
-        self.assertEqual([(s["repo"], s["default"]) for s in answer["sources"]], [(repo, True) for repo, _name in S.SOURCES_DEFAUT])
+        self.assertEqual([(s["repo"], s["default"]) for s in answer["sources"]], [(repo, True) for repo, _name in S.DEFAULT_SOURCES])
         self.assertEqual(sorted(answer["sources"][0]), ["default", "name", "repo"])
         self.assertEqual(answer["github"], {"configured": False, "source": ""})
         self.assertTrue(answer["offline"], "the server of these tests is in strict offline mode")
@@ -83,7 +83,7 @@ class Page(Base):
         self.assertEqual(call("POST", BASE + "/sources", {"repo": "someone/their-skills"})[1]["sources"].count(answer["sources"][-1]), 1, "added twice, listed once")
         self.assertEqual(call("GET", BASE)[1]["sources"][-1]["repo"], "someone/their-skills")
         status, answer = call("DELETE", BASE + "/sources?repo=someone/their-skills")
-        self.assertEqual((status, [s["repo"] for s in answer["sources"]]), (200, [repo for repo, _name in S.SOURCES_DEFAUT]))
+        self.assertEqual((status, [s["repo"] for s in answer["sources"]]), (200, [repo for repo, _name in S.DEFAULT_SOURCES]))
         self.assertEqual(call("DELETE", BASE + "/sources?repo=anthropics/skills")[0], 400, "a default source cannot be removed")
         for body in ({}, {"repo": "nonsense"}, {"repo": 3}, {"repo": "a/b", "colour": 1}):
             self.assertEqual(call("POST", BASE + "/sources", body)[1]["error"]["code"], "invalid_request", body)

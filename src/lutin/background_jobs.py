@@ -30,8 +30,8 @@ from .i18n import t as _t
 MAX_WORKS = 10
 DOCUMENTS_MAX = 20000               # documents suivis par travail
 MAX_CONSECUTIVE_ERRORS = 5                # au-delà, le travail se met en pause (le PC, le modèle ou le dossier ont un problème)
-ESSAI_DOCUMENTS = 3                 # un travail « à valider » s'arrête après ces premiers documents : tu lis leurs résultats avant qu'il traite tout le dossier
-DELAI_DOCUMENT = 900                # secondes au plus pour un document
+TRIAL_DOCUMENTS = 3                 # un travail « à valider » s'arrête après ces premiers documents : tu lis leurs résultats avant qu'il traite tout le dossier
+DOCUMENT_TIMEOUT = 900                # secondes au plus pour un document
 MAX_SIZE = 80_000_000             # octets : un document plus gros est signalé, pas lu (une extraction ne doit pas figer le travail)
 PERIOD = 5                         # secondes entre deux regards
 TEXTS = (".txt", ".md", ".csv", ".json", ".log")
@@ -205,7 +205,7 @@ def liste():
 
 
 # --------------------------------------------------------------------------- un document
-def texte_document(chemin):
+def document_text(chemin):
     f = Path(chemin)
     if f.stat().st_size > MAX_SIZE:
         raise text_extraction.ExtractionError(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1_000_000))
@@ -216,9 +216,9 @@ def texte_document(chemin):
     raise text_extraction.ExtractionError(_t("Format non géré : {}").format(f.suffix))
 
 
-def traiter_document(t, chemin, r, interrompre):
+def process_document(t, chemin, r, interrompre):
     """Un appel au modèle pour un document. Renvoie la réponse, ou None si le document a été interrompu (conversation qui démarre, pause) ; lève OSError/ValueError en cas d'échec."""
-    brut = texte_document(chemin).strip()
+    brut = document_text(chemin).strip()
     if not brut:
         raise ValueError(_t("Document vide (ou sans texte lisible : un scan sans texte demande un OCR)."))
     budget = max(2000, int(r["num_ctx"] * 0.55 * 3))
@@ -235,7 +235,7 @@ def traiter_document(t, chemin, r, interrompre):
     req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(agent.avec_garde(requete)).encode("utf-8"), headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=120) as flux:
         for brut_ligne in flux:
-            if interrompre.is_set() or time.time() - debut > DELAI_DOCUMENT:
+            if interrompre.is_set() or time.time() - debut > DOCUMENT_TIMEOUT:
                 return None if interrompre.is_set() else _failure_timeout()
             try:
                 morceau = json.loads(brut_ligne.decode("utf-8"))
@@ -277,7 +277,7 @@ def results(t):
     return out
 
 
-def rapport(t):
+def report(t):
     """Génère rapport.md (un titre par document, la réponse dessous) et renvoie son texte."""
     e = read_state(t["id"])
     lignes = ["# " + t["nom"], "", "> " + t["consigne"].replace("\n", " "), "", _t("{} document(s) traité(s), {} en erreur.").format(len(e["faits"]), len(e["erreurs"])), ""]
@@ -298,7 +298,7 @@ def rapport(t):
 
 
 # --------------------------------------------------------------------------- la boucle
-def un_pas(modele_pret=None):
+def one_step(modele_pret=None):
     """Traite UN document du premier travail qui en a à faire. Renvoie True s'il y avait quelque chose à faire (donc inutile d'attendre)."""
     if _m.TOURS_ACTIFS:
         return False                                                         # quelqu'un parle à Lutin : le travail de fond cède la place
@@ -324,11 +324,11 @@ def un_pas(modele_pret=None):
             if e["etat"] != "termine":
                 e.update(etat="termine", fin=int(maintenant), message="")
                 write_state(t["id"], e)
-                rapport(t)
+                report(t)
             else:
                 write_state(t["id"], e)
             continue
-        if not t.get("valide", True) and len(e["faits"]) >= ESSAI_DOCUMENTS:          # les premiers résultats sont prêts : on attend que tu les aies lus
+        if not t.get("valide", True) and len(e["faits"]) >= TRIAL_DOCUMENTS:          # les premiers résultats sont prêts : on attend que tu les aies lus
             if e["etat"] != "a_valider":
                 e.update(etat="a_valider", message=_t("Les {} premiers résultats sont prêts (bouton « Rapport »). Si la consigne est bien comprise, valide pour traiter les {} autres documents ; sinon supprime le travail et reformule.").format(len(e["faits"]), len(restants)))
             write_state(t["id"], e)
@@ -345,7 +345,7 @@ def un_pas(modele_pret=None):
         ALIVE["interrompre"].clear()
         ALIVE["document"] = (t["id"], chemin)
         try:
-            reponse = traiter_document(t, chemin, r, ALIVE["interrompre"])
+            reponse = process_document(t, chemin, r, ALIVE["interrompre"])
         except (OSError, ValueError, text_extraction.ExtractionError, urllib.error.URLError) as erreur:
             e["erreurs"][chemin] = str(erreur)[:300]
             e["message"] = ""
@@ -389,7 +389,7 @@ def interrupt_for_user(attente=8):
 def loop():
     while not ALIVE["stop"].is_set():
         try:
-            fait = un_pas()
+            fait = one_step()
         except Exception as erreur:  # noqa: BLE001  (une panne ne doit jamais arrêter la boucle)
             _m.journaliser("Travail de fond : {!r}".format(erreur))
             fait = False

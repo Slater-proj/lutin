@@ -339,9 +339,9 @@ from .web import (  # noqa: F401  (déplacé dans web.py : moteur ré-exporte se
     WARNING_WEB,
     DDG_URL,
     STATES_TASK,
-    HtmlEnTexte,
-    ResultatsDDG,
-    SIGNES_TACHE,
+    HtmlToText,
+    DdgResults,
+    TASK_SIGNS,
     WEB_MAX_BYTES,
     WEB_PAGE,
     address_result,
@@ -350,7 +350,7 @@ from .web import (  # noqa: F401  (déplacé dans web.py : moteur ré-exporte se
     state_engines as etat_moteurs_recherche,
     tool_web_search,
     tool_web_read,
-    tester_moteurs as tester_moteurs_recherche,
+    check_engines as tester_moteurs_recherche,
     text_tasks,
     check_host_web,
     web_download,
@@ -964,7 +964,7 @@ def nouvelle_version_lutin():
     if not chemin:
         return None
     from . import updates
-    return updates.nouvelle_version(chemin, VERSION)
+    return updates.new_version(chemin, VERSION)
 
 
 def page_web():

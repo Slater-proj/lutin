@@ -127,7 +127,7 @@ class Mcp(unittest.TestCase):
         self.addCleanup(lambda: mcp.write(ancienne))
         def commande(action, nom=None, cible=None, env=()):
             with contextlib.redirect_stdout(io.StringIO()) as sortie:
-                code = cli.commande_mcp(type("A", (), {"action": action, "nom": nom, "cible": cible, "env": list(env)})())
+                code = cli.command_mcp(type("A", (), {"action": action, "nom": nom, "cible": cible, "env": list(env)})())
             return code, sortie.getvalue()
         code, texte = commande("lister")
         self.assertEqual(code, 0)

@@ -46,7 +46,7 @@ class LutinVersion(unittest.TestCase):
         self.assertIsNone(self.status()["new_version"], "the version running is not announced")
         self.announce("999.0.0")
         self.assertEqual(self.status()["new_version"], {"version": "999.0.0", "page": "https://github.com/example/lutin/releases/tag/v999.0.0",
-                                                         "command": updates.commande_mise_a_jour()})
+                                                         "command": updates.update_command()})
         self.announce("999.0.0", ignoree="999.0.0")
         self.assertIsNone(self.status()["new_version"], "an ignored version is not announced again")
 
@@ -56,7 +56,7 @@ class LutinVersion(unittest.TestCase):
         def github(*args, **kwargs):
             asked.append(args)
             return "999.0.0", "https://example.invalid/lutin.whl", ""
-        with mock.patch.object(updates, "derniere_release_detail", github):
+        with mock.patch.object(updates, "latest_release_detail", github):
             status, answer = V.call("POST", "/api/v1/lutin/check", V.OWNER, {})
         self.assertEqual(status, 200, answer)
         self.assertEqual(len(asked), 1)
@@ -64,7 +64,7 @@ class LutinVersion(unittest.TestCase):
         self.assertEqual(self.status()["new_version"]["version"], "999.0.0", "kept in the cache for the banner")
 
     def test_checking_says_when_github_cannot_be_reached(self):
-        with mock.patch.object(updates, "derniere_release_detail", lambda *args, **kwargs: (None, None, "no route to host")):
+        with mock.patch.object(updates, "latest_release_detail", lambda *args, **kwargs: (None, None, "no route to host")):
             status, answer = V.call("POST", "/api/v1/lutin/check", V.OWNER, {})
         self.assertEqual((status, answer["error"]["code"]), (503, "unreachable"))
         self.assertIn("no route to host", answer["error"]["message"])
@@ -94,7 +94,7 @@ class LutinVersion(unittest.TestCase):
 
     def test_updating_needs_the_right_to_configure_and_the_network(self):
         started = []
-        with mock.patch.object(cli, "mise_a_jour_detaillee", lambda *args, **kwargs: started.append(1) or (0, "1.0", None)):
+        with mock.patch.object(cli, "detailed_update", lambda *args, **kwargs: started.append(1) or (0, "1.0", None)):
             self.assertEqual(V.call("POST", "/api/v1/lutin/update", V.DEVICE, {})[0], 403, "a paired phone does not update Lutin")
             status, answer = V.call("POST", "/api/v1/lutin/update", V.OWNER, {})
             self.assertEqual((status, answer["error"]["code"]), (409, "offline"), "the test server is in strict offline mode")
@@ -109,7 +109,7 @@ class LutinVersion(unittest.TestCase):
             say("Sauvegarde faite.")
             return outcome
         timers = []
-        with mock.patch.object(cli, "mise_a_jour_detaillee", steps), mock.patch.object(V.api_v1._offline, "is_active", lambda: False), \
+        with mock.patch.object(cli, "detailed_update", steps), mock.patch.object(V.api_v1._offline, "is_active", lambda: False), \
                 mock.patch.object(access, "can_restart", lambda: can_restart), mock.patch.object(access.threading, "Timer", lambda *args: timers.append(args) or mock.Mock()):
             status, answer = V.call("POST", "/api/v1/lutin/update", V.OWNER, {})
             self.assertEqual(status, 200, answer)          # « running », or already over: the replaced steps take no time

@@ -34,8 +34,8 @@ class SansApi(unittest.TestCase):
         self.assertEqual(colibri.latest_version(http_sans_api), "2.1.0")
 
     def test_exllamav3_et_tabbyapi_aussi(self):
-        self.assertEqual(exllamav3.derniere_version_lib(http_sans_api), "2.1.0")
-        self.assertEqual(exllamav3.dernier_commit(http_sans_api), SHA)
+        self.assertEqual(exllamav3.latest_lib_version(http_sans_api), "2.1.0")
+        self.assertEqual(exllamav3.latest_commit(http_sans_api), SHA)
 
     def test_sans_aucune_reponse_l_erreur_dit_la_limite_de_requetes(self):
         def mort(url, entetes=None):
@@ -46,14 +46,14 @@ class SansApi(unittest.TestCase):
         self.assertIn("limite", str(e.exception))
 
     def test_publications_les_plus_recentes_dont_l_etiquette_convient(self):
-        rs = updates.publications_par_page("ggml-org/llama.cpp", r"b\d+", 4, http=http_sans_api)
+        rs = updates.releases_from_page("ggml-org/llama.cpp", r"b\d+", 4, http=http_sans_api)
         self.assertEqual([r["tag_name"] for r in rs], ["b200", "b199"], "v0.9.0 n'est pas une version à installer")
         self.assertEqual(rs[0]["assets"], [], "une publication encore vide (binaires en cours de construction) est gardée telle quelle")
         self.assertEqual(rs[1]["assets"][0]["name"], "llama-b199-bin-win-cpu-x64.zip")
         self.assertEqual(rs[1]["assets"][0]["browser_download_url"], "https://github.com/ggml-org/llama.cpp/releases/download/b199/llama-b199-bin-win-cpu-x64.zip")
 
     def test_llamacpp_choisit_la_plus_recente_publication_qui_a_ses_fichiers(self):
-        rs = updates.publications_par_page("ggml-org/llama.cpp", r"b\d+", 4, http=http_sans_api)
+        rs = updates.releases_from_page("ggml-org/llama.cpp", r"b\d+", 4, http=http_sans_api)
         etiquette, assets = ll.choisir_fichiers(rs, "windows", "amd64", "cpu")
         self.assertEqual(etiquette, "b199")
         self.assertEqual(len(assets), 1)

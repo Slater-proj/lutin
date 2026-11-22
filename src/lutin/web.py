@@ -54,7 +54,7 @@ def check_host_web(url, hote_autorise=None, resoudre=True):
 
 
 PDF_MAX_BYTES = 15_000_000
-CODES_PASSAGERS = (502, 503, 504)          # un serveur qui bute un instant : une seconde tentative, pas plus
+TRANSIENT_CODES = (502, 503, 504)          # un serveur qui bute un instant : une seconde tentative, pas plus
 
 
 def guess_charset(brut, charset=None):
@@ -97,7 +97,7 @@ def web_download(url, donnees=None, *, hote_autorise=None, entetes=None, octets=
         except _garde_reseau.TooManyRedirections:
             raise _m.ErreurOutil(_t("Impossible de joindre le site : {}").format(_t("trop de redirections")))
         except urllib.error.HTTPError as e:
-            if e.code in CODES_PASSAGERS and tentative == 1:
+            if e.code in TRANSIENT_CODES and tentative == 1:
                 time.sleep(1)
                 continue
             raise _m.ErreurOutil(_t("Le site a répondu HTTP {}.").format(e.code))
@@ -114,7 +114,7 @@ def web_download(url, donnees=None, *, hote_autorise=None, entetes=None, octets=
     return final, type_, texte
 
 
-class HtmlEnTexte(HTMLParser):
+class HtmlToText(HTMLParser):
     """Transforme une page HTML en texte lisible (titres, listes, paragraphes), sans scripts ni styles."""
     IGNORES = {"script", "style", "noscript", "svg", "template", "iframe", "canvas"}
     NAVIGATION = {"nav", "footer", "aside"}          # menus, pieds de page, colonnes latérales : du bruit pour qui veut le contenu (on les relit si la page paraît vide sans eux)
@@ -200,10 +200,10 @@ class MetaPage(HTMLParser):
         return "\n".join(lignes)
 
 
-SEUIL_PAGE_VIDE = 200          # en dessous, une page « HTML » n'a presque pas de texte lisible : elle est probablement construite par JavaScript
+EMPTY_PAGE_THRESHOLD = 200          # en dessous, une page « HTML » n'a presque pas de texte lisible : elle est probablement construite par JavaScript
 
 
-def conseil_page_javascript(adresse):
+def javascript_page_advice(adresse):
     """Quoi dire (et quoi proposer à l'utilisateur) quand la page n'a pas de contenu sans JavaScript. Le modèle le répète tel quel : rien d'inventé, rien de contourné."""
     hote = (urllib.parse.urlparse(adresse).hostname or "").lower()
     texte = _t("\nCette page est construite par JavaScript, que je ne peux pas exécuter : je n'ai que ce que le serveur envoie au départ.")
@@ -213,7 +213,7 @@ def conseil_page_javascript(adresse):
     return texte
 
 
-class ResultatsDDG(HTMLParser):
+class DdgResults(HTMLParser):
     """Lit la page de résultats de DuckDuckGo (version HTML simple)."""
 
     def __init__(self):
@@ -248,20 +248,20 @@ def address_result(href):
     return "https:" + href if href.startswith("//") else href
 
 
-LIRE_AUTO = 3                       # nombre de premiers résultats dont on lit un extrait tout de suite
+AUTO_READ = 3                       # nombre de premiers résultats dont on lit un extrait tout de suite
 EXCERPT_CHARACTERS = 700
 EXCERPT_BYTES = 500_000            # un aperçu n'a besoin que du début de la page : on ne télécharge ni ne décortique le reste (plus rapide, moins de mémoire)
 TIMEOUT_EXCERPTS = 12.0               # secondes pour l'ensemble des lectures
 
 
-def extrait_page(url):
+def page_excerpt(url):
     """Le début lisible d'une page (sans menus ni lignes courtes), ou '' si elle ne se lit pas. Sert à ce que le modèle puisse RÉPONDRE d'après le contenu, pas seulement lister des adresses."""
     try:
         _, type_, brut = web_download(url, max_octets=EXCERPT_BYTES)
     except _m.ErreurOutil:
         return ""
     if "html" in type_ or brut.lstrip()[:15].lower().startswith(("<!doctype", "<html")):
-        analyse = HtmlEnTexte()
+        analyse = HtmlToText()
         analyse.feed(brut)
         texte = analyse.texte()
     elif type_.startswith("text/"):
@@ -272,11 +272,11 @@ def extrait_page(url):
     return " ".join(" ".join(lignes).split())[:EXCERPT_CHARACTERS]
 
 
-def extraits_en_parallele(urls, lire=None, delai=None):
+def parallel_excerpts(urls, lire=None, delai=None):
     """{indice: extrait} pour les adresses données, lues en parallèle ; celles qui ne répondent pas à temps sont ignorées."""
     from concurrent.futures import ThreadPoolExecutor, wait
     delai = TIMEOUT_EXCERPTS if delai is None else delai
-    lire = lire or extrait_page
+    lire = lire or page_excerpt
     if not urls:
         return {}
     pool = ThreadPoolExecutor(max_workers=min(4, len(urls)))
@@ -298,14 +298,14 @@ def extraits_en_parallele(urls, lire=None, delai=None):
 
 # --------------------------------------------------------------------------- les moteurs de recherche : jamais un seul
 BING_URL = "https://www.bing.com/search?q={}&setlang=fr&cc=FR"
-PAUSE_BLOQUE_S = 600          # un moteur qui ne répond rien (limitation, vérification anti-robot) est laissé tranquille 10 minutes, les autres prennent le relais
-DUREE_CACHE_RECHERCHE_S = 600          # la même recherche, peu après : pas de nouvelle requête (on n'insiste pas auprès d'un moteur qui limite)
-BLOQUES = {}          # moteur -> instant jusqu'auquel on l'évite
-CACHE_RECHERCHE = {}          # (requête, nombre) -> (instant, résultats)
+BLOCKED_PAUSE_S = 600          # un moteur qui ne répond rien (limitation, vérification anti-robot) est laissé tranquille 10 minutes, les autres prennent le relais
+SEARCH_CACHE_TTL_S = 600          # la même recherche, peu après : pas de nouvelle requête (on n'insiste pas auprès d'un moteur qui limite)
+BLOCKED = {}          # moteur -> instant jusqu'auquel on l'évite
+SEARCH_CACHE = {}          # (requête, nombre) -> (instant, résultats)
 LOCK_SEARCH = threading.Lock()
-RE_BING_BLOC = re.compile(r'<li class="b_algo"[^>]*>(.*?)</li>', re.S)
-RE_BING_TITRE = re.compile(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
-RE_PARAGRAPHE = re.compile(r"<p[^>]*>(.*?)</p>", re.S)
+RE_BING_BLOCK = re.compile(r'<li class="b_algo"[^>]*>(.*?)</li>', re.S)
+RE_BING_TITLE = re.compile(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+RE_PARAGRAPH = re.compile(r"<p[^>]*>(.*?)</p>", re.S)
 
 
 def without_tags(fragment):
@@ -334,7 +334,7 @@ def results_duckduckgo(requete):
     if o.get("periode"):
         champs["df"] = _recherche.PERIODS[o["periode"]][2]
     _, _, page = web_download(DDG_URL, urllib.parse.urlencode(champs).encode("utf-8"))
-    analyse = ResultatsDDG()
+    analyse = DdgResults()
     analyse.feed(page)
     sortie = []
     for x in analyse.resultats:
@@ -351,14 +351,14 @@ def results_bing(requete):
         adresse = adresse.replace("setlang=fr&cc=FR", "setlang=en&cc=US")
     _, _, page = web_download(adresse)
     sortie = []
-    for bloc in RE_BING_BLOC.findall(page):
-        t = RE_BING_TITRE.search(bloc)
+    for bloc in RE_BING_BLOCK.findall(page):
+        t = RE_BING_TITLE.search(bloc)
         if not t:
             continue
         url = address_bing(t.group(1))
         if not url.startswith("http"):
             continue
-        p = RE_PARAGRAPHE.search(bloc)
+        p = RE_PARAGRAPH.search(bloc)
         sortie.append({"titre": without_tags(t.group(2)), "url": url, "extrait": without_tags(p.group(1))[:300] if p else ""})
     return sortie
 
@@ -376,12 +376,12 @@ def search_results(requete, nombre, maintenant=time.time, options=None):
     o = _recherche.options() if options is None else options
     cle = (requete.lower(), nombre, o.get("periode"), o.get("site"), bool(o.get("actualites")), o.get("langue"))
     with LOCK_SEARCH:
-        en_cache = CACHE_RECHERCHE.get(cle)
-    if en_cache and maintenant() - en_cache[0] < DUREE_CACHE_RECHERCHE_S:
+        en_cache = SEARCH_CACHE.get(cle)
+    if en_cache and maintenant() - en_cache[0] < SEARCH_CACHE_TTL_S:
         return en_cache[1], []
     moteurs = engines_of_search()
-    libres = [m for m in moteurs if BLOQUES.get(m[0], 0) <= maintenant()]
-    ordre = libres + sorted((m for m in moteurs if m not in libres), key=lambda m: BLOQUES.get(m[0], 0))
+    libres = [m for m in moteurs if BLOCKED.get(m[0], 0) <= maintenant()]
+    ordre = libres + sorted((m for m in moteurs if m not in libres), key=lambda m: BLOCKED.get(m[0], 0))
     raisons = []
     for nom, fonction in ordre:
         envoyee, retire = requete, []
@@ -402,10 +402,10 @@ def search_results(requete, nombre, maintenant=time.time, options=None):
             _sorties.record(nom, envoyee, retire, bool(trouves))
         if trouves:
             with LOCK_SEARCH:
-                BLOQUES.pop(nom, None)
-                CACHE_RECHERCHE[cle] = (maintenant(), trouves)
+                BLOCKED.pop(nom, None)
+                SEARCH_CACHE[cle] = (maintenant(), trouves)
             return trouves, raisons
-        BLOQUES[nom] = maintenant() + PAUSE_BLOQUE_S
+        BLOCKED[nom] = maintenant() + BLOCKED_PAUSE_S
         raisons.append("{} : {}".format(nom, raison))
     return [], raisons
 
@@ -415,11 +415,11 @@ def state_engines(maintenant=time.time):
     c = _recherche.config()
     sortie = []
     for nom, _ in engines_of_search():
-        sortie.append({"nom": nom, "configure": bool(c["searxng"]) if nom == "searxng" else bool(c.get(nom + "_cle")), "en_pause_s": max(0, int(BLOQUES.get(nom, 0) - maintenant()))})
+        sortie.append({"nom": nom, "configure": bool(c["searxng"]) if nom == "searxng" else bool(c.get(nom + "_cle")), "en_pause_s": max(0, int(BLOCKED.get(nom, 0) - maintenant()))})
     return sortie
 
 
-def tester_moteurs(requete="assistant d'IA local", delai=40):
+def check_engines(requete="assistant d'IA local", delai=40):
     """Interroge CHAQUE moteur séparément (sans changer leur mise en pause) : [{nom, ok, nombre, ms, erreur, exemple}]. Sert au bouton « Tester » des réglages."""
     from concurrent.futures import ThreadPoolExecutor, wait
 
@@ -452,7 +452,7 @@ def tool_web_search(requete, nombre, ctx, lire=None, periode=None, site=None, ac
     except (TypeError, ValueError):
         nombre = 6
     try:
-        options = _recherche.set_options(periode, site, actualites, _i18n_langue())
+        options = _recherche.set_options(periode, site, actualites, _i18n_language())
     except ValueError as e:
         raise _m.ErreurOutil(str(e))
     ctx["web_lu"] = True
@@ -468,10 +468,10 @@ def tool_web_search(requete, nombre, ctx, lire=None, periode=None, site=None, ac
         return _t("La recherche web ne répond pas pour le moment ({}). Les moteurs de recherche limitent les requêtes automatiques. NE RÉESSAIE PAS tout de suite : dis simplement à l'utilisateur que la recherche est momentanément indisponible, "
                   "réponds avec ce que tu sais en le précisant, ou lis directement une page dont tu connais l'adresse avec web_lire.").format(" ; ".join(raisons) or _t("aucun résultat"))
     try:
-        a_lire = LIRE_AUTO if lire is None else max(0, min(5, int(lire)))
+        a_lire = AUTO_READ if lire is None else max(0, min(5, int(lire)))
     except (TypeError, ValueError):
-        a_lire = LIRE_AUTO
-    extraits = extraits_en_parallele(urls[:a_lire])
+        a_lire = AUTO_READ
+    extraits = parallel_excerpts(urls[:a_lire])
     for i, texte in extraits.items():
         lignes[i] += "\n   " + _t("Début de la page : ") + texte
     precisions = [x for x in (("période : " + options["periode"]) if options.get("periode") else "", ("site : " + options["site"]) if options.get("site") else "", "actualités" if options.get("actualites") else "") if x]
@@ -480,16 +480,16 @@ def tool_web_search(requete, nombre, ctx, lire=None, periode=None, site=None, ac
     return WARNING_WEB + consigne.format(requete) + "\n\n".join(lignes) + pied
 
 
-def _i18n_langue():
+def _i18n_language():
     from . import i18n
     return i18n.language()
 
 
 CACHE_PAGES = {}          # adresse -> (instant, (adresse finale, type, contenu)) : lire la suite d'une page longue ne la télécharge pas de nouveau
-DUREE_CACHE_PAGES_S = 600
+PAGE_CACHE_TTL_S = 600
 CACHE_PAGES_MAX = 24
-CACHE_PAGES_OCTETS = 32_000_000         # le cache entier reste sous ce poids (le plus ancien part d'abord) ; une page plus grosse que le tiers n'y entre pas
-VERROU_PAGES = threading.Lock()
+CACHE_PAGES_BYTES = 32_000_000         # le cache entier reste sous ce poids (le plus ancien part d'abord) ; une page plus grosse que le tiers n'y entre pas
+PAGES_LOCK = threading.Lock()
 
 
 def read_pdf(url):
@@ -514,15 +514,15 @@ def read_pdf(url):
     return final, "application/pdf", texte
 
 
-def page_en_cache(url, maintenant=time.time):
+def cached_page(url, maintenant=time.time):
     """(adresse finale, type, contenu) de la page, gardée dix minutes. Un PDF donne son texte ; une page HTML son code."""
     try:
         _hl.guard(url)          # le mode hors ligne l'emporte toujours, cache ou pas
     except _hl.OfflineError as e:
         raise _m.ErreurOutil(str(e))
-    with VERROU_PAGES:
+    with PAGES_LOCK:
         trouve = CACHE_PAGES.get(url)
-    if trouve and maintenant() - trouve[0] < DUREE_CACHE_PAGES_S:
+    if trouve and maintenant() - trouve[0] < PAGE_CACHE_TTL_S:
         return trouve[1]
     if urllib.parse.urlsplit(url).path.lower().endswith(".pdf"):
         res = read_pdf(url)
@@ -531,22 +531,22 @@ def page_en_cache(url, maintenant=time.time):
         if res[1] == "application/pdf":          # un PDF sans « .pdf » dans l'adresse : on le sait à son type, on le relit en octets
             res = read_pdf(url)
     poids = len(res[2])
-    if poids <= CACHE_PAGES_OCTETS // 3:
-        with VERROU_PAGES:
+    if poids <= CACHE_PAGES_BYTES // 3:
+        with PAGES_LOCK:
             CACHE_PAGES.pop(url, None)
-            while CACHE_PAGES and (len(CACHE_PAGES) >= CACHE_PAGES_MAX or sum(len(v[1][2]) for v in CACHE_PAGES.values()) + poids > CACHE_PAGES_OCTETS):
+            while CACHE_PAGES and (len(CACHE_PAGES) >= CACHE_PAGES_MAX or sum(len(v[1][2]) for v in CACHE_PAGES.values()) + poids > CACHE_PAGES_BYTES):
                 CACHE_PAGES.pop(min(CACHE_PAGES, key=lambda k: CACHE_PAGES[k][0]))
             CACHE_PAGES[url] = (maintenant(), res)
     return res
 
 
-def texte_de_page_html(brut, adresse):
+def html_page_text(brut, adresse):
     """(texte, titre, liens) d'une page HTML : sans menus ni pieds de page d'abord ; s'il n'en reste presque rien, la page entière."""
-    analyse = HtmlEnTexte(garder_navigation=False, base=adresse)
+    analyse = HtmlToText(garder_navigation=False, base=adresse)
     analyse.feed(brut)
     texte = analyse.texte()
-    if len(texte.strip()) < SEUIL_PAGE_VIDE:
-        complet = HtmlEnTexte(garder_navigation=True, base=adresse)
+    if len(texte.strip()) < EMPTY_PAGE_THRESHOLD:
+        complet = HtmlToText(garder_navigation=True, base=adresse)
         complet.feed(brut)
         if len(complet.texte()) > len(texte):
             analyse, texte = complet, complet.texte()
@@ -562,12 +562,12 @@ def tool_web_read(url, debut, ctx, liens=False):
     except (TypeError, ValueError):
         debut = 0
     ctx["web_lu"] = True
-    final, type_, brut = page_en_cache(url)
+    final, type_, brut = cached_page(url)
     titre = ""
     adresses = []
     est_html = "html" in type_ or brut.lstrip()[:15].lower().startswith(("<!doctype", "<html"))
     if est_html:
-        texte, titre, adresses = texte_de_page_html(brut, final)
+        texte, titre, adresses = html_page_text(brut, final)
     elif type_ == "application/pdf" or type_.startswith("text/") or "json" in type_ or "xml" in type_:
         texte = brut
     else:
@@ -585,14 +585,14 @@ def tool_web_read(url, debut, ctx, liens=False):
         return WARNING_WEB + "\n" + final + _t("\nLiens de la page (lis-en un avec web_lire) :\n") + ("\n".join(lignes) or _t("(aucun lien)"))
     note = ""
     if est_html:
-        if len(texte.strip()) < SEUIL_PAGE_VIDE:
+        if len(texte.strip()) < EMPTY_PAGE_THRESHOLD:
             meta = MetaPage()
             try:
                 meta.feed(brut)
             except Exception:  # noqa: BLE001  (un HTML cassé ne doit pas empêcher de répondre)
                 pass
             annonce = meta.texte()
-            note = conseil_page_javascript(final)
+            note = javascript_page_advice(final)
             if not texte.strip() and not annonce:
                 return WARNING_WEB + "\n" + final + note
             if annonce:
@@ -610,7 +610,7 @@ def tool_web_read(url, debut, ctx, liens=False):
 STATES_TASK = ("a_faire", "en_cours", "fait")
 
 
-SIGNES_TACHE = {"a_faire": "[ ]", "en_cours": "[>]", "fait": "[x]"}
+TASK_SIGNS = {"a_faire": "[ ]", "en_cours": "[>]", "fait": "[x]"}
 
 
 def normalize_tasks(liste):
@@ -641,7 +641,7 @@ def text_tasks(conv):
         return ""
     ancienne = int(conv.get("taches_age") or 0)
     rappel = _t("(NON mise à jour depuis {} réponse(s) : renvoie-la à jour, ou renvoie une liste vide si ce n'est plus d'actualité)\n").format(ancienne) if ancienne else ""
-    return _t("\n\n[Tâches en cours : liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier]\n") + rappel + "\n".join("{} {}".format(SIGNES_TACHE[t["etat"]], t["texte"]) for t in conv["taches"])
+    return _t("\n\n[Tâches en cours : liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier]\n") + rappel + "\n".join("{} {}".format(TASK_SIGNS[t["etat"]], t["texte"]) for t in conv["taches"])
 
 
 def tool_tasks(liste, ctx):

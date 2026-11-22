@@ -30,7 +30,7 @@ DURATION_DEFAULT_H = 8
 DURATION_MAX_H = 72
 MAX_TURNS = 400                     # tours automatiques au plus par mission
 MAX_CONSECUTIVE_ERRORS = 3
-SANS_ACTION_MAX = 3                 # réponses de suite sans aucun appel d'outil avant de demander de l'aide
+MAX_IDLE_TURNS = 3                 # réponses de suite sans aucun appel d'outil avant de demander de l'aide
 PERIOD = 5
 MAX_NOTEBOOK = 12000
 RE_ID = re.compile(r"^[a-f0-9]{8}$")
@@ -98,7 +98,7 @@ def find_for_conversation(conv_id):
     return liste[-1] if liste else None
 
 
-def par_conversation():
+def by_conversation():
     """{conversation: résumé de sa mission} : de quoi montrer l'avancement dans la conversation elle-même."""
     sortie = {}
     for m in read():
@@ -107,7 +107,7 @@ def par_conversation():
     return sortie
 
 
-def oublier_conversation(conv_id):
+def forget_conversation(conv_id):
     """La conversation est supprimée : sa mission aussi."""
     for m in read():
         if m.get("lie") and m.get("conv") == conv_id:
@@ -138,7 +138,7 @@ def state():
 
 
 # --------------------------------------------------------------------------- les outils du modèle
-def signaler(ident, nouvel_etat, texte):
+def report(ident, nouvel_etat, texte):
     """Appelé par les outils mission_terminer / mission_bloquee."""
     if nouvel_etat == "terminee":
         m = modify(ident, etat="terminee", bilan=str(texte)[:4000], fin=int(time.time()), message="")
@@ -161,7 +161,7 @@ def instruction_system():
     return "\n\n"  + _t(INSTRUCTION)
 
 
-def prompt_du_tour(m):
+def turn_prompt(m):
     point = "\n\n" + _t("Termine ce tour par un court point d'avancement dans ta réponse (1 à 3 phrases : ce qui est fait, ce qui reste) : l'utilisateur te suit dans cette conversation.")
     if m["tours"] == 0:
         return _t("MISSION « {} »\n\nCahier des charges :\n{}\n\nCommence par le plan dans la fiche de suivi, puis exécute la première étape.").format(m["nom"], m["cahier"]) + point
@@ -170,10 +170,10 @@ def prompt_du_tour(m):
 
 
 MAX_LOG = 8                     # dernières actions gardées pour la page
-DELAI_MESSAGE = 3.0                 # secondes entre deux mises à jour du « le modèle réfléchit… » (le fichier des missions n'est pas réécrit à chaque jeton)
+MESSAGE_TIMEOUT = 3.0                 # secondes entre deux mises à jour du « le modèle réfléchit… » (le fichier des missions n'est pas réécrit à chaque jeton)
 
 
-def suivre_le_tour(ident, maintenant=time.time):
+def follow_turn(ident, maintenant=time.time):
     """La fonction d'émission d'un tour de mission : elle ne montre rien dans la page (personne n'y est connecté), mais tient à jour l'avancement de la mission — ce que fait le modèle EN CE MOMENT
     (il réfléchit, il écrit, il lance tel outil) et les dernières actions — pour que la bannière ne reste pas sur « tour 1 en cours… » pendant des minutes, sans qu'on sache si quelque chose se passe."""
     compte = {"pensee": 0, "texte": 0, "dernier": 0.0}
@@ -208,7 +208,7 @@ def suivre_le_tour(ident, maintenant=time.time):
         else:
             return
         t = maintenant()
-        if t - compte["dernier"] >= DELAI_MESSAGE:
+        if t - compte["dernier"] >= MESSAGE_TIMEOUT:
             compte["dernier"] = t
             try:
                 modify(ident, message=(_t("le modèle réfléchit… ({} caractères)").format(compte["pensee"]) if compte["pensee"] and not compte["texte"]
@@ -219,7 +219,7 @@ def suivre_le_tour(ident, maintenant=time.time):
 
 
 # --------------------------------------------------------------------------- le fil
-def _tour(m):
+def _turn(m):
     """Un tour de la mission. Renvoie False sans rien faire si aucune place n'est libre ou si le dossier de travail est occupé par un autre, True si un tour a eu lieu."""
     if _turns.full():
         return False
@@ -251,7 +251,7 @@ def _tour(m):
     modify(m["id"], conv=conv["id"], message=_t("tour {} en cours…").format(m["tours"] + 1))
     echec = None
     try:
-        siege.run(prompt_du_tour(m), suivre_le_tour(m["id"]), r, identite="mission", lecture_seule=not autonome)
+        siege.run(turn_prompt(m), follow_turn(m["id"]), r, identite="mission", lecture_seule=not autonome)
     except Exception as erreur:  # noqa: BLE001
         echec = erreur
         _m.journaliser("Mission « {} » : tour en erreur : {!r}".format(m["nom"], erreur))
@@ -281,14 +281,14 @@ def _tour(m):
         else:
             champs["erreurs"] = 0
             champs["sans_action"] = 0 if faits > 0 else actuel.get("sans_action", 0) + 1
-            if champs["sans_action"] >= SANS_ACTION_MAX:
-                champs.update(etat="bloquee", question=_t("Je n'avance plus : {} réponses de suite sans aucune action. Que dois-je faire ?").format(SANS_ACTION_MAX), sans_action=0)
+            if champs["sans_action"] >= MAX_IDLE_TURNS:
+                champs.update(etat="bloquee", question=_t("Je n'avance plus : {} réponses de suite sans aucune action. Que dois-je faire ?").format(MAX_IDLE_TURNS), sans_action=0)
                 notify(actuel, _t("n'avance plus et a besoin de toi."))
     modify(m["id"], **champs)
     return True
 
 
-def un_pas():
+def one_step():
     """Fait avancer la première mission en cours d'un tour. Renvoie True si un tour a eu lieu."""
     for m in read():
         if m["etat"] != "en_cours":
@@ -297,7 +297,7 @@ def un_pas():
             fini = modify(m["id"], etat="terminee", fin=int(time.time()), bilan=m.get("bilan") or _t("Arrêtée : la durée ou le nombre de tours maximal est atteint. Le travail déjà fait est dans le dossier ; relis la conversation « 🎯 » pour l'état exact."))
             notify(fini, _t("arrêtée : la durée ou le nombre de tours maximal est atteint."))
             continue
-        if _tour(m):
+        if _turn(m):
             return True
         if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
             return False                                                    # plus de place pour personne : la boucle attend au lieu de tourner à vide
@@ -307,7 +307,7 @@ def un_pas():
 def loop():
     while not ALIVE["stop"].is_set():
         try:
-            if not un_pas():
+            if not one_step():
                 ALIVE["stop"].wait(PERIOD)
         except Exception as erreur:  # noqa: BLE001
             _m.journaliser("Missions : {!r}".format(erreur))
@@ -322,7 +322,7 @@ def start():
     ALIVE["fil"].start()
 
 
-def arreter():
+def stop_mission():
     ALIVE["stop"].set()
     for e in list(ALIVE["arrets"].values()):
         e.set()

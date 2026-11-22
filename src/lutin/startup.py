@@ -18,7 +18,7 @@ def prepare_environment(cfg, dossiers):
     polyvalent = cfg["modeles"]["choisis"].get("polyvalent") or next(iter(cfg["modeles"]["choisis"].values()), "")
     env = {"LUTIN_RACINE": str(travail), "LUTIN_DONNEES": str(dossiers["donnees"]), "LUTIN_MEMOIRE": str(dossiers["memoire"]),
            "LUTIN_PORT": str(cfg["securite"]["port"]), "LUTIN_PROPOSITIONS": str(Path(dossiers["cache"]) / "propositions.json"), "LUTIN_BENCH": str(Path(dossiers["cache"]) / "bench.json"),
-           "LUTIN_CONFIG": str(Path(dossiers["config"]) / "config.json"), "LUTIN_VERSION_CACHE": str(updates.fichier_version(dossiers))}
+           "LUTIN_CONFIG": str(Path(dossiers["config"]) / "config.json"), "LUTIN_VERSION_CACHE": str(updates.version_file(dossiers))}
     if polyvalent:
         env["LUTIN_MODELE"] = polyvalent
     if cache_catalogue.is_file():

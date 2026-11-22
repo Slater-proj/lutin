@@ -535,7 +535,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.par_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
@@ -674,7 +674,7 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/fond-rapport":
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
-                return self._envoyer(200, {"texte": _fond.rapport(_fond.find((q.get("id") or [""])[0]))})
+                return self._envoyer(200, {"texte": _fond.report(_fond.find((q.get("id") or [""])[0]))})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/mettre-a-jour-etat":
@@ -1170,18 +1170,18 @@ class Handler(BaseHTTPRequestHandler):
                 if not chemin:
                     raise ValueError("Pas de vérification de version dans ce mode de lancement.")
                 from . import updates
-                updates.ignorer_version(chemin, str(donnees.get("version", ""))[:40])
+                updates.ignore_version(chemin, str(donnees.get("version", ""))[:40])
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/verifier-lutin":                    # bouton « Vérifier les mises à jour » : une requête GitHub, tout de suite
                 chemin = os.environ.get("LUTIN_VERSION_CACHE")
                 if not chemin:
                     return self._envoyer(400, {"erreur": _t("Pas de vérification de version dans ce mode de lancement.")})
                 from . import updates
-                avant = updates.lire_fichier_version(chemin).get("date") or 0
+                avant = updates.read_version_file(chemin).get("date") or 0
                 d = updates.check_lutin({"cache": str(Path(chemin).parent)}, force=True)
                 if (d.get("date") or 0) <= avant:
                     return self._envoyer(503, {"erreur": _t("Impossible de joindre GitHub : {}").format(d.get("erreur") or "?"), "actuelle": _m.VERSION})
-                return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": updates.lire_fichier_version(chemin).get("version", ""), "nouvelle": _m.nouvelle_version_lutin()})
+                return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": updates.read_version_file(chemin).get("version", ""), "nouvelle": _m.nouvelle_version_lutin()})
             if self.path == "/api/langue":
                 try:
                     return self._envoyer(200, {"langue": _i18n.save_language(str(donnees.get("valeur", "")).strip().lower())})
@@ -1232,7 +1232,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path in ("/api/supprimer", "/api/renommer", "/api/epingler") and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})          # sinon la fin de la réponse réécrirait la conversation par-dessus
             if self.path == "/api/supprimer":
-                _mission.oublier_conversation(str(donnees.get("id", "")))                  # sa mission, s'il y en a une, s'arrête avec elle
+                _mission.forget_conversation(str(donnees.get("id", "")))                  # sa mission, s'il y en a une, s'arrête avec elle
                 _m.conv_supprimer(str(donnees.get("id", "")))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/renommer":
@@ -1467,8 +1467,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(200, _github.test_token(_skills.default_http))
             if chemin == "/api/skills-tiers-source":
                 if donnees.get("retirer"):
-                    return self._envoyer(200, {"sources": _skills.retirer_source(str(donnees.get("depot", "")))})
-                return self._envoyer(200, {"sources": _skills.ajouter_source(donnees.get("depot"))})
+                    return self._envoyer(200, {"sources": _skills.remove_source(str(donnees.get("depot", "")))})
+                return self._envoyer(200, {"sources": _skills.add_source(donnees.get("depot"))})
             racines, actif = self._racines_travail()
             if chemin == "/api/skills-tiers-indexer":
                 depot = str(donnees.get("depot", ""))
@@ -1476,7 +1476,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
                 if not (_skills.INDEXING.get(depot) or {}).get("fini", True):
                     return self._envoyer(200, {"deja": True})
-                threading.Thread(target=lambda: _skills.indexer(depot), daemon=True, name="skills-indexation").start()
+                threading.Thread(target=lambda: _skills.build_index(depot), daemon=True, name="skills-indexation").start()
                 return self._envoyer(200, {"ok": True})
             travail = str(donnees.get("travail") or actif)
             if travail not in racines:
@@ -1495,7 +1495,7 @@ class Handler(BaseHTTPRequestHandler):
                 _m.journaliser("Skill tiers installé : {} ({}, {}).".format(r["nom"], depot, dossier))
                 return self._envoyer(200, r)
             if chemin == "/api/skills-tiers-retirer":
-                _skills.retirer(racines[travail], str(donnees.get("nom", "")))
+                _skills.remove(racines[travail], str(donnees.get("nom", "")))
                 _m.journaliser("Skill tiers retiré : {}.".format(str(donnees.get("nom", ""))[:60]))
                 return self._envoyer(200, {"ok": True})
         except ValueError as e:
