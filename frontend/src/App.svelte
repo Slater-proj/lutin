@@ -14,12 +14,17 @@
   import { fromLegacy } from "./lib/address";
   import type { Status } from "./lib/types";
   import Chat from "./screens/Chat.svelte";
-  import Models from "./screens/Models.svelte";
-  import Setup from "./screens/Setup.svelte";
-  import Agents from "./screens/Agents.svelte";
   import ComingSoon from "./screens/ComingSoon.svelte";
-  import Projects from "./screens/Projects.svelte";
-  import Settings from "./screens/Settings.svelte";
+
+  // Chat is the screen most visits open: it comes with the page. The others, and the guide of the first launch, are loaded the first time they are
+  // shown (a file of their own each, kept by the browser after), so that the page does not read every screen before it can draw one.
+  const loadSetup = (): Promise<typeof import("./screens/Setup.svelte")> => import("./screens/Setup.svelte");
+  const SCREENS = {
+    models: () => import("./screens/Models.svelte"),
+    agents: () => import("./screens/Agents.svelte"),
+    projects: () => import("./screens/Projects.svelte"),
+    settings: () => import("./screens/Settings.svelte"),
+  };
 
   const AREAS = ["chat", "agents", "projects", "models", "settings"] as const;
   type Area = (typeof AREAS)[number];
@@ -107,7 +112,7 @@
 {#if setupNeeded === null}
   <p class="loading" role="status">{t("setup.engine_looking")}</p>
 {:else if setupNeeded}
-  <Setup {status} onfinished={() => ((setupNeeded = false), void refreshStatus())} />
+  {#await loadSetup() then screen}<screen.default {status} onfinished={() => ((setupNeeded = false), void refreshStatus())} />{/await}
 {:else}
 <a class="skip" href="#main">{t("a11y.skip")}</a>
 <Palette />
@@ -138,13 +143,13 @@
     {#if area === "chat"}
       <Chat {status} onchanged={refreshStatus} />
     {:else if area === "models"}
-      <Models {status} onchanged={refreshStatus} />
+      {#await SCREENS.models() then screen}<screen.default {status} onchanged={refreshStatus} />{/await}
     {:else if area === "agents"}
-      <Agents />
+      {#await SCREENS.agents() then screen}<screen.default />{/await}
     {:else if area === "projects"}
-      <Projects />
+      {#await SCREENS.projects() then screen}<screen.default />{/await}
     {:else if area === "settings"}
-      <Settings />
+      {#await SCREENS.settings() then screen}<screen.default />{/await}
     {:else}
       <ComingSoon name={t(("nav." + area) as MessageKey)} />
     {/if}
