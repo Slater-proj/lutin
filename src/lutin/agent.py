@@ -72,6 +72,29 @@ def record_template(modele):
         pass
 
 
+TEXT_TOOLS_FORMAT = ("Pour appeler un outil, réponds UNIQUEMENT par une ligne de cette forme, sans autre texte :\n"
+                     "<tool_call>{\"name\": \"NOM_DE_L_OUTIL\", \"arguments\": {\"parametre\": \"valeur\"}}</tool_call>\n"
+                     "Si aucun outil n'est utile, réponds normalement en texte, sans <tool_call>. Le résultat de l'outil te revient dans le message suivant.\n"
+                     "Exemple : pour lire le fichier src/app.py, réponds : <tool_call>{\"name\": \"lire\", \"arguments\": {\"chemin\": \"src/app.py\"}}</tool_call>")
+
+
+def text_tools_block(outils):
+    """Les outils décrits dans la consigne d'un modèle dont /api/show n'annonce pas les outils (proposition 8 de CONTEXT_RESEARCH.md, « UnTooled ») : une
+    ligne par outil (nom, arguments, première phrase) et la forme d'un appel, lu ensuite par `extract_text_calls`. Mesuré au banc le 22/11/2026
+    (tools/measure_tool_prompt.py, gemma3:4b sur 4 096 jetons) : les appels possibles passent tous (0 avant, aucun outil envoyé), et la ligne prend
+    387 jetons de prompt contre 955 pour les schémas entiers, à réussite égale. La balise ne sert qu'à ces modèles : sur un modèle dont le gabarit
+    lit lui-même les appels (Qwen par Ollama), écrire <tool_call> sans `tools` dans la requête coupe la réponse (« EOF »)."""
+    lignes = []
+    for t in outils:
+        f = t.get("function") or {}
+        parametres = f.get("parameters") or {}
+        requis = set(parametres.get("required") or [])
+        arguments = ", ".join(nom + ("" if nom in requis else "?") for nom in (parametres.get("properties") or {}))
+        premiere = (f.get("description") or "").split(". ")[0].split("\n")[0][:110]
+        lignes.append("- {}({}) : {}".format(f.get("name", ""), arguments, premiere))
+    return "Tu as ces outils :\n" + "\n".join(lignes) + "\n\n" + TEXT_TOOLS_FORMAT
+
+
 def flatten_without_tools(corps):
     """Le même échange sans outils ni rôle « tool » : un résultat d'outil devient un message de l'utilisateur, un appel d'outil une phrase, et deux messages de même rôle à la suite sont fusionnés
     (les gabarits les plus stricts exigent l'alternance utilisateur / assistant). Ce que le modèle a lu reste donc sous ses yeux, en texte.
@@ -2018,23 +2041,29 @@ def _prepare_request(conv, r, emit, ctx, msgs, outils, idx_tour, dernier_tour, d
     if idx_tour == 0 and route_request(r, derniere_demande, any(m.get("images") for m in conv["messages"][-_images.RECENT:]), emit, conv["id"]):
         caps = current_engine(r).capacites(r["modele"])
         reflechit = reflechit and (caps is None or "thinking" in caps)
+    # un modèle dont /api/show n'annonce pas les outils : ils sont décrits dans sa consigne et il les appelle en texte (proposition 8, mesurée : voir
+    # text_tools_block). Avant, il répondait en texte seul, sans rien pouvoir lire. La requête est aplatie (pas de rôle « tool » pour son gabarit).
+    texte_outils = bool(not dernier_tour and outils and caps is not None and "tools" not in caps)
+    ctx["outils_texte"] = texte_outils
+    if texte_outils and msgs and msgs[0].get("role") == "system":
+        msgs[0] = dict(msgs[0], content=(msgs[0].get("content") or "") + "\n\n" + text_tools_block(outils))          # dans la liste de l'étape : les nouveaux essais la gardent
     rapport_contexte = {}
     corps = {"model": r["modele"], "messages": adjust_context(msgs, r["num_ctx"], 1.0, outils, rapport_contexte), "stream": True, "options": options, "think": reflechit}
     if not dernier_tour and outils:                      # mode « discussion » : aucun outil, donc rien à envoyer ni à signaler
-        if caps is not None and "tools" not in caps:
+        if texte_outils:
             if idx_tour == 0:
-                emit({"type": "info", "texte": "Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela."})
+                emit({"type": "info", "texte": _t("Ce modèle n\'annonce pas d\'appel d\'outils : je lui décris les outils dans la consigne et il les appelle en texte. C\'est moins sûr qu\'un modèle prévu pour cela (Qwen 3.8 ou Gemma 4).")})
         else:
             corps["tools"] = outils
     announce_reduction(rapport_contexte, emit, ctx, r["num_ctx"])
     plat = r["modele"] in known_templates()
-    if plat:
+    if plat or texte_outils:
         corps = flatten_without_tools(corps)
-        if idx_tour == 0 and outils:
+        if plat and idx_tour == 0 and outils:
             emit({"type": "info", "texte": _t("Le gabarit de ce modèle refuse les outils : il répond sans lire ni modifier de fichiers. Pour cela, choisis un autre modèle (Qwen ou Gemma).")})
     if current_engine(r).en_memoire(r["modele"]) is None:
         emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
-    return corps, caps, plat
+    return corps, caps, plat or texte_outils          # « plat » : chaque nouvel essai de l'étape est aplati aussi
 
 
 def _call_model(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, plat):
@@ -2325,7 +2354,7 @@ def agent_loop(conv, r, emit, ctx, stop):
                 conv["messages"].append({"role": "assistant", "content": contenu, "ts": timestamp()})
             emit({"type": "info", "texte": "Ta demande est gardée dans la conversation. Écris « continue » pour que je reprenne là où ça s'est arrêté."})
             break
-        if not appels and contenu and "tools" in corps:
+        if not appels and contenu and ("tools" in corps or ctx.get("outils_texte")):
             recu = []                                     # ce que le modèle a lu depuis la dernière demande de l'utilisateur : résultats d'outils (fichiers, pages web)
             for x in reversed(conv["messages"]):
                 if x.get("role") == "user":
@@ -2335,7 +2364,8 @@ def agent_loop(conv, r, emit, ctx, stop):
             appels, contenu_net = extract_text_calls(contenu, ctx["outils_autorises"], " ".join(recu))
             if appels:
                 contenu = contenu_net
-                emit({"type": "info", "texte": "Le modèle a écrit son appel d'outil en texte au lieu d'utiliser le mécanisme prévu : je l'exécute quand même."})
+                if not ctx.get("outils_texte"):          # un modèle sans outils annoncés appelle en texte : c'est la règle pour lui, pas un écart à signaler
+                    emit({"type": "info", "texte": "Le modèle a écrit son appel d'outil en texte au lieu d'utiliser le mécanisme prévu : je l'exécute quand même."})
         if forcer_fin and appels:                                   # le dernier tour est sans outil : un appel quand même demandé n'est pas exécuté (ce serait recommencer la boucle)
             appels = []
             if not contenu.strip():

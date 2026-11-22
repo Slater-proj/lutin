@@ -277,7 +277,7 @@
 "Erreur inattendue : {} (détail dans donnees/lutin.log). Ta demande est gardée.": "Unexpected error: {} (details in donnees/lutin.log). Your request is kept.",
 "📎 Rappels ajoutés d'après tes documents : {}": "📎 Reminders added from your documents: {}",
 "Ce modèle n'a pas de mode réflexion : je le désactive pour cette demande.": "This model has no reasoning mode: I am turning it off for this request.",
-"Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela.": "This model cannot call tools: it will answer without reading or modifying files. Choose another model (Qwen 3.8 or Gemma 4) for that.",
+"Ce modèle n'annonce pas d'appel d'outils : je lui décris les outils dans la consigne et il les appelle en texte. C'est moins sûr qu'un modèle prévu pour cela (Qwen 3.8 ou Gemma 4).": "This model does not announce tool calls: the tools are described in its instructions and it calls them in text. It is less reliable than a model made for it (Qwen 3.8 or Gemma 4).",
 "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte).": "Loading the model into memory (30 s to 2 min the first time, or if ComfyUI took the card from it).",
 "Attention : seulement {} % du modèle tient sur la carte graphique, le reste tourne sur le processeur, donc c'est lent. Ferme ComfyUI et le navigateur d'images, ou baisse le contexte dans Réglages.": "Warning: only {} % of the model fits on the graphics card, the rest runs on the processor, so it is slow. Close ComfyUI and the image browser, or lower the context in Settings.",
 "Ollama ne répond pas : je le démarre (quelques secondes)...": "Ollama is not responding: I am starting it (a few seconds)...",

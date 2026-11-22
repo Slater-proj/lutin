@@ -1553,9 +1553,35 @@ class Assistant(unittest.TestCase):
             A.CAPABILITIES.pop("petit:1b", None)
         self.assertFalse(RECUES[-1]["think"], "pas de réflexion demandée à un modèle qui n'en a pas")
         self.assertNotIn("tools", RECUES[-1])
+        self.assertIn("- lire(chemin", RECUES[-1]["messages"][0]["content"], "ses outils sont décrits dans la consigne (proposition 8)")
         textes = " ".join(e["texte"] for e in ev if e["type"] == "info")
         self.assertIn("pas de mode réflexion", textes)
-        self.assertIn("ne sait pas appeler d'outils", textes)
+        self.assertIn("n'annonce pas d'appel d'outils", textes)
+
+    def test_un_modele_sans_outils_les_appelle_en_texte(self):
+        """Proposition 8 de CONTEXT_RESEARCH.md (« UnTooled »), mesurée au banc (tools/measure_tool_prompt.py) : un modèle dont /api/show n'annonce pas les
+        outils répondait en texte seul. Ses outils sont décrits dans la consigne, son appel écrit en texte est exécuté, et le résultat lui revient dans une
+        requête aplatie (pas de rôle « tool » pour son gabarit), sans l'avis « appel écrit en texte » à chaque fois."""
+        CAPACITES_FAUX["petit:1b"] = ["completion"]
+        A.CAPABILITIES.pop("petit:1b", None)
+        appel = '<tool_call>{"name": "lire", "arguments": {"chemin": "docs/univers.md"}}</tool_call>'
+        try:
+            ev = chat("Lis docs/univers.md", reponses=[[{"content": appel}], [{"content": "Il parle de tonnerre."}]], modele="petit:1b")
+        finally:
+            CAPACITES_FAUX.pop("petit:1b", None)
+            A.CAPABILITIES.pop("petit:1b", None)
+        self.assertEqual(texte_de(ev).strip().split()[-3:], ["parle", "de", "tonnerre."])
+        self.assertTrue(any(e["type"] == "resultat" and e["nom"] == "lire" for e in ev), "l'outil a été exécuté")
+        premiere, seconde = RECUES[-2], RECUES[-1]
+        self.assertNotIn("tools", premiere)
+        self.assertIn("<tool_call>", premiere["messages"][0]["content"], "la forme d'un appel est dans la consigne")
+        self.assertEqual({m["role"] for m in seconde["messages"]} - {"system", "user", "assistant"}, set(), "requête aplatie : pas de rôle « tool »")
+        self.assertIn("Résultat de l'outil", " ".join(m["content"] for m in seconde["messages"] if m["role"] == "user"), "le résultat lui revient en texte")
+        self.assertNotIn("en texte au lieu", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"), "pas d'avis d'écart : c'est la règle pour ce modèle")
+        cid = next(e["conversation"] for e in ev if e["type"] == "debut")
+        stocke = A.conv_read(cid)["messages"]
+        self.assertTrue(any(m.get("tool_calls") for m in stocke) and any(m.get("role") == "tool" for m in stocke), "la conversation garde l'appel et son résultat")
+        self.assertFalse(any("<tool_call>" in (m.get("content") or "") for m in stocke), "pas la balise brute dans la conversation")
 
     def test_commande_de_lecture_reste_dans_le_projet(self):
         self.assertTrue(A.safe_read_command("git status --short"))
@@ -3515,7 +3541,7 @@ class Assistant(unittest.TestCase):
         ev = chat("Salut, ça va ?", reponses=[[{"content": "Très bien."}]], mode="discussion")
         self.assertNotIn("tools", RECUES[-1], "pas d'outils envoyés : c'est ce qui rend ce mode rapide")
         self.assertEqual(texte_de(ev), "Très bien.")
-        self.assertNotIn("ne sait pas appeler d'outils", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"), "ce n'est pas un défaut du modèle : aucun message")
+        self.assertNotIn("n'annonce pas d'appel d'outils", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"), "ce n'est pas un défaut du modèle : aucun message")
         self.assertIn("DISCUSSION", RECUES[-1]["messages"][0]["content"])
 
     def test_mode_recherche_ne_peut_rien_ecrire_ni_lancer(self):
