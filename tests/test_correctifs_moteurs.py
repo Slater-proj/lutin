@@ -196,7 +196,7 @@ class ColibriRemplacement(unittest.TestCase):
 class SeuilVideoPourTousLesMoteurs(unittest.TestCase):
     def test_ollama_et_llamacpp_repartissent_tout_seuls_pas_un_serveur_externe(self):
         for moteur, attendu in (("ollama", True), ("llamacpp", True), ("openai", False), (None, True)):
-            self.assertEqual(health._repartit_seul({"moteur": moteur}), attendu, str(moteur))
+            self.assertEqual(health._engine_splits_itself({"moteur": moteur}), attendu, str(moteur))
 
 
 class PremierLancement(unittest.TestCase):
@@ -278,7 +278,7 @@ class ProcessusMoteurs(unittest.TestCase):
         ml.SERVEUR.update(proc=Proc(), modele=ml.ROUTEUR, noms=("a",))
         try:
             with mock.patch.object(rc, "snapshot_process", lambda **kw: instantane), mock.patch.object(rc, "placement_llamacpp", lambda mo: (rc.parse_log_llamacpp(journal), "cuda")):
-                c = rc.charges_llamacpp()[0]
+                c = rc.loaded_llamacpp()[0]
         finally:
             ml.SERVEUR.update(ancien)
         self.assertEqual(c["vram"], 20 * go, "le routeur lui-même n'a rien : la carte est tenue par son fils")
@@ -304,24 +304,24 @@ class ProcessusMoteurs(unittest.TestCase):
         instantane = [{"pid": 50, "ppid": 1, "nom": "llama-server", "exe": str(exe), "ram": 10, "vram": 7 * 1024 ** 3}, {"pid": 51, "ppid": 50, "nom": "llama-server", "exe": str(exe), "ram": 5, "vram": 1024},
                       {"pid": 60, "ppid": 1, "nom": "LM Studio", "exe": "C:/Autre/LM Studio.exe", "ram": 3, "vram": None}, {"pid": 70, "ppid": 1, "nom": "ollama", "exe": "", "ram": 3, "vram": 9}]
         with mock.patch.object(rc, "snapshot_process", lambda **kw: instantane), mock.patch.object(rc, "folders_lutin", lambda: [dossier]):
-            c = rc.charges_orphelines(set())
+            c = rc.loaded_orphans(set())
             ids = {x["id"]: x for x in c}
             self.assertEqual(set(ids), {"processus:50", "processus:60"}, "les fils sont regroupés avec leur père ; Ollama est vu par son interface")
             self.assertEqual(ids["processus:50"]["vram"], 7 * 1024 ** 3 + 1024)
             self.assertTrue(ids["processus:50"]["dechargeable"])
             self.assertFalse(ids["processus:60"]["dechargeable"])
             self.assertIsNone(ids["processus:60"]["vram"], "inconnu n'est pas zéro")
-            self.assertEqual(rc.charges_orphelines({50, 51}) and [x["id"] for x in rc.charges_orphelines({50, 51})], ["processus:60"], "ce que Lutin pilote n'est pas compté deux fois")
+            self.assertEqual(rc.loaded_orphans({50, 51}) and [x["id"] for x in rc.loaded_orphans({50, 51})], ["processus:60"], "ce que Lutin pilote n'est pas compté deux fois")
             arretes = []
             with mock.patch.object(rc, "stop_process", lambda pid, tous, **kw: arretes.append((pid, sorted(tous)))):
-                self.assertIn("arrêté", rc.decharger("processus:50")["message"])
+                self.assertIn("arrêté", rc.unload("processus:50")["message"])
                 self.assertEqual(arretes, [(50, [50, 51])])
                 with self.assertRaises(ValueError):
-                    rc.decharger("processus:60")          # pas à Lutin
+                    rc.unload("processus:60")          # pas à Lutin
                 with self.assertRaises(ValueError):
-                    rc.decharger("processus:12345")          # inconnu
+                    rc.unload("processus:12345")          # inconnu
                 with self.assertRaises(ValueError):
-                    rc.decharger("processus:abc")
+                    rc.unload("processus:abc")
         self.assertEqual(len(arretes), 1)
 
 

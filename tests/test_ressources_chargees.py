@@ -75,7 +75,7 @@ class Base(unittest.TestCase):
 
 class Charges(Base):
     def test_les_modeles_d_ollama_avec_leur_part_sur_la_carte(self):
-        c = rc.charges_ollama()
+        c = rc.loaded_ollama()
         self.assertEqual([x["id"] for x in c], ["ollama:qwen3:8b", "ollama:nomic-embed-text:latest"])
         q = c[0]
         self.assertEqual((q["vram"], q["ram"]), (5 * 1024 ** 3, 1024 ** 3))
@@ -84,11 +84,11 @@ class Charges(Base):
         self.assertTrue(all(x["dechargeable"] for x in c))
 
     def test_comfyui_montre_son_cache_et_ne_se_decharge_pas_en_plein_travail(self):
-        c = rc.charges_comfy()
+        c = rc.loaded_comfy()
         self.assertEqual(c[0]["vram"], 6 * 1024 ** 3)
         self.assertTrue(c[0]["dechargeable"])
         FauxOutils.en_cours = 1
-        c = rc.charges_comfy()
+        c = rc.loaded_comfy()
         self.assertFalse(c[0]["dechargeable"])
         self.assertIn("génère 1", c[0]["detail"])
 
@@ -97,8 +97,8 @@ class Charges(Base):
         _m.OLLAMA = "http://127.0.0.1:9"
         os.environ["COMFY_URL"] = "http://127.0.0.1:9"
         try:
-            self.assertEqual(rc.charges_ollama(), [])
-            self.assertEqual(rc.charges_comfy(), [])
+            self.assertEqual(rc.loaded_ollama(), [])
+            self.assertEqual(rc.loaded_comfy(), [])
         finally:
             _m.OLLAMA = ancien
             os.environ["COMFY_URL"] = "http://127.0.0.1:%d" % self.s.server_address[1]
@@ -112,15 +112,15 @@ class Charges(Base):
         ancien = dict(ml.SERVEUR)
         ml.SERVEUR.update(proc=Proc(), modele="un", noms=())
         try:
-            c = rc.charges_llamacpp()
+            c = rc.loaded_llamacpp()
             self.assertEqual(c[0]["id"], "llamacpp")
             self.assertEqual(c[0]["nom"], "un")
             self.assertGreater(c[0]["ram"] or 0, 1_000_000, "la mémoire de ce processus Python se lit")
             ml.SERVEUR.update(modele=ml.ROUTEUR, noms=("a", "b"))
-            self.assertIn("2 modèles", rc.charges_llamacpp()[0]["nom"])
+            self.assertIn("2 modèles", rc.loaded_llamacpp()[0]["nom"])
         finally:
             ml.SERVEUR.update(ancien)
-        self.assertEqual(rc.charges_llamacpp(), [], "arrêté : rien à décharger")
+        self.assertEqual(rc.loaded_llamacpp(), [], "arrêté : rien à décharger")
 
     def test_etat_complet(self):
         with mock.patch.object(_m, "system_memory", lambda: {"total": 32 * 1024 ** 3, "libre": 10 * 1024 ** 3, "engagement_libre": 0}), \
@@ -137,24 +137,24 @@ class Charges(Base):
 
 class Decharger(Base):
     def test_un_modele_d_ollama_est_decharge_avec_keep_alive_zero(self):
-        r = rc.decharger("ollama:qwen3:8b")
+        r = rc.unload("ollama:qwen3:8b")
         self.assertTrue(r["ok"])
         self.assertEqual(APPELS, [("/api/generate", {"model": "qwen3:8b", "prompt": "", "keep_alive": 0})])
 
     def test_comfyui_libere_ses_modeles(self):
-        rc.decharger("comfyui")
+        rc.unload("comfyui")
         self.assertEqual(APPELS, [("/free", {"unload_models": True, "free_memory": True})])
 
     def test_llamacpp_s_arrete(self):
         arrete = []
         with mock.patch.object(engines.ENGINES["llamacpp"], "arreter", lambda: arrete.append(1)):
-            rc.decharger("llamacpp")
+            rc.unload("llamacpp")
         self.assertEqual(arrete, [1])
 
     def test_les_demandes_invalides_sont_refusees_sans_rien_envoyer(self):
         for ident in ("", None, "ollama:", "ollama:a b", "ollama:x;y", "ollama:../../etc", "kill:1234", "chrome", "comfyui2"):
             with self.assertRaises(ValueError, msg=repr(ident)):
-                rc.decharger(ident)
+                rc.unload(ident)
         self.assertEqual(APPELS, [])
 
     def test_un_outil_qui_ne_repond_pas_donne_une_erreur_claire(self):
@@ -162,7 +162,7 @@ class Decharger(Base):
         _m.OLLAMA = "http://127.0.0.1:9"
         try:
             with self.assertRaises(ValueError) as e:
-                rc.decharger("ollama:qwen3:8b")
+                rc.unload("ollama:qwen3:8b")
             self.assertIn("qwen3:8b", str(e.exception))
         finally:
             _m.OLLAMA = ancien

@@ -391,7 +391,7 @@ def search_results(requete, nombre, maintenant=time.time, options=None):
                 raisons.append("{} : {}".format(nom, _t("requête vide une fois les données personnelles retirées")))
                 continue
         try:
-            trouves = _recherche.clean(fonction(envoyee), nombre, 0 if o.get("site") else _recherche.PAR_SITE_MAX)
+            trouves = _recherche.clean(fonction(envoyee), nombre, 0 if o.get("site") else _recherche.PER_SITE_MAX)
             for x in trouves:
                 x["source"] = nom
         except _m.ErreurOutil as e:
@@ -426,7 +426,7 @@ def tester_moteurs(requete="assistant d'IA local", delai=40):
     def essai(nom, fonction):
         debut = time.monotonic()
         try:
-            _recherche.definir_options()
+            _recherche.set_options()
             res = _recherche.clean(fonction(requete), 10)
             return {"nom": nom, "ok": bool(res), "nombre": len(res), "ms": int((time.monotonic() - debut) * 1000), "erreur": "" if res else _t("aucun résultat"), "exemple": (res[0]["titre"] if res else "")}
         except Exception as e:  # noqa: BLE001  (chaque moteur dit sa propre panne)
@@ -452,7 +452,7 @@ def tool_web_search(requete, nombre, ctx, lire=None, periode=None, site=None, ac
     except (TypeError, ValueError):
         nombre = 6
     try:
-        options = _recherche.definir_options(periode, site, actualites, _i18n_langue())
+        options = _recherche.set_options(periode, site, actualites, _i18n_langue())
     except ValueError as e:
         raise _m.ErreurOutil(str(e))
     ctx["web_lu"] = True
@@ -504,7 +504,7 @@ def read_pdf(url):
         chemin = f.name
     try:
         texte = attachments.file_text(chemin, ".pdf")
-    except (text_extraction.ErreurExtraction, OSError, ValueError) as e:
+    except (text_extraction.ExtractionError, OSError, ValueError) as e:
         raise _m.ErreurOutil(_t("Ce PDF n'a pas pu être lu : {}").format(str(e)[:150]))
     finally:
         try:

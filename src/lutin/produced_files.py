@@ -37,7 +37,7 @@ def identifier(chemin):
     return hashlib.sha1(str(chemin).encode("utf-8")).hexdigest()[:12]
 
 
-def entree(chemin):
+def entry(chemin):
     """{id, chemin, nom, taille} pour un fichier à rattacher à un message."""
     p = Path(chemin)
     try:
@@ -173,7 +173,7 @@ def _write_registry(d):
     _m.ecrire_atomique(_m.DONNEES / "fichiers_crees.json", json.dumps(d, ensure_ascii=False))
 
 
-def entree_image(image_id, chemin):
+def image_entry(image_id, chemin):
     p = Path(chemin)
     try:
         taille = p.stat().st_size
@@ -212,7 +212,7 @@ def _from_the_conversations():
             for i in m.get("medias") or []:
                 chemin = (m.get("medias_fichiers") or {}).get(i)
                 if chemin:
-                    trouves.append(dict(entree_image(i, chemin), conversation=c["id"], date=quand))
+                    trouves.append(dict(image_entry(i, chemin), conversation=c["id"], date=quand))
     return trouves
 
 

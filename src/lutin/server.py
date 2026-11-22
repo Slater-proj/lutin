@@ -304,7 +304,7 @@ class Handler(BaseHTTPRequestHandler):
                 return _diagnostic.first_launch(mo.nom, True, "")
             reco = None          # pas de mo.statut() ici : il sonde le moteur (2 s) et /api/etat doit rester immédiat
             try:
-                reco = _bench_moteurs.recommander(profil, banc=None, docker=_moteurs.CONTEXT["en_docker"](), modele_installe=False)
+                reco = _bench_moteurs.recommend(profil, banc=None, docker=_moteurs.CONTEXT["en_docker"](), modele_installe=False)
             except Exception:  # noqa: BLE001  (la recommandation est un plus)
                 reco = None
             from . import docker_engines as _md
@@ -702,7 +702,7 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/propositions":
             return self._envoyer(200, _m.lire_propositions())
         if chemin == "/api/bench-moteurs":                        # comparaison des moteurs : dernier résultat, recommandation et sa raison, avancement
-            return self._envoyer(200, _bench_moteurs.vue(_m.DONNEES, _m.reglages()["modele"], _moteurs.CONTEXT["profil"](), _moteurs.CONTEXT["en_docker"]()))
+            return self._envoyer(200, _bench_moteurs.view(_m.DONNEES, _m.reglages()["modele"], _moteurs.CONTEXT["profil"](), _moteurs.CONTEXT["en_docker"]()))
         if chemin == "/api/estimation":                          # estimer AVANT de charger : mémoire prise, où, saturation, conseils, préréglage des modèles à experts
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             modele = (q.get("modele") or [""])[0] or _m.reglages()["modele"]
@@ -721,7 +721,7 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/sorties":                              # Santé : ce qui est sorti de la machine (recherches envoyées à un service extérieur)
             return self._envoyer(200, {"entrees": _sorties.read(60), "modifiable": self._configurateur()})
         if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
-            return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
+            return self._envoyer(200, dict(_recherche.view(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
             return self._envoyer(200, _mesures.view(_m.DONNEES, dict(_moteurs.ENGINES), _m.reglages()))
         if chemin.split("?")[0] in MANAGED_MODEL_ROUTES:          # onglet Modèles d'un serveur géré par Lutin : ce qui est téléchargé, ce qu'on peut télécharger, jugé pour cette machine
@@ -1128,18 +1128,18 @@ class Handler(BaseHTTPRequestHandler):
                 if self.path == "/api/planifie-modifier":
                     return self._envoyer(200, _plan.change(ident, donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail"), donnees.get("notifier"), donnees.get("date")))
                 if self.path == "/api/planifie-arreter":
-                    return self._envoyer(200, _plan.arreter(ident))
+                    return self._envoyer(200, _plan.stop_task(ident))
                 if self.path == "/api/planifie-notifier":
-                    return self._envoyer(200, _plan.definir_notification(ident, donnees.get("canal")))
+                    return self._envoyer(200, _plan.set_notification(ident, donnees.get("canal")))
                 if self.path == "/api/planifie-supprimer":
                     return self._envoyer(200, _plan.remove(ident, bool(donnees.get("conversation"))))
                 if self.path == "/api/planifie-activer":
                     return self._envoyer(200, _plan.modify(ident, actif=bool(donnees.get("actif"))))
-                if ident in _plan.EN_COURS:
+                if ident in _plan.RUNNING:
                     raise ValueError(_t("Cette tâche travaille déjà."))
                 if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
                     raise ValueError(_t("Une réponse est déjà en cours : attends sa fin."))
-                threading.Thread(target=lambda: _plan.executer(ident), daemon=True, name="planifie-lancer").start()
+                threading.Thread(target=lambda: _plan.execute(ident), daemon=True, name="planifie-lancer").start()
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/calibrage":
                 action = str(donnees.get("action", ""))
@@ -1411,7 +1411,7 @@ class Handler(BaseHTTPRequestHandler):
                 _bench_moteurs.launch(_m.reglages()["modele"], str(donnees.get("mode", "rapide")), _m.DONNEES, _moteurs.CONTEXT["profil"]())
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/decharger":                          # décharger une chose de la liste des ressources (modèle d'Ollama, serveur llama.cpp, ComfyUI)
-                return self._envoyer(200, _ressources.decharger(donnees.get("id")))
+                return self._envoyer(200, _ressources.unload(donnees.get("id")))
             if self.path == "/api/liberer-vram":
                 return self._envoyer(200, _m.liberer_vram(tout=True))
             if self.path == "/api/resumer":

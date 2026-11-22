@@ -56,7 +56,7 @@ class Documents(unittest.TestCase):
             self.assertEqual(octets[int(m.group(1)):].split(b" ")[0], b"%d" % n)
         f = _TEMP / "essai.pdf"
         f.write_bytes(octets)
-        texte = "\n".join(t for _, t in text_extraction.parties(str(f)))
+        texte = "\n".join(t for _, t in text_extraction.parts(str(f)))
         for attendu in ("Rapport", "Bilan de la semaine", "é è à ç œ", "première puce", "deuxième puce", "bonjour", "1 / "):
             self.assertIn(attendu, texte)
 
@@ -64,15 +64,15 @@ class Documents(unittest.TestCase):
         octets = documents.pdf("\n\n".join("Paragraphe %d : " % i + "mot " * 80 for i in range(40)))
         self.assertGreater(len(re.findall(rb"/Type /Page /Parent", octets)), 2)
         for _, taille, x, _, texte in [(0, 11, 56, 0, "x" * 5)]:
-            self.assertLess(documents._largeur(texte, "F1", taille) + x, documents.PAGE[0] - documents.MARGE)
-        for ligne in documents._couper("supercalifragilistic" * 12 + " fin", "F1", 11, 483):
-            self.assertLessEqual(documents._largeur(ligne, "F1", 11), 483 + 1)
+            self.assertLess(documents._width(texte, "F1", taille) + x, documents.PAGE[0] - documents.MARGIN)
+        for ligne in documents._wrap("supercalifragilistic" * 12 + " fin", "F1", 11, 483):
+            self.assertLessEqual(documents._width(ligne, "F1", 11), 483 + 1)
 
     def test_les_caracteres_hors_alphabet_latin_ne_cassent_pas_le_pdf(self):
         octets = documents.pdf("Emoji 😀 et idéogramme 漢字 et parenthèses (a) \\ fin")
         f = _TEMP / "exotique.pdf"
         f.write_bytes(octets)
-        texte = "\n".join(t for _, t in text_extraction.parties(str(f)))
+        texte = "\n".join(t for _, t in text_extraction.parts(str(f)))
         self.assertIn("parenthèses (a)", texte)
 
     def test_le_docx_est_valide_et_se_relit(self):
@@ -87,7 +87,7 @@ class Documents(unittest.TestCase):
         self.assertIn("<w:b/>", document)
         self.assertIn("<w:i/>", document)
         self.assertIn('w:val="Titre1"', document)
-        texte = "\n".join(t for _, t in text_extraction.parties(str(f)))
+        texte = "\n".join(t for _, t in text_extraction.parts(str(f)))
         for attendu in ("Rapport", "Bilan de la semaine", "é è à ç œ", "première puce", "bonjour", "gras"):
             self.assertIn(attendu, texte)
 

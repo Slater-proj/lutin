@@ -2274,11 +2274,11 @@ def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
                             detail=str(resultat)[:100] if str(resultat).startswith("Erreur") else "")
         medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation
         extra = {"medias": medias, "medias_fichiers": fichiers} if medias else {}
-        joints = [_fichiers.entree(c) for c in ctx.pop("fichiers_joints", [])][:8]           # documents et médias créés : une carte (ouvrir, télécharger, supprimer) sous le message
+        joints = [_fichiers.entry(c) for c in ctx.pop("fichiers_joints", [])][:8]           # documents et médias créés : une carte (ouvrir, télécharger, supprimer) sous le message
         if joints:
             extra["fichiers_joints"] = joints
         try:
-            _fichiers.save([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
+            _fichiers.save([dict(e, genre="fichier") for e in joints] + [_fichiers.image_entry(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
         except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
             _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
         affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.is_tool(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARKER in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse

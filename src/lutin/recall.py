@@ -129,7 +129,7 @@ def document_parts(f):
     try:
         parties = [tuple(p) for p in json.loads(fichier.read_text(encoding="utf-8"))]
     except (OSError, ValueError, TypeError):
-        parties = text_extraction.parties(f)
+        parties = text_extraction.parts(f)
         try:
             fichier.parent.mkdir(parents=True, exist_ok=True)
             _m.ecrire_atomique(fichier, json.dumps(parties, ensure_ascii=False))
@@ -159,7 +159,7 @@ def file_chunks(f):
             try:
                 for titre, texte in document_parts(f):
                     morceaux += split_text(texte, recall_label(f), titre)
-            except text_extraction.ErreurExtraction as e:
+            except text_extraction.ExtractionError as e:
                 erreur = {"nom": recall_label(f), "message": str(e)}
         elif isinstance(f, ConversationRef):
             c = f.read()

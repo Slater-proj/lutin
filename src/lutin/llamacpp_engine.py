@@ -360,7 +360,7 @@ def moteurs_installes_par_lutin():
     llama = engines.ENGINES.get("llamacpp")
     if isinstance(llama, MoteurLlamaCpp) and not llama.config().get("dossier") and llama.serveur_installe() is not None:
         trouves.append("llama.cpp")
-    if engines.CONTEXT["en_docker"]() and docker_engines.ollama_installe_par_lutin():
+    if engines.CONTEXT["en_docker"]() and docker_engines.ollama_installed_by_lutin():
         trouves.append("Ollama")
     autre = engines.ENGINES.get(engines.OPENAI)
     if isinstance(autre, MoteurExterne) and autre._colibri() is not None:
@@ -376,7 +376,7 @@ def vue_dossier_moteurs():
     detail = docker_engines.detail_folder_engines()
     actuel = detail["dossier"]
     donnees = engines.CONTEXT["donnees"]()
-    defaut = docker_engines.dossier_par_defaut(donnees) if donnees else None
+    defaut = docker_engines.default_folder(donnees) if donnees else None
     docker = engines.CONTEXT["en_docker"]()
     if docker and docker_engines.is_mounted(docker_engines.MOUNT) and os.access(docker_engines.MOUNT, os.W_OK):
         defaut = Path(docker_engines.MOUNT)          # sans choix de ta part, c'est lui qui serait pris

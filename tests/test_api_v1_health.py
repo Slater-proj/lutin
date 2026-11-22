@@ -43,7 +43,7 @@ class Health(unittest.TestCase):
 
     def test_unloading_and_freeing_the_graphics_memory(self):
         unloaded = []
-        with mock.patch.object(loaded_resources, "decharger", lambda ident: unloaded.append(ident) or {"ok": True, "message": "déchargé"}), \
+        with mock.patch.object(loaded_resources, "unload", lambda ident: unloaded.append(ident) or {"ok": True, "message": "déchargé"}), \
                 mock.patch.object(A, "liberer_vram", lambda tout=False: unloaded.append(("tout", tout)) or {"ok": True, "message": "libre"}):
             for body in ({}, {"id": ""}, {"id": 1}, {"id": "x", "all": True}):
                 self.assertEqual(call("POST", "/api/v1/health/unload", body)[1]["error"]["code"], "invalid_request", body)

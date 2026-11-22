@@ -192,9 +192,9 @@ class JetonGitHub(unittest.TestCase):
 
 class ReconnaitreUnLlamaServer(unittest.TestCase):
     def test_port_et_modele_viennent_de_la_ligne_de_commande(self):
-        self.assertEqual(rc.decrire_commande('"E:/IA/llama.cpp/bin/llama-server.exe" -m "E:/IA/modeles/qwen3-27b.gguf" -c 8192 --port 8081'), "sur le port 8081, modèle qwen3-27b.gguf")
-        self.assertEqual(rc.decrire_commande("llama-server --models-preset C:/x/modeles.ini --port 8080"), "sur le port 8080, modèle modeles.ini")
-        self.assertEqual(rc.decrire_commande(""), "")
+        self.assertEqual(rc.describe_command('"E:/IA/llama.cpp/bin/llama-server.exe" -m "E:/IA/modeles/qwen3-27b.gguf" -c 8192 --port 8081'), "sur le port 8081, modèle qwen3-27b.gguf")
+        self.assertEqual(rc.describe_command("llama-server --models-preset C:/x/modeles.ini --port 8080"), "sur le port 8080, modèle modeles.ini")
+        self.assertEqual(rc.describe_command(""), "")
 
     def test_un_programme_sans_chemin_connu_est_reconnu_par_sa_ligne_de_commande(self):
         dossier = Path(tempfile.mkdtemp(prefix="lutin-llama-cmd-")).resolve()

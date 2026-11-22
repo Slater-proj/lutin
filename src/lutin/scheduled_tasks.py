@@ -20,7 +20,7 @@ from . import turn_runner as _turns
 MAX_TASKS = 20
 MAX_HISTORY = 10
 RE_HOUR = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
-EN_COURS = {}            # id de tâche -> évènement d'arrêt, tant qu'elle travaille
+RUNNING = {}            # id de tâche -> évènement d'arrêt, tant qu'elle travaille
 TO_REMOVE = set()      # conversations de tâches supprimées pendant qu'elles travaillaient : effacées quand le tour se termine (sinon il les réécrirait)
 LOCK = threading.Lock()
 PERIOD = 30            # secondes entre deux regards sur l'horloge
@@ -114,7 +114,7 @@ def modify(ident, **champs):
     raise ValueError(_t("Cette tâche planifiée n'existe plus."))
 
 
-def definir_notification(ident, canal):
+def set_notification(ident, canal):
     """Associe (ou retire, canal vide) le canal de notification d'une tâche."""
     canal = str(canal or "")
     if canal:
@@ -132,7 +132,7 @@ def remove(ident, conversation=False):
         if tache is None:
             raise ValueError(_t("Cette tâche planifiée n'existe plus."))
         _write([t for t in liste if t["id"] != ident])
-    arret = EN_COURS.get(ident)
+    arret = RUNNING.get(ident)
     if arret is not None:
         arret.set()
     conv = tache.get("derniere_conv")
@@ -145,9 +145,9 @@ def remove(ident, conversation=False):
     return {"ok": True}
 
 
-def arreter(ident):
+def stop_task(ident):
     """Arrête la tâche pendant qu'elle travaille (elle reste planifiée pour la prochaine fois)."""
-    arret = EN_COURS.get(ident)
+    arret = RUNNING.get(ident)
     if arret is None:
         raise ValueError(_t("Cette tâche ne travaille pas en ce moment."))
     arret.set()
@@ -195,9 +195,9 @@ def state():
     taches = []
     for t in read():
         etat_t = t.get("derniere_etat", "")
-        if etat_t == "en_cours" and t["id"] not in EN_COURS:
+        if etat_t == "en_cours" and t["id"] not in RUNNING:
             etat_t = "interrompue"          # Lutin s'est arrêté pendant qu'elle travaillait
-        taches.append(dict(t, derniere_etat=etat_t, prochaine=next_one(t, maintenant), en_cours=t["id"] in EN_COURS))
+        taches.append(dict(t, derniere_etat=etat_t, prochaine=next_one(t, maintenant), en_cours=t["id"] in RUNNING))
     return {"taches": taches}
 
 
@@ -249,26 +249,26 @@ def _failure_startup(tache, texte):
     _m.journaliser("Tâche planifiée « {} » : impossible de démarrer ({}).".format(tache["nom"], texte[:200]))
     if _note(tache["id"], derniere_exec=debut.isoformat(timespec="seconds"), derniere_etat="erreur", derniere_erreur=texte[:300]):
         _record(tache["id"], "erreur", debut, texte)
-        _notifier(tache, "erreur", "⚠ " + texte)
+        _notify(tache, "erreur", "⚠ " + texte)
 
 
-def executer(ident):
+def execute(ident):
     """Traite une tâche maintenant. Renvoie l'identifiant de SA conversation (la même à chaque exécution), ou lève ValueError si la machine est déjà occupée ou si la tâche travaille déjà.
     Une tâche qui ne peut pas démarrer (dossier de travail disparu) l'écrit sur elle-même et renvoie ''."""
     tache = next((t for t in read() if t["id"] == ident), None)
     if tache is None:
         raise ValueError(_t("Cette tâche planifiée n'existe plus."))
     with _m.VERROU_TOURS:
-        if ident in EN_COURS:
+        if ident in RUNNING:
             raise ValueError(_t("Cette tâche travaille déjà."))
     if _turns.full():
         raise ValueError(_t("Une réponse est déjà en cours : la tâche attend."))
     conv, neuve = _conversation(tache)
 
     def au_travail(stop):                                # sous le verrou des tours, avec la place : deux lancements de la même tâche ne passent pas tous les deux
-        if ident in EN_COURS:
+        if ident in RUNNING:
             raise ValueError(_t("Cette tâche travaille déjà."))
-        EN_COURS[ident] = stop
+        RUNNING[ident] = stop
     try:
         siege = _turns.reserve(conv, work=tache.get("travail", "") if neuve else None, also=au_travail)          # une conversation où quelqu'un écrit n'a pas de second tour (ADR 0015)
     except _turns.TurnRefused as refus:
@@ -298,7 +298,7 @@ def executer(ident):
     finally:
         siege.release()
         with _m.VERROU_TOURS:
-            EN_COURS.pop(ident, None)
+            RUNNING.pop(ident, None)
     arretee = stop.is_set()
     resultat = ""
     try:
@@ -328,11 +328,11 @@ def executer(ident):
         return conv["id"]                                 # supprimée pendant son exécution : rien à noter, personne à prévenir
     _record(ident, etat_final, debut, erreur_texte)
     if etat_final != "arretee":
-        _notifier(tache, etat_final, resultat)
+        _notify(tache, etat_final, resultat)
     return conv["id"]
 
 
-def _notifier(tache, etat_final, resultat):
+def _notify(tache, etat_final, resultat):
     """Envoie le résultat par le canal associé à la tâche (s'il y en a un) ; le résultat de l'envoi est gardé pour la page."""
     if not tache.get("notifier"):
         return
@@ -350,13 +350,13 @@ def _notifier(tache, etat_final, resultat):
         pass
 
 
-def un_regard(maintenant=None):
+def run_first_due(maintenant=None):
     """Lance la première tâche échue si la machine est libre. Renvoie son identifiant (ou None)."""
     maintenant = maintenant or datetime.now()
     for tache in read():
-        if due(tache, maintenant) and not _m.TOURS_ACTIFS and tache["id"] not in EN_COURS:
+        if due(tache, maintenant) and not _m.TOURS_ACTIFS and tache["id"] not in RUNNING:
             try:
-                executer(tache["id"])
+                execute(tache["id"])
             except ValueError:
                 return None
             return tache["id"]
@@ -366,7 +366,7 @@ def un_regard(maintenant=None):
 def loop():
     while True:
         try:
-            un_regard()
+            run_first_due()
         except Exception as erreur:  # noqa: BLE001
             _m.journaliser("Planification : {!r}".format(erreur))
         time.sleep(PERIOD)

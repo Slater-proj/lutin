@@ -44,7 +44,7 @@ class Produced(unittest.TestCase):
         self.report.write_bytes(b"%PDF-1.4 the report")
         self.addCleanup(lambda: self.report.unlink(missing_ok=True))
         self.image = images.save(PNG)
-        self.entry = produced_files.entree(self.report)
+        self.entry = produced_files.entry(self.report)
         stored = A.conv_lire(self.conversation)
         stored["messages"] += [{"role": "user", "content": "Make a report and a picture"},
                                {"role": "tool", "tool_name": "generer_image", "content": "Done.", "medias": [self.image], "medias_fichiers": {self.image: ""},
@@ -90,7 +90,7 @@ class Produced(unittest.TestCase):
             script.write_text("print(1)", encoding="utf-8")
             self.addCleanup(script.unlink)
             stored = A.conv_lire(self.conversation)
-            stored["messages"][-1]["fichiers_joints"].append(produced_files.entree(script))
+            stored["messages"][-1]["fichiers_joints"].append(produced_files.entry(script))
             A.conv_ecrire_telle_quelle(stored)
             status, answer, _ = send("POST", "{}/files/{}/open".format(self.base, produced_files.identifier(script)), V.OWNER, {})
             self.assertEqual((status, answer["error"]["code"]), (409, "cannot_open"), "only documents and media are opened")

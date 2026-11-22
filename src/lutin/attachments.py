@@ -60,7 +60,7 @@ def file_text(chemin, ext):
     if ext in TEXT_EXTENSIONS or ext == ".txt":
         t = decode(Path(chemin).read_bytes())
         if t is None:
-            raise text_extraction.ErreurExtraction(_t("Ce fichier n'est pas du texte lisible."))
+            raise text_extraction.ExtractionError(_t("Ce fichier n'est pas du texte lisible."))
         return t.strip()
     return text_extraction.texte(chemin)
 
@@ -90,7 +90,7 @@ def save(octets, nom):
             tmp.unlink(missing_ok=True)
     try:
         texte = read_text(ident)
-    except text_extraction.ErreurExtraction as erreur:
+    except text_extraction.ExtractionError as erreur:
         f.unlink(missing_ok=True)
         (folder() / (ident + ".texte")).unlink(missing_ok=True)
         raise ValueError(str(erreur)) from erreur
@@ -171,7 +171,7 @@ def for_model(messages, budget):
             if n in recents:
                 try:
                     texte = read_text(p["id"])
-                except (ValueError, text_extraction.ErreurExtraction, OSError):
+                except (ValueError, text_extraction.ExtractionError, OSError):
                     blocs.append(_t("[Fichier joint « {} » : devenu illisible]").format(p.get("nom", "")))
                     continue
                 coupe = len(texte) - part

@@ -105,11 +105,11 @@ def memory_of_engine(ident, modele):
     """Mémoire prise par ce moteur pour ce modèle, d'après ressources_chargees : {ram, vram}."""
     from . import loaded_resources as rc
     if ident == "ollama":
-        for c in rc.charges_ollama():
+        for c in rc.loaded_ollama():
             if c["nom"] == modele:
                 return {"ram": c["ram"], "vram": c["vram"]}
     elif ident == "llamacpp":
-        for c in rc.charges_llamacpp():
+        for c in rc.loaded_llamacpp():
             return {"ram": c["ram"], "vram": c["vram"]}
     return None
 
@@ -122,16 +122,16 @@ def free(autres, modele):
         nom = modele.get(ident, "") if isinstance(modele, dict) else modele
         try:
             if ident == "ollama":
-                rc.decharger("ollama:" + nom)
+                rc.unload("ollama:" + nom)
             elif ident == "llamacpp":
-                rc.decharger("llamacpp")
+                rc.unload("llamacpp")
         except ValueError:
             pass
 
 
 # --------------------------------------------------------------------------- le banc complet, conservation, empreinte
 
-GENERIQUES = {"instruct", "chat", "it", "latest", "gguf", "exl3", "exl2", "base", "hf", "ai"}
+GENERIC = {"instruct", "chat", "it", "latest", "gguf", "exl3", "exl2", "base", "hf", "ai"}
 RE_QUANTIFICATION = re.compile(r"^(i?q\d.*|\d+(\.\d+)?bpw|f16|bf16|fp16|fp8|int[48]|mlx)$")
 RE_SIZE = re.compile(r"^\d+(\.\d+)?[bm]$")
 
@@ -141,7 +141,7 @@ def _tokens(nom):
     nom = str(nom).lower().rsplit("/", 1)[-1]
     nom = re.sub(r"\.(gguf|safetensors)$", "", nom)
     mots = [m for m in re.split(r"[^a-z0-9.]+", nom) if m]
-    return {m for m in mots if m not in GENERIQUES and not RE_QUANTIFICATION.match(m)}
+    return {m for m in mots if m not in GENERIC and not RE_QUANTIFICATION.match(m)}
 
 
 def equivalent(modele, installes):
@@ -194,7 +194,7 @@ def digest(profil, versions):
     return hashlib.sha1(json.dumps(base, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
-def versions_actuelles():
+def current_versions():
     out = {}
     for ident in ENGINES_BENCH:
         mo = engines.ENGINES.get(ident)
@@ -229,14 +229,14 @@ def compare(modele, mode="rapide", profil=None, ctx=4096, progression=None, horl
             liberer_autres([x.id for x, _ in pret if x.id != mo.id], par_moteur)
         r["moteurs"].append(measure(mo, propre, mode, ctx, horloge, lambda mo=mo, propre=propre: memoire(mo.id, propre), estime_go=estime_go))
     r["empreinte"] = digest(profil, {m["id"]: m["version"] for m in r["moteurs"]}) if profil else ""
-    r["recommandation"] = recommander(profil, banc=r)
+    r["recommandation"] = recommend(profil, banc=r)
     return r
 
 
 STATE = {"en_cours": False, "etape": "", "erreur": ""}
 
 
-VERROU_LANCEMENT = threading.Lock()
+LAUNCH_LOCK = threading.Lock()
 
 
 def launch(modele, mode, dossier, profil, **options):
@@ -249,7 +249,7 @@ def launch(modele, mode, dossier, profil, **options):
     if sum(1 for _, raison, _p in dispo if not raison) < 2:          # comparer, c'est être au moins deux : avec un seul moteur il n'y a rien à comparer
         from .engine_metrics import display_name
         raise ValueError(_t("Pour comparer, il faut au moins deux moteurs prêts qui ont ce modèle ou un équivalent (même famille et même taille). Pour l'instant : {}").format(" ; ".join("{} : {}".format(display_name(mo), raison or _t("prêt")) for mo, raison, _p in dispo) or "?"))
-    with VERROU_LANCEMENT:          # vérifier puis réserver d'un seul geste : deux demandes simultanées ne lancent pas deux comparaisons
+    with LAUNCH_LOCK:          # vérifier puis réserver d'un seul geste : deux demandes simultanées ne lancent pas deux comparaisons
         if STATE["en_cours"]:
             raise ValueError(_t("Une comparaison est déjà en cours."))
         STATE.update(en_cours=True, etape=_t("démarrage…"), erreur="")
@@ -268,22 +268,22 @@ def launch(modele, mode, dossier, profil, **options):
     threading.Thread(target=travail, daemon=True, name="bench-moteurs").start()
 
 
-def vue(dossier, modele, profil, docker=False):
+def view(dossier, modele, profil, docker=False):
     """Ce que la page affiche : le dernier résultat pour ce modèle, s'il est à refaire, la recommandation (avec sa raison) et l'état d'une comparaison en cours."""
     from .engine_metrics import display_name
     resultat = read(dossier).get(modele)
-    caduc = a_refaire(resultat, profil, versions_actuelles()) if resultat else False
+    caduc = needs_rerun(resultat, profil, current_versions()) if resultat else False
     banc = resultat if resultat and not caduc else None
     try:
         dispo = available(modele) if modele else []
     except Exception:  # noqa: BLE001  (un plus pour la page)
         dispo = []
-    return {"modele": modele, "resultat": resultat, "a_refaire": caduc, "recommandation": recommander(profil, banc=banc, docker=docker, modele_installe=bool(modele)),
+    return {"modele": modele, "resultat": resultat, "a_refaire": caduc, "recommandation": recommend(profil, banc=banc, docker=docker, modele_installe=bool(modele)),
             "comparables": sum(1 for _, raison, _p in dispo if not raison), "disponibilite": [{"nom": display_name(mo), "raison": raison, "modele": propre if not raison else ""} for mo, raison, propre in dispo],
             "en_cours": STATE["en_cours"], "etape": STATE["etape"], "erreur": STATE["erreur"]}
 
 
-def a_refaire(resultat, profil, versions):
+def needs_rerun(resultat, profil, versions):
     """Vrai si le matériel ou une version de moteur a changé depuis ce résultat (ou s'il n'y en a pas)."""
     if not resultat or not resultat.get("empreinte"):
         return True
@@ -314,12 +314,12 @@ def save(dossier, resultat):
     tmp.replace(f)
 
 
-def exporter(resultat):
+def export(resultat):
     """Le résultat à partager : ni chemin ni nom d'utilisateur (la machine n'est décrite que par son matériel)."""
     return json.dumps({k: v for k, v in resultat.items() if k != "recommandation"}, ensure_ascii=False, indent=1)
 
 
-def lisible(resultat):
+def readable(resultat):
     """Le résultat en quelques lignes de texte."""
     lignes = [_t("Modèle : {} · {} · {}").format(resultat["modele"], resultat.get("machine") or "?", resultat["mode"])]
     for m in resultat["moteurs"]:
@@ -343,7 +343,7 @@ def _name(ident):
     return mo.nom if mo else ident
 
 
-def _depuis_le_banc(banc):
+def _from_the_bench(banc):
     bons = [m for m in banc.get("moteurs", []) if m.get("ok") and m.get("tok_s")]
     if len(bons) < 2:
         return None
@@ -361,11 +361,11 @@ def _depuis_le_banc(banc):
     return {"moteur": choix["id"], "nom": choix["nom"], "raison": raison, "source": "banc", "theorique": False, "limites": [], "espace_go": None}
 
 
-def recommander(profil, banc=None, docker=False, modele_installe=True):
+def recommend(profil, banc=None, docker=False, modele_installe=True):
     """{moteur, nom, raison, source (banc | regles), theorique, limites, espace_go} : le moteur conseillé pour cette machine et pourquoi. Le banc, s'il a comparé deux moteurs, prime.
     Sinon des règles générales, présentées comme telles (pas mesurées ici) : le banc est proposé pour trancher."""
     if banc:
-        r = _depuis_le_banc(banc)
+        r = _from_the_bench(banc)
         if r:
             return r
     theorique = not modele_installe

@@ -542,11 +542,11 @@ def commande_bench_moteurs(args):
         return 1
     print(_t("Comparaison des moteurs avec {} ({}, environ {})…").format(modele, args.mode, "1 minute" if args.mode == "rapide" else "5 minutes"))
     r = engine_bench.compare(modele, args.mode, profil, progression=lambda texte, i, n: print("  {} ({}/{})".format(texte, i + 1, n)))
-    print(engine_bench.lisible(r))
+    print(engine_bench.readable(r))
     if r["moteurs"]:
         engine_bench.save(d["donnees"], r)
     if args.sortie:
-        Path(args.sortie).write_text(engine_bench.exporter(r), encoding="utf-8")
+        Path(args.sortie).write_text(engine_bench.export(r), encoding="utf-8")
         print(_t("Résultat écrit dans {} (rien de personnel : à partager tel quel).").format(args.sortie))
     return 0 if r["moteurs"] and all(m["ok"] for m in r["moteurs"]) else 1
 

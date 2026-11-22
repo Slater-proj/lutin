@@ -76,7 +76,7 @@ class JamaisParDefaut(unittest.TestCase):
         for ident in EXPERIMENTAUX:
             self.assertNotIn(ident, engine_bench.ENGINES_BENCH)
         for docker in (False, True):
-            r = engine_bench.recommander(None, docker=docker)
+            r = engine_bench.recommend(None, docker=docker)
             self.assertNotIn(r["moteur"], EXPERIMENTAUX)
 
     def test_le_moteur_par_defaut_reste_ollama(self):

@@ -61,20 +61,20 @@ class ScheduledTasks(Clean):
     def setUp(self):
         super().setUp()
         tasks._write([])
-        tasks.EN_COURS.clear()
+        tasks.RUNNING.clear()
         for patch in (mock.patch.object(notifications, "find", lambda ident: None), mock.patch.object(notifications, "send", lambda *a: None)):
             patch.start()
             self.addCleanup(patch.stop)
         self.task = tasks.add(nom="Summary", prompt="Summarise the repository.", heure="08:00", jours=[0, 1, 2, 3, 4], travail="", notifier="")
         with mock.patch.object(_m, "tour", answering("First summary.")):
-            self.conversation = tasks.executer(self.task["id"])          # the task's own conversation, the same at every run
+            self.conversation = tasks.execute(self.task["id"])          # the task's own conversation, the same at every run
 
     def test_run_now_while_a_person_writes_in_its_conversation_is_refused(self):
         person = self.person_writes_in(self.conversation)
         with mock.patch.object(_m, "tour", refusing), self.assertRaises(ValueError):
-            tasks.executer(self.task["id"])
+            tasks.execute(self.task["id"])
         self.assertIs(_m.TOURS_ACTIFS.get(self.conversation), person, "the person's Stop button still stops the person's turn")
-        self.assertEqual(tasks.EN_COURS, {}, "the task is not left « at work »")
+        self.assertEqual(tasks.RUNNING, {}, "the task is not left « at work »")
 
     def test_an_abandoned_turn_writes_nothing_and_keeps_the_newer_seat(self):
         newer = threading.Event()
@@ -88,7 +88,7 @@ class ScheduledTasks(Clean):
             conv["messages"] += [{"role": "assistant", "content": "late answer"}]
             _m.conv_ecrire(conv)                                          # the frozen turn finally ends
         with mock.patch.object(_m, "tour", abandoned):
-            tasks.executer(self.task["id"])
+            tasks.execute(self.task["id"])
         self.assertNotIn("late answer", [m.get("content") for m in _m.conv_lire(self.conversation)["messages"]])
         self.assertIs(_m.TOURS_ACTIFS.get(self.conversation), newer, "the newer turn keeps its seat")
 

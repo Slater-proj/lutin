@@ -111,9 +111,9 @@ class RechercheGuidee(unittest.TestCase):
     def test_la_periode_se_dit_comme_on_veut(self):
         from lutin import web_search
         for dit, attendu in [("année", "an"), ("year", "an"), ("semaine", "semaine"), ("Week", "semaine"), ("aujourd'hui", "jour"), ("", None)]:
-            self.assertEqual(web_search.definir_options(dit)["periode"], attendu, dit)
+            self.assertEqual(web_search.set_options(dit)["periode"], attendu, dit)
         with self.assertRaises(ValueError):
-            web_search.definir_options("siècle")
+            web_search.set_options("siècle")
 
     def test_noms_propres(self):
         self.assertEqual(news.proper_names("Cherche l'histoire judiciaire de Fiona Warr et donne-moi des liens"), ["Fiona Warr"])

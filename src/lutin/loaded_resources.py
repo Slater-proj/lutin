@@ -24,7 +24,7 @@ RE_MODEL = re.compile(r"^[A-Za-z0-9_./:@+-]{1,200}$")
 KNOWN = {"ollama": "Ollama", "ollama app": "Ollama", "ollama_llama_server": "Ollama (modèle)", "llama-server": "llama.cpp", "llama-swap": "llama-swap", "vllm": "vLLM", "lm studio": "LM Studio",
           "lmstudio": "LM Studio", "python": "Python (ComfyUI, scripts…)", "pythonw": "Python (ComfyUI, scripts…)", "python3": "Python (ComfyUI, scripts…)", "comfyui": "ComfyUI"}
 MEMO = {"t": 0.0, "v": [], "gpu_t": 0.0, "gpu": {}}
-GO = 1024 ** 3
+GB = 1024 ** 3
 
 
 def _json(url, corps=None, delai=3):
@@ -184,7 +184,7 @@ def parse_gpu_process(texte):
     return sortie
 
 
-def gpu_par_processus(lanceur=subprocess.run):
+def gpu_per_process(lanceur=subprocess.run):
     """{pid: (nom, octets de mémoire vidéo ou None)} d'après nvidia-smi (gardé 4 s). {} sans carte NVIDIA."""
     if time.monotonic() - MEMO["gpu_t"] < 4:
         return MEMO["gpu"]
@@ -218,7 +218,7 @@ def vram_windows_process(pid, lanceur=subprocess.run):
 PATTERN_ENGINE = re.compile(r"^(llama|ollama|lm[ _-]?studio|vllm|coli)", re.I)
 PATTERN_ORPHAN = re.compile(r"^(llama|lm[ _-]?studio|vllm|coli)", re.I)          # Ollama est vu par son interface : seuls les autres serveurs peuvent rester « invisibles »
 
-SCRIPT_PROCESSUS = (
+PROCESS_SCRIPT = (
     "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $v=@{}; "
     "try { foreach($s in (Get-Counter '\\GPU Process Memory(*)\\Dedicated Usage' -ErrorAction Stop).CounterSamples) { if($s.InstanceName -match '^pid_(\\d+)_') { $k=[int]$Matches[1]; if($v.ContainsKey($k)){$v[$k]+=[long]$s.CookedValue}else{$v[$k]=[long]$s.CookedValue} } } } catch {}; "
     "$r=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(llama|ollama|lm[ _-]?studio|vllm|coli)' } | ForEach-Object { "
@@ -246,7 +246,7 @@ def parse_snapshot(texte):
 
 def _snapshot_proc(racine="/proc", gpu=None):
     """Linux : les processus-moteurs lus dans /proc, avec la mémoire vidéo de nvidia-smi quand il la donne."""
-    gpu = gpu if gpu is not None else gpu_par_processus()
+    gpu = gpu if gpu is not None else gpu_per_process()
     sortie = []
     try:
         dossiers = [d for d in Path(racine).iterdir() if d.name.isdigit()]
@@ -289,7 +289,7 @@ def snapshot_process(lanceur=subprocess.run, force=False):
             if not any(PATTERN_ENGINE.match(nom) for nom, _ in list_process()):          # `tasklist` est rapide : PowerShell (1 à 3 s) ne se lance que s'il y a un moteur à regarder
                 valeur = []
             else:
-                r = lanceur(["powershell", "-NoProfile", "-NonInteractive", "-Command", SCRIPT_PROCESSUS], capture_output=True, timeout=15, creationflags=0x08000000)
+                r = lanceur(["powershell", "-NoProfile", "-NonInteractive", "-Command", PROCESS_SCRIPT], capture_output=True, timeout=15, creationflags=0x08000000)
                 valeur = parse_snapshot(r.stdout.decode("utf-8", "replace"))
         elif sys.platform == "darwin":
             r = lanceur(["ps", "-axo", "pid=,ppid=,rss=,comm="], capture_output=True, timeout=10)
@@ -351,7 +351,7 @@ def placement_llamacpp(mo):
     return parse_log_llamacpp(journal), (mo.config().get("variante_installee") or "")
 
 
-def conseil_variante(mo, variante):
+def variant_advice(mo, variante):
     """Si le programme installé n'utilise pas une carte graphique alors que la machine en a une : le dire (la cause la plus fréquente d'un modèle « en RAM »)."""
     try:
         from . import config
@@ -367,7 +367,7 @@ def conseil_variante(mo, variante):
 
 # --------------------------------------------------------------------------- ce qui est chargé
 
-def charges_ollama():
+def loaded_ollama():
     try:
         modeles = _json(address_ollama() + "/api/ps", None, 3).get("models", [])
     except (urllib.error.URLError, OSError, ValueError):
@@ -382,7 +382,7 @@ def charges_ollama():
     return sortie
 
 
-def charges_llamacpp():
+def loaded_llamacpp():
     mo = engines.ENGINES.get("llamacpp")
     if mo is None or not hasattr(mo, "routeur_actif") or mo.externe():
         return []
@@ -401,7 +401,7 @@ def charges_llamacpp():
     mesures = [x["vram"] for x in suivis if x["vram"] is not None]
     vram = sum(mesures) if mesures else None          # compteurs de Windows, par processus
     if vram is None:
-        g = gpu_par_processus()
+        g = gpu_per_process()
         valeurs = [g[pid][1] for pid in arbre if pid in g and g[pid][1] is not None]
         vram = sum(valeurs) if valeurs else None          # nvidia-smi quand il la donne
     if vram is None and place and place["gpu"]:
@@ -417,9 +417,9 @@ def charges_llamacpp():
     if place and place["couches"]:
         detail = _t("{} couches sur {} sont sur la carte graphique").format(place["couches_gpu"], place["couches"]) + " · " + detail
     if cache > 524288000:
-        detail += " · " + _t("Windows compte aussi {} Go du fichier du modèle lu en mémoire (cache libérable) : ce n'est pas du modèle chargé en RAM").format(round(cache / GO, 1))
+        detail += " · " + _t("Windows compte aussi {} Go du fichier du modèle lu en mémoire (cache libérable) : ce n'est pas du modèle chargé en RAM").format(round(cache / GB, 1))
     return [{"id": "llamacpp", "genre": "llamacpp", "moteur": "llama.cpp", "nom": _t("routeur ({} modèles disponibles)").format(len(noms)) if routeur else nom, "vram": vram, "ram": ram, "taille": (ram or 0) + (vram or 0),
-             "detail": detail, "avertissement": conseil_variante(mo, variante), "dechargeable": True, "pids": sorted(arbre)}]
+             "detail": detail, "avertissement": variant_advice(mo, variante), "dechargeable": True, "pids": sorted(arbre)}]
 
 
 def folders_lutin():
@@ -450,7 +450,7 @@ def _at_lutin(exe, cmd=""):
     return bool(texte) and any(str(d).replace("\\", "/").lower() in texte for d in dossiers)
 
 
-def decrire_commande(cmd):
+def describe_command(cmd):
     """« port 8081, modèle qwen3.gguf » d'après la ligne de commande d'un llama-server : de quoi reconnaître d'où il vient. « » si on ne sait pas."""
     texte = str(cmd or "")
     port = re.search(r"--port[ =](\d{2,5})", texte)
@@ -463,7 +463,7 @@ def decrire_commande(cmd):
     return ", ".join(morceaux)
 
 
-def charges_orphelines(suivis):
+def loaded_orphans(suivis):
     """Les serveurs de modèles qui occupent la machine SANS être pilotés par Lutin en ce moment : un llama-server resté en vie après un arrêt brutal, un LM Studio, un vLLM… Sans cette liste, leur mémoire vidéo
     apparaissait comme « autres programmes » et il n'y avait rien à décharger. Lutin n'arrête que ceux qui sortent de son propre dossier d'installation."""
     candidats = {x["pid"]: x for x in snapshot_process() if PATTERN_ORPHAN.match(x["nom"]) and x["pid"] not in suivis}
@@ -481,7 +481,7 @@ def charges_orphelines(suivis):
         ram = sum(x["ram"] for x in groupe)
         chez_nous = _at_lutin(racine["exe"], racine.get("cmd"))
         detail = _t("resté en vie après un ancien lancement de Lutin : tu peux l'arrêter ici") if chez_nous else _t("pas piloté par ce Lutin (lancé à la main, par un autre programme, ou par un autre Lutin déjà lancé sur cette machine) : ferme-le toi-même")
-        quoi = decrire_commande(racine.get("cmd"))
+        quoi = describe_command(racine.get("cmd"))
         if quoi:
             detail = quoi + " · " + detail
         sortie.append({"id": "processus:{}".format(pid), "genre": "processus", "moteur": racine["nom"], "nom": "pid {}".format(pid), "vram": vram, "ram": ram, "taille": ram + (vram or 0),
@@ -489,7 +489,7 @@ def charges_orphelines(suivis):
     return sorted(sortie, key=lambda c: -c["taille"])
 
 
-def _comfy_lance_par_lutin():
+def _comfy_started_by_lutin():
     try:
         from . import addons_comfyui
         p = addons_comfyui.PROCESS.get("popen")
@@ -498,7 +498,7 @@ def _comfy_lance_par_lutin():
         return False
 
 
-def charges_comfy():
+def loaded_comfy():
     try:
         stats = _json(address_comfy() + "/system_stats", None, 1.5)
     except (urllib.error.URLError, OSError, ValueError):
@@ -513,18 +513,18 @@ def charges_comfy():
     except (urllib.error.URLError, OSError, ValueError):
         travail = 0
     return [{"id": "comfyui", "genre": "comfyui", "moteur": "ComfyUI", "nom": "ComfyUI", "vram": reserve, "ram": None, "taille": reserve or 0,
-             "detail": _t("génère {} image(s) : attends la fin avant de décharger").format(travail) if travail else _t("modèles d'images gardés en mémoire vidéo (cache)"), "dechargeable": not travail, "fermable": _comfy_lance_par_lutin() and not travail}]
+             "detail": _t("génère {} image(s) : attends la fin avant de décharger").format(travail) if travail else _t("modèles d'images gardés en mémoire vidéo (cache)"), "dechargeable": not travail, "fermable": _comfy_started_by_lutin() and not travail}]
 
 
 def state():
     """Tout ce qu'il faut à la page : mémoire de la machine, ce qui est chargé (avec de quoi le décharger), programmes les plus gourmands."""
     from . import core as _m
     ram, vram = _m.system_memory(), _m.video_memory()
-    suivies = charges_llamacpp()
+    suivies = loaded_llamacpp()
     suivis = set()
     for c in suivies:
         suivis.update(c.get("pids") or [])
-    charges = charges_ollama() + suivies + charges_orphelines(suivis) + charges_comfy()
+    charges = loaded_ollama() + suivies + loaded_orphans(suivis) + loaded_comfy()
     return {"ram": ram, "vram": vram, "charges": charges, "programmes": heavy_programs(), "quand": time.time()}
 
 
@@ -546,7 +546,7 @@ def stop_process(pid, tous, lanceur=subprocess.run):
                 raise ValueError(_t("Impossible d'arrêter le programme (pid {}) : {}").format(pid, e))
 
 
-def decharger(ident):
+def unload(ident):
     """Décharge une chose de la liste (par son identifiant) : {ok, message}. Lève ValueError pour une demande invalide."""
     ident = str(ident or "")
     if ident.startswith("ollama:"):
@@ -579,7 +579,7 @@ def decharger(ident):
         mo.arreter()
         return {"ok": True, "message": _t("Le serveur llama.cpp est arrêté : la mémoire est libre (il redémarre tout seul au prochain message).")}
     if ident == "comfyui:close":
-        if not _comfy_lance_par_lutin():
+        if not _comfy_started_by_lutin():
             raise ValueError(_t("Ce ComfyUI n'a pas été lancé par Lutin : ferme-le toi-même."))
         from . import addons_comfyui
         addons_comfyui.stop_comfyui()

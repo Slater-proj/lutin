@@ -208,12 +208,12 @@ def liste():
 def texte_document(chemin):
     f = Path(chemin)
     if f.stat().st_size > MAX_SIZE:
-        raise text_extraction.ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1_000_000))
+        raise text_extraction.ExtractionError(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1_000_000))
     if f.suffix.lower() in text_extraction.FORMATS:
         return text_extraction.texte(f)
     if f.suffix.lower() in TEXTS:
         return f.read_text(encoding="utf-8", errors="replace")
-    raise text_extraction.ErreurExtraction(_t("Format non géré : {}").format(f.suffix))
+    raise text_extraction.ExtractionError(_t("Format non géré : {}").format(f.suffix))
 
 
 def traiter_document(t, chemin, r, interrompre):
@@ -346,7 +346,7 @@ def un_pas(modele_pret=None):
         ALIVE["document"] = (t["id"], chemin)
         try:
             reponse = traiter_document(t, chemin, r, ALIVE["interrompre"])
-        except (OSError, ValueError, text_extraction.ErreurExtraction, urllib.error.URLError) as erreur:
+        except (OSError, ValueError, text_extraction.ExtractionError, urllib.error.URLError) as erreur:
             e["erreurs"][chemin] = str(erreur)[:300]
             e["message"] = ""
             suite = e.get("de_suite", 0) + 1

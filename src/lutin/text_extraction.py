@@ -15,14 +15,14 @@ from .i18n import t as _t
 
 FORMATS = (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx", ".html", ".htm")
 MAX_SIZE = 30 * 1024 * 1024
-DECOMPRESSE_MAX = 80 * 1024 * 1024
+DECOMPRESSED_MAX = 80 * 1024 * 1024
 
 
-class ErreurExtraction(ValueError):
+class ExtractionError(ValueError):
     pass
 
 
-class Suspect(ErreurExtraction):
+class Suspect(ExtractionError):
     """Un document qui se décompresse en trop de données : on arrête tout (les autres erreurs d'objet, elles, sont sautées)."""
 
 
@@ -36,13 +36,13 @@ def clean(texte):
 # ----------------------------------------------------------------- formats zip
 def _zip(chemin):
     if Path(chemin).stat().st_size > MAX_SIZE:
-        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
+        raise ExtractionError(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
     try:
         z = zipfile.ZipFile(chemin)
     except (zipfile.BadZipFile, OSError) as e:
-        raise ErreurExtraction(_t("Document illisible : {}").format(e)) from e
-    if sum(i.file_size for i in z.infolist()) > DECOMPRESSE_MAX:
-        raise ErreurExtraction(_t("Document suspect : trop volumineux une fois décompressé."))
+        raise ExtractionError(_t("Document illisible : {}").format(e)) from e
+    if sum(i.file_size for i in z.infolist()) > DECOMPRESSED_MAX:
+        raise ExtractionError(_t("Document suspect : trop volumineux une fois décompressé."))
     return z
 
 
@@ -64,7 +64,7 @@ def docx(chemin):
     z = _zip(chemin)
     xml = _read(z, "word/document.xml")
     if not xml:
-        raise ErreurExtraction(_t("Ce n'est pas un document Word (.docx) lisible."))
+        raise ExtractionError(_t("Ce n'est pas un document Word (.docx) lisible."))
     paragraphes = []
     for m in re.finditer(r"<w:p(?:\s[^>]*)?>(.*?)</w:p>", xml, re.S):
         texte = _concat(m.group(1), "w:t").strip()
@@ -78,7 +78,7 @@ def odt(chemin):
     z = _zip(chemin)
     xml = _read(z, "content.xml")
     if not xml:
-        raise ErreurExtraction(_t("Ce n'est pas un document LibreOffice (.odt) lisible."))
+        raise ExtractionError(_t("Ce n'est pas un document LibreOffice (.odt) lisible."))
     xml = re.sub(r"<text:s\s*/>", " ", xml)
     blocs = []
     for m in re.finditer(r"<text:(h|p)(?:\s[^>]*)?>(.*?)</text:\1>", xml, re.S):
@@ -130,7 +130,7 @@ def xlsx(chemin):
 
 def page_html(chemin):
     if Path(chemin).stat().st_size > MAX_SIZE:
-        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
+        raise ExtractionError(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
     brut = Path(chemin).read_bytes().decode("utf-8", "replace")
     brut = re.sub(r"<(script|style|noscript|svg)\b.*?</\1>", " ", brut, flags=re.S | re.I)
     brut = re.sub(r"<(h[1-6])\b[^>]*>(.*?)</\1>", lambda m: "\n\n# " + re.sub(r"<[^>]+>", "", m.group(2)) + "\n\n", brut, flags=re.S | re.I)
@@ -142,21 +142,21 @@ def page_html(chemin):
 RE_OBJ = re.compile(rb"(\d+)\s+(\d+)\s+obj\b")
 
 
-def _filtres(dico):
+def _filters(dico):
     f = dico.get("/Filter")
     if f is None:
         return []
     return [x for x in (f if isinstance(f, list) else [f])]
 
 
-def _decoder_flux(dico, brut):
+def _decode_stream(dico, brut):
     """Les octets d'un flux après ses filtres ; None si un filtre n'est pas géré (images, LZW…)."""
     donnees = brut
-    for f in _filtres(dico):
+    for f in _filters(dico):
         try:
             if f in ("/FlateDecode", "/Fl"):
                 d = zlib.decompressobj()
-                donnees = d.decompress(donnees, DECOMPRESSE_MAX)
+                donnees = d.decompress(donnees, DECOMPRESSED_MAX)
             elif f in ("/ASCII85Decode", "/A85"):
                 donnees = base64.a85decode(donnees.strip(), adobe=donnees.strip().startswith(b"<~"))
             elif f in ("/ASCIIHexDecode", "/AHx"):
@@ -168,7 +168,7 @@ def _decoder_flux(dico, brut):
     return donnees
 
 
-class Analyse:
+class Analysis:
     """Un petit lecteur d'objets PDF : nombres, noms, chaînes, tableaux, dictionnaires, références."""
 
     def __init__(self, octets):
@@ -190,10 +190,10 @@ class Analyse:
 
     def valeur(self, profondeur=0):
         if profondeur > 40:
-            raise ErreurExtraction("PDF trop imbriqué")
+            raise ExtractionError("PDF trop imbriqué")
         self.sauter()
         if self.i >= len(self.o):
-            raise ErreurExtraction("fin inattendue")
+            raise ExtractionError("fin inattendue")
         c = self.o[self.i:self.i + 1]
         if c == b"/":
             return self.nom()
@@ -231,7 +231,7 @@ class Analyse:
             return float(t) if b"." in t else int(t)
         m = re.compile(rb"[^\s()<>\[\]{}/%]+").match(self.o, self.i)
         if not m:
-            raise ErreurExtraction("jeton inconnu")
+            raise ExtractionError("jeton inconnu")
         self.i = m.end()
         mot = m.group(0)
         return {b"true": True, b"false": False, b"null": None}.get(mot, mot.decode("latin-1"))
@@ -284,7 +284,7 @@ class Analyse:
         return bytes.fromhex(h.decode("ascii"))
 
 
-def _objets_pdf(donnees):
+def _pdf_objects(donnees):
     """{numéro: (dictionnaire ou valeur, octets du flux décodé ou None)} pour tous les objets, y compris ceux rangés dans des flux d'objets."""
     objets = {}
     positions = [(int(m.group(1)), m.end()) for m in RE_OBJ.finditer(donnees)]
@@ -293,7 +293,7 @@ def _objets_pdf(donnees):
         fin = positions[k + 1][1] if k + 1 < len(positions) else len(donnees)
         morceau = donnees[debut:fin]
         try:
-            a = Analyse(morceau)
+            a = Analysis(morceau)
             valeur = a.valeur()
             flux = None
             apres = morceau.find(b"stream", a.i)
@@ -305,10 +305,10 @@ def _objets_pdf(donnees):
                     debut_flux += 1
                 fin_flux = morceau.rfind(b"endstream")
                 brut = morceau[debut_flux:fin_flux if fin_flux >= debut_flux else len(morceau)]
-                flux = _decoder_flux(valeur, brut.rstrip(b"\r\n") if "/FlateDecode" not in _filtres(valeur) else brut)
+                flux = _decode_stream(valeur, brut.rstrip(b"\r\n") if "/FlateDecode" not in _filters(valeur) else brut)
                 if flux is not None:
                     total += len(flux)
-                    if total > DECOMPRESSE_MAX:
+                    if total > DECOMPRESSED_MAX:
                         raise Suspect(_t("Document suspect : trop volumineux une fois décompressé."))
             objets[num] = (valeur, flux)
         except Suspect:
@@ -323,13 +323,13 @@ def _objets_pdf(donnees):
                 for j in range(0, len(paires) - 1, 2):
                     debut = premier + paires[j + 1]
                     fin_o = premier + paires[j + 3] if j + 3 < len(paires) else len(flux)
-                    objets.setdefault(paires[j], (Analyse(flux[debut:fin_o]).valeur(), None))
-            except (ValueError, ErreurExtraction, IndexError):
+                    objets.setdefault(paires[j], (Analysis(flux[debut:fin_o]).valeur(), None))
+            except (ValueError, ExtractionError, IndexError):
                 continue
     return objets
 
 
-def _resoudre(objets, v):
+def _resolve(objets, v):
     for _ in range(10):
         if isinstance(v, tuple) and v and v[0] == "ref":
             v = objets.get(v[1], (None, None))[0]
@@ -369,10 +369,10 @@ def _cmap(flux):
     return table, longueur
 
 
-class Police:
+class Font:
     def __init__(self, objets, ref):
         self.table, self.longueur, self.connue = {}, 1, False
-        d = _resoudre(objets, ref)
+        d = _resolve(objets, ref)
         if not isinstance(d, dict):
             return
         tu = d.get("/ToUnicode")
@@ -391,10 +391,10 @@ class Police:
         return octets.decode("cp1252", "replace")
 
 
-def _texte_contenu(flux, polices):
+def _content_text(flux, polices):
     """Le texte d'un flux de contenu de page : opérateurs Tf, Tj, TJ, ', \", Td, TD, Tm, T*, ET."""
-    a = Analyse(flux)
-    pile, sortie, police, y_precedent = [], [], Police({}, None), None
+    a = Analysis(flux)
+    pile, sortie, police, y_precedent = [], [], Font({}, None), None
 
     def montrer(v):
         if isinstance(v, bytes):
@@ -429,7 +429,7 @@ def _texte_contenu(flux, polices):
                 fin = re.compile(rb"\sEI(?=\s|$)").search(flux, a.i)
                 a.i = fin.end() if fin else n
             elif op == "Tf" and len(pile) >= 2:
-                police = polices.get(pile[-2], Police({}, None))
+                police = polices.get(pile[-2], Font({}, None))
             elif op == "Tj" and pile:
                 montrer(pile[-1])
             elif op == "TJ" and pile and isinstance(pile[-1], list):
@@ -452,30 +452,30 @@ def _texte_contenu(flux, polices):
             elif op in ("T*", "ET"):
                 ligne()
             pile.clear()
-        except (ErreurExtraction, ValueError, IndexError):
+        except (ExtractionError, ValueError, IndexError):
             a.i += 1
     return "".join(sortie)
 
 
 def pdf(chemin):
     if Path(chemin).stat().st_size > MAX_SIZE:
-        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
+        raise ExtractionError(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
     donnees = Path(chemin).read_bytes()
     if not donnees.startswith(b"%PDF") and b"%PDF" not in donnees[:1024]:
-        raise ErreurExtraction(_t("Ce n'est pas un PDF lisible."))
+        raise ExtractionError(_t("Ce n'est pas un PDF lisible."))
     if re.search(rb"/Encrypt\s", donnees[-4096:]) or re.search(rb"/Encrypt\s*\d", donnees[-4096:]):
-        raise ErreurExtraction(_t("PDF chiffré : Lutin ne peut pas le lire."))
-    objets = _objets_pdf(donnees)
+        raise ExtractionError(_t("PDF chiffré : Lutin ne peut pas le lire."))
+    objets = _pdf_objects(donnees)
     # pages dans l'ordre de l'arbre ; à défaut, dans l'ordre du fichier
     pages = []
 
     def descendre(noeud, ressources, profondeur=0):
-        d = _resoudre(objets, noeud)
+        d = _resolve(objets, noeud)
         if not isinstance(d, dict) or profondeur > 30:
             return
         res = d.get("/Resources", ressources)
         if d.get("/Type") == "/Pages" or "/Kids" in d:
-            for k in _resoudre(objets, d.get("/Kids")) or []:
+            for k in _resolve(objets, d.get("/Kids")) or []:
                 descendre(k, res, profondeur + 1)
         else:
             pages.append((d, res))
@@ -486,32 +486,32 @@ def pdf(chemin):
         pages = [(v, v.get("/Resources")) for num, (v, _) in sorted(objets.items()) if isinstance(v, dict) and v.get("/Type") == "/Page"]
     sortie = []
     for numero, (page, ressources) in enumerate(pages, 1):
-        res = _resoudre(objets, ressources) or {}
-        familles = _resoudre(objets, res.get("/Font")) or {} if isinstance(res, dict) else {}
-        polices = {nom: Police(objets, ref) for nom, ref in familles.items()} if isinstance(familles, dict) else {}
-        contenu = _resoudre(objets, page.get("/Contents"))
+        res = _resolve(objets, ressources) or {}
+        familles = _resolve(objets, res.get("/Font")) or {} if isinstance(res, dict) else {}
+        polices = {nom: Font(objets, ref) for nom, ref in familles.items()} if isinstance(familles, dict) else {}
+        contenu = _resolve(objets, page.get("/Contents"))
         refs = contenu if isinstance(contenu, list) else [page.get("/Contents")]
         flux = b"\n".join(objets[r[1]][1] for r in refs if isinstance(r, tuple) and r[1] in objets and objets[r[1]][1])
-        texte = clean(_texte_contenu(flux, polices)) if flux else ""
+        texte = clean(_content_text(flux, polices)) if flux else ""
         if texte:
             sortie.append((_t("Page {}").format(numero), texte))
     return sortie
 
 
-def parties(chemin):
+def parts(chemin):
     """[(titre de la partie, texte)] d'un document ; ErreurExtraction s'il est illisible."""
     ext = Path(chemin).suffix.lower()
     fonctions = {".pdf": pdf, ".docx": docx, ".odt": odt, ".ods": odt, ".odp": odt, ".pptx": pptx, ".xlsx": xlsx, ".html": page_html, ".htm": page_html}
     if ext not in fonctions:
-        raise ErreurExtraction(_t("Format non géré : {}").format(ext))
+        raise ExtractionError(_t("Format non géré : {}").format(ext))
     try:
         return fonctions[ext](chemin)
-    except ErreurExtraction:
+    except ExtractionError:
         raise
     except (OSError, ValueError, KeyError, zlib.error, RecursionError) as e:
-        raise ErreurExtraction(_t("Document illisible : {}").format(e)) from e
+        raise ExtractionError(_t("Document illisible : {}").format(e)) from e
 
 
 def texte(chemin):
     """Tout le texte d'un document, parties séparées par leur titre en Markdown."""
-    return "\n\n".join(("## {}\n\n".format(titre) if titre else "") + corps for titre, corps in parties(chemin))
+    return "\n\n".join(("## {}\n\n".format(titre) if titre else "") + corps for titre, corps in parts(chemin))

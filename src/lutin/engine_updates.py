@@ -93,7 +93,7 @@ def _latest_ollama(http_json):
     """(version installée, dernière version publiée) pour Ollama local et démarré ; None sinon (Docker : l'image se met à jour avec docker compose)."""
     if engines.CONTEXT["en_docker"]():
         from . import docker_engines
-        if not docker_engines.ollama_installe_par_lutin():
+        if not docker_engines.ollama_installed_by_lutin():
             return None          # Ollama de l'image ou d'un autre conteneur : il se met à jour avec docker compose
         try:
             derniere = ((http_json or docker_engines._http_json)(docker_engines.API_OLLAMA) or {}).get("tag_name", "")

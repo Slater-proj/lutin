@@ -205,7 +205,7 @@ class Chat(unittest.TestCase):
         for patch in (mock.patch.object(T.A, "run_selftest", lambda profond=False: dict(result, profond=profond)),
                       mock.patch.object(T.A, "health_state", lambda: {"niveau": "ok", "items": [{"id": "ram", "nom": "Mémoire vive (RAM)", "niveau": "ok", "valeur": "16 Go libres", "conseil": ""}]}),
                       mock.patch.object(loaded_resources, "state", lambda: resources),
-                      mock.patch.object(loaded_resources, "decharger", lambda ident: unloaded.append(ident) or {"ok": True, "message": "Déchargé."})):
+                      mock.patch.object(loaded_resources, "unload", lambda ident: unloaded.append(ident) or {"ok": True, "message": "Déchargé."})):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/settings/health'")
@@ -308,7 +308,7 @@ class Chat(unittest.TestCase):
         report.write_bytes(b"%PDF-1.4 3p")
         self.addCleanup(lambda: report.unlink(missing_ok=True))
         picture = images.save(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
-        entry = produced_files.entree(report)
+        entry = produced_files.entry(report)
         held = T.A.conv_nouvelle()["id"]
         T.A.conv_renommer(held, "Produits 3p")
         stored = T.A.conv_lire(held)
@@ -989,7 +989,7 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: T.INSTALLES.__setitem__(slice(None), installed))
         T.INSTALLES[:] = ["qwen3:8b", "gemma3:4b"]
         for patch in (mock.patch.dict(os.environ, {"LUTIN_BENCH": str(path)}), mock.patch.object(T.A, "lancer_bench_serie", measure),
-                      mock.patch.object(engine_bench, "vue", lambda *args: seen), mock.patch.object(engine_bench, "launch", lambda *args: launched.append(args[1]))):
+                      mock.patch.object(engine_bench, "view", lambda *args: seen), mock.patch.object(engine_bench, "launch", lambda *args: launched.append(args[1]))):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
@@ -2324,7 +2324,7 @@ class Chat(unittest.TestCase):
         from lutin import scheduled_tasks
         self.addCleanup(lambda: [scheduled_tasks.remove(task["id"]) for task in scheduled_tasks.read()])
         ran = []
-        patch = mock.patch.object(scheduled_tasks, "executer", side_effect=lambda identifier: ran.append(identifier))
+        patch = mock.patch.object(scheduled_tasks, "execute", side_effect=lambda identifier: ran.append(identifier))
         patch.start()
         self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/agents/tasks'")

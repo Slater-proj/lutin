@@ -175,7 +175,7 @@ class RemoteConversations(unittest.TestCase):
         report = A.RACINE / "rapport du bureau.pdf"
         report.write_bytes(b"%PDF-1.4 host")
         self.addCleanup(report.unlink)
-        entry = produced_files.entree(report)
+        entry = produced_files.entry(report)
         stored = A.conv_lire(self.conversation)
         stored["messages"].append({"role": "tool", "tool_name": "ecrire_fichier", "content": "Written.", "fichiers_joints": [entry]})
         A.conv_ecrire_telle_quelle(stored)

@@ -34,7 +34,7 @@ def tour_qui_repond(texte="Voici le résumé."):
 class Base(unittest.TestCase):
     def setUp(self):
         P._write([])
-        P.EN_COURS.clear()
+        P.RUNNING.clear()
         P.TO_REMOVE.clear()
         self.envoyes = []
         self.canal = mock.patch.object(notifications, "find", lambda ident: {"id": ident} if ident == "c1" else None)
@@ -51,7 +51,7 @@ class Base(unittest.TestCase):
 
     def lancer(self, ident, tour):
         with mock.patch.object(_m, "tour", tour):
-            return P.executer(ident)
+            return P.execute(ident)
 
 
 class Validation(Base):
@@ -150,7 +150,7 @@ class Execution(Base):
         self.assertTrue(all(h["date"] and h["duree_s"] >= 0 for h in n["historique"]))
         self.assertEqual(_m.conv_lire(c1)["titre"], "⏰ Résumé")
         self.assertEqual([e[2] for e in self.envoyes], ["Premier résumé.", "Deuxième résumé."])
-        self.assertEqual(P.EN_COURS, {}, "rien ne reste « en cours »")
+        self.assertEqual(P.RUNNING, {}, "rien ne reste « en cours »")
 
     def test_l_historique_garde_les_dix_dernieres(self):
         t = self.tache()
@@ -195,24 +195,24 @@ class Execution(Base):
         t = self.tache(notifier="c1")
         P.modify(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
         with mock.patch.object(_m, "activate_work", mock.Mock(side_effect=ValueError("Le dossier de travail « x » n'est plus dans la liste."))), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
-            self.assertEqual(P.un_regard(LUNDI_8H), t["id"])
+            self.assertEqual(P.run_first_due(LUNDI_8H), t["id"])
             n = P.read()[0]
             self.assertEqual((n["derniere_etat"], len(n["historique"])), ("erreur", 1))
             self.assertIn("n'est plus dans la liste", n["derniere_erreur"])
             self.assertIn("n'est plus dans la liste", self.envoyes[-1][2])
-            self.assertIsNone(P.un_regard(LUNDI_8H + timedelta(minutes=1)), "pas de nouvelle tentative toutes les 30 secondes")
+            self.assertIsNone(P.run_first_due(LUNDI_8H + timedelta(minutes=1)), "pas de nouvelle tentative toutes les 30 secondes")
             self.assertEqual(len(P.read()[0]["historique"]), 1)
 
     def test_machine_occupee_la_tache_attend_sans_rien_noter(self):
         t = self.tache()
         P.modify(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
         with mock.patch.dict(_m.TOURS_ACTIFS, {"autre": threading.Event()}), mock.patch.object(_m, "TOURS_SIMULTANES", 1), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
-            self.assertIsNone(P.un_regard(LUNDI_8H))
+            self.assertIsNone(P.run_first_due(LUNDI_8H))
             with self.assertRaises(ValueError):
-                P.executer(t["id"])
+                P.execute(t["id"])
         self.assertEqual((P.read()[0]["derniere_exec"], P.read()[0]["historique"]), ("", []))
         with mock.patch.object(_m, "tour", tour_qui_repond()):
-            self.assertEqual(P.un_regard(LUNDI_8H), t["id"], "la machine est libre : elle part")
+            self.assertEqual(P.run_first_due(LUNDI_8H), t["id"], "la machine est libre : elle part")
 
     def test_une_tache_ne_se_lance_pas_deux_fois_en_meme_temps(self):
         t = self.tache()
@@ -228,7 +228,7 @@ class Execution(Base):
         self.assertTrue(demarree.wait(10))
         self.assertTrue(P.state()["taches"][0]["en_cours"])
         with mock.patch.object(_m, "tour", tour_qui_repond()), self.assertRaises(ValueError) as e:
-            P.executer(t["id"])
+            P.execute(t["id"])
         self.assertIn("déjà", str(e.exception))
         libre.set()
         fil.join(10)
@@ -252,13 +252,13 @@ class ArretEtSuppression(Base):
     def test_arreter_une_tache_en_cours_la_garde_planifiee_et_ne_previent_personne(self):
         t = self.tache(notifier="c1")
         fil = self.en_plein_travail(t)
-        P.arreter(t["id"])
+        P.stop_task(t["id"])
         fil.join(10)
         n = P.read()[0]
         self.assertEqual((n["derniere_etat"], n["actif"], self.envoyes), ("arretee", True, []))
         self.assertEqual(n["historique"][0]["etat"], "arretee")
         with self.assertRaises(ValueError):
-            P.arreter(t["id"])
+            P.stop_task(t["id"])
 
     def test_supprimer_une_tache_en_cours_l_arrete_pour_de_bon(self):
         t = self.tache(notifier="c1")
@@ -266,8 +266,8 @@ class ArretEtSuppression(Base):
         P.remove(t["id"])
         fil.join(10)
         self.assertFalse(fil.is_alive(), "le tour a été arrêté")
-        self.assertEqual((P.read(), self.envoyes, P.EN_COURS), ([], [], {}), "supprimée : plus rien ne s'écrit, personne n'est prévenu")
-        self.assertIsNone(P.un_regard(LUNDI_8H + timedelta(days=30)))
+        self.assertEqual((P.read(), self.envoyes, P.RUNNING), ([], [], {}), "supprimée : plus rien ne s'écrit, personne n'est prévenu")
+        self.assertIsNone(P.run_first_due(LUNDI_8H + timedelta(days=30)))
 
     def test_la_conversation_est_gardee_par_defaut_et_effacee_sur_demande(self):
         t = self.tache()

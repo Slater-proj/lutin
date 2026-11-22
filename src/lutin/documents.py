@@ -13,9 +13,9 @@ from io import BytesIO
 from xml.sax.saxutils import escape
 
 PAGE = (595, 842)                # A4, en points
-MARGE = 56
-RE_TITRE = re.compile(r"^(#{1,3})\s+(.*)$")
-RE_PUCE = re.compile(r"^(\s*)[-*•]\s+(.*)$")
+MARGIN = 56
+RE_TITLE = re.compile(r"^(#{1,3})\s+(.*)$")
+RE_BULLET = re.compile(r"^(\s*)[-*•]\s+(.*)$")
 RE_NUM = re.compile(r"^(\s*)(\d{1,3})[.)]\s+(.*)$")
 RE_SEP = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
 RE_INLINE = re.compile(r"(\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`)")
@@ -25,24 +25,24 @@ MAX_SIZE = 400_000
 _H = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015,
       667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333,
       556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584]
-LARGEUR = {chr(32 + i): w for i, w in enumerate(_H)}
+WIDTH = {chr(32 + i): w for i, w in enumerate(_H)}
 BASE = {"àáâãä": "a", "ç": "c", "èéêë": "e", "ìíîï": "i", "ñ": "n", "òóôõö": "o", "ùúûü": "u", "ýÿ": "y", "ÀÁÂÃÄ": "A", "Ç": "C", "ÈÉÊË": "E", "ÌÍÎÏ": "I", "Ñ": "N", "ÒÓÔÕÖ": "O", "ÙÚÛÜ": "U", "Ý": "Y"}
 for lettres, base in BASE.items():
     for c in lettres:
-        LARGEUR[c] = LARGEUR[base]
-LARGEUR.update({"œ": 944, "Œ": 1000, "æ": 889, "Æ": 1000, "€": 556, "’": 222, "‘": 222, "“": 333, "”": 333, "«": 556, "»": 556, "—": 1000, "–": 556, "…": 1000, "•": 350, "°": 400, "©": 737})
+        WIDTH[c] = WIDTH[base]
+WIDTH.update({"œ": 944, "Œ": 1000, "æ": 889, "Æ": 1000, "€": 556, "’": 222, "‘": 222, "“": 333, "”": 333, "«": 556, "»": 556, "—": 1000, "–": 556, "…": 1000, "•": 350, "°": 400, "©": 737})
 SUBSTITUTIONS = str.maketrans({" ": " ", " ": " ", "→": "->", "←": "<-", "✓": "v", "✔": "v", "✗": "x", "•": "•", "−": "-", "\t": "    "})
 
 
-def _largeur(texte, police, taille):
+def _width(texte, police, taille):
     if police == "F3":
         return len(texte) * 0.6 * taille
-    total = sum(LARGEUR.get(c, 556) for c in texte) * taille / 1000
+    total = sum(WIDTH.get(c, 556) for c in texte) * taille / 1000
     return total * (1.07 if police == "F2" else 1.0)
 
 
 # --------------------------------------------------------------------------- lecture du Markdown
-def blocs(markdown):
+def blocks(markdown):
     """Liste de blocs : ("titre", niveau, texte), ("para", texte), ("puce", niveau, texte), ("num", niveau, "n. texte"), ("code", [lignes]), ("sep",), ("vide",)."""
     sortie, code, para = [], None, []
 
@@ -62,16 +62,16 @@ def blocs(markdown):
         if code is not None:
             code.append(ligne)
             continue
-        m = RE_TITRE.match(ligne.strip())
+        m = RE_TITLE.match(ligne.strip())
         if m:
             clore()
             sortie.append(("titre", len(m.group(1)), m.group(2).strip()))
         elif RE_SEP.match(ligne):
             clore()
             sortie.append(("sep",))
-        elif RE_PUCE.match(ligne):
+        elif RE_BULLET.match(ligne):
             clore()
-            m = RE_PUCE.match(ligne)
+            m = RE_BULLET.match(ligne)
             sortie.append(("puce", min(3, len(m.group(1).replace("\t", "  ")) // 2), m.group(2).strip()))
         elif RE_NUM.match(ligne):
             clore()
@@ -102,24 +102,24 @@ def without_tags(texte):
 
 
 # --------------------------------------------------------------------------- PDF
-def _pdf_chaine(texte):
+def _pdf_string(texte):
     octets = texte.translate(SUBSTITUTIONS).encode("cp1252", "replace")
     return b"(" + octets.replace(b"\\", b"\\\\").replace(b"(", b"\\(").replace(b")", b"\\)") + b")"
 
 
-def _couper(texte, police, taille, largeur):
+def _wrap(texte, police, taille, largeur):
     """Coupe un texte en lignes qui tiennent dans `largeur` (aux espaces ; un mot trop long est coupé)."""
     lignes, courante = [], ""
     for mot in texte.split(" "):
         essai = (courante + " " + mot) if courante else mot
-        if _largeur(essai, police, taille) <= largeur:
+        if _width(essai, police, taille) <= largeur:
             courante = essai
             continue
         if courante:
             lignes.append(courante)
-        while _largeur(mot, police, taille) > largeur and len(mot) > 1:
+        while _width(mot, police, taille) > largeur and len(mot) > 1:
             n = len(mot)
-            while n > 1 and _largeur(mot[:n], police, taille) > largeur:
+            while n > 1 and _width(mot[:n], police, taille) > largeur:
                 n -= 1
             lignes.append(mot[:n])
             mot = mot[n:]
@@ -130,39 +130,39 @@ def _couper(texte, police, taille, largeur):
 
 def pdf(markdown, titre=""):
     """Octets d'un PDF (A4, pages numérotées) à partir du Markdown."""
-    texte_max = PAGE[0] - 2 * MARGE
-    pages, courante, y = [], [], PAGE[1] - MARGE
+    texte_max = PAGE[0] - 2 * MARGIN
+    pages, courante, y = [], [], PAGE[1] - MARGIN
 
     def saut():
         nonlocal courante, y
         pages.append(courante)
-        courante, y = [], PAGE[1] - MARGE
+        courante, y = [], PAGE[1] - MARGIN
 
     def ligne(police, taille, x, texte, avant=0, interligne=1.3):
         nonlocal y
         hauteur = taille * interligne
-        if y - avant - hauteur < MARGE + 14:
+        if y - avant - hauteur < MARGIN + 14:
             saut()
             avant = 0
         y -= avant + hauteur
         courante.append((police, taille, x, y + taille * 0.28, texte))
 
-    corps = ([("titre", 0, titre)] if titre else []) + blocs(markdown)
+    corps = ([("titre", 0, titre)] if titre else []) + blocks(markdown)
     for b in corps:
         if b[0] == "titre":
             taille = {0: 22, 1: 18, 2: 14, 3: 12}[b[1]]
-            for k, t in enumerate(_couper(without_tags(b[2]), "F2", taille, texte_max)):
-                ligne("F2", taille, MARGE, t, avant=(taille * 0.9 if k == 0 else 0), interligne=1.25)
+            for k, t in enumerate(_wrap(without_tags(b[2]), "F2", taille, texte_max)):
+                ligne("F2", taille, MARGIN, t, avant=(taille * 0.9 if k == 0 else 0), interligne=1.25)
             y -= 3
         elif b[0] == "para":
-            for k, t in enumerate(_couper(without_tags(b[1]), "F1", 11, texte_max)):
-                ligne("F1", 11, MARGE, t, avant=(4 if k == 0 else 0))
+            for k, t in enumerate(_wrap(without_tags(b[1]), "F1", 11, texte_max)):
+                ligne("F1", 11, MARGIN, t, avant=(4 if k == 0 else 0))
         elif b[0] in ("puce", "num"):
-            retrait = MARGE + 14 * b[1]
+            retrait = MARGIN + 14 * b[1]
             marque = "•" if b[0] == "puce" else b[2].split(" ", 1)[0]
             reste = b[2] if b[0] == "puce" else b[2].split(" ", 1)[1] if " " in b[2] else ""
             x_texte = retrait + (14 if b[0] == "puce" else 22)
-            for k, t in enumerate(_couper(without_tags(reste), "F1", 11, texte_max - (x_texte - MARGE))):
+            for k, t in enumerate(_wrap(without_tags(reste), "F1", 11, texte_max - (x_texte - MARGIN))):
                 if k == 0:
                     ligne("F1", 11, x_texte, t, avant=2)
                     courante.insert(len(courante) - 1, ("F1", 11, retrait, y + 11 * 0.28, marque))          # la puce avant son texte (ordre de lecture)
@@ -170,11 +170,11 @@ def pdf(markdown, titre=""):
                     ligne("F1", 11, x_texte, t)
         elif b[0] == "code":
             for k, t in enumerate(b[1] or [""]):
-                for j, morceau in enumerate(_couper(t.expandtabs(4), "F3", 9, texte_max) if t.strip() else [""]):
-                    ligne("F3", 9, MARGE + 6, morceau, avant=(4 if k == 0 and j == 0 else 0), interligne=1.25)
+                for j, morceau in enumerate(_wrap(t.expandtabs(4), "F3", 9, texte_max) if t.strip() else [""]):
+                    ligne("F3", 9, MARGIN + 6, morceau, avant=(4 if k == 0 and j == 0 else 0), interligne=1.25)
         elif b[0] == "sep":
-            ligne("F1", 6, MARGE, "", avant=4)
-            courante.append(("TRAIT", 0, MARGE, y + 3, ""))
+            ligne("F1", 6, MARGIN, "", avant=4)
+            courante.append(("TRAIT", 0, MARGIN, y + 3, ""))
         elif b[0] == "vide":
             y -= 3
     pages.append(courante)
@@ -185,7 +185,7 @@ def pdf(markdown, titre=""):
     objets.append(("<< /Type /Pages /Kids [" + " ".join("%d 0 R" % (8 + 2 * i) for i in range(nb_pages)) + "] /Count %d >>" % nb_pages).encode("ascii"))
     for nom in ("Helvetica", "Helvetica-Bold", "Courier"):
         objets.append(("<< /Type /Font /Subtype /Type1 /BaseFont /%s /Encoding /WinAnsiEncoding >>" % nom).encode("ascii"))
-    info = b"<< /Producer (Lutin) /CreationDate (D:" + time.strftime("%Y%m%d%H%M%S").encode("ascii") + b") " + (b"/Title " + _pdf_chaine(titre) + b" " if titre else b"") + b">>"
+    info = b"<< /Producer (Lutin) /CreationDate (D:" + time.strftime("%Y%m%d%H%M%S").encode("ascii") + b") " + (b"/Title " + _pdf_string(titre) + b" " if titre else b"") + b">>"
     objets.append(info)                            # objet 6
     for i, page in enumerate(pages):
         flux = [b"BT"]
@@ -195,11 +195,11 @@ def pdf(markdown, titre=""):
                 traits.append(py)
                 continue
             if texte:
-                flux.append(b"/%s %s Tf 1 0 0 1 %.1f %.1f Tm " % (police.encode(), (b"%g" % taille), x, py) + _pdf_chaine(texte) + b" Tj")
+                flux.append(b"/%s %s Tf 1 0 0 1 %.1f %.1f Tm " % (police.encode(), (b"%g" % taille), x, py) + _pdf_string(texte) + b" Tj")
         flux.append(b"ET")
         for py in traits:
-            flux.append(b"0.6 G %d %.1f m %d %.1f l S" % (MARGE, py, PAGE[0] - MARGE, py))
-        flux.append(b"BT /F1 9 Tf 1 0 0 1 %.1f 28 Tm " % (PAGE[0] / 2 - 10) + _pdf_chaine("%d / %d" % (i + 1, nb_pages)) + b" Tj ET")
+            flux.append(b"0.6 G %d %.1f m %d %.1f l S" % (MARGIN, py, PAGE[0] - MARGIN, py))
+        flux.append(b"BT /F1 9 Tf 1 0 0 1 %.1f 28 Tm " % (PAGE[0] / 2 - 10) + _pdf_string("%d / %d" % (i + 1, nb_pages)) + b" Tj ET")
         brut = zlib.compress(b"\n".join(flux))
         objets.append(b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(brut) + brut + b"\nendstream")                                    # objet 7 + 2i
         objets.append(("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents %d 0 R /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R >> >> >>"
@@ -254,7 +254,7 @@ def _clean(texte):
     return re.sub("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]", "", texte)
 
 
-def _paragraphe(texte, style="", retrait=0, suspendu=0):
+def _paragraph(texte, style="", retrait=0, suspendu=0):
     ppr = ""
     if style:
         ppr += '<w:pStyle w:val="%s"/>' % style
@@ -267,16 +267,16 @@ def docx(markdown, titre=""):
     """Octets d'un document Word (.docx) à partir du Markdown."""
     corps = []
     if titre:
-        corps.append(_paragraphe(titre, "Titre"))
-    for b in blocs(markdown):
+        corps.append(_paragraph(titre, "Titre"))
+    for b in blocks(markdown):
         if b[0] == "titre":
-            corps.append(_paragraphe(b[2], "Titre%d" % b[1]))
+            corps.append(_paragraph(b[2], "Titre%d" % b[1]))
         elif b[0] == "para":
-            corps.append(_paragraphe(b[1]))
+            corps.append(_paragraph(b[1]))
         elif b[0] == "puce":
-            corps.append(_paragraphe("•  " + b[2], "", 360 + 360 * b[1], 360))
+            corps.append(_paragraph("•  " + b[2], "", 360 + 360 * b[1], 360))
         elif b[0] == "num":
-            corps.append(_paragraphe(b[2], "", 360 + 360 * b[1], 360))
+            corps.append(_paragraph(b[2], "", 360 + 360 * b[1], 360))
         elif b[0] == "code":
             corps.extend('<w:p><w:pPr><w:pStyle w:val="Code"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>' % escape(_clean(t)) for t in (b[1] or [""]))
         elif b[0] == "sep":

@@ -168,7 +168,7 @@ class Configuration(Base):
         if os.name != "nt":
             self.assertEqual(stat.S_IMODE(os.stat(web_search._path()).st_mode), 0o600)
         self.assertEqual(web_search.save(brave_cle="")["brave"], False, "retirer la clé")
-        self.assertEqual(web_search.vue()["searxng"], URL_SX, "ne pas toucher à SearXNG en retirant la clé")
+        self.assertEqual(web_search.view()["searxng"], URL_SX, "ne pas toucher à SearXNG en retirant la clé")
         for mauvaise in ("trop court", "avec espace dedans!!", "x" * 300):
             with self.subTest(mauvaise=mauvaise), self.assertRaises(ValueError):
                 web_search.save(brave_cle=mauvaise)
@@ -180,11 +180,11 @@ class Configuration(Base):
         self.assertEqual(web_search.config()["searxng"], "")
 
     def test_options_validees_et_propres_a_chaque_fil(self):
-        self.assertEqual(web_search.definir_options("Semaine", "https://www.Docs.Python.org/3/", True, "en"), {"periode": "semaine", "site": "docs.python.org", "actualites": True, "langue": "en"})
+        self.assertEqual(web_search.set_options("Semaine", "https://www.Docs.Python.org/3/", True, "en"), {"periode": "semaine", "site": "docs.python.org", "actualites": True, "langue": "en"})
         for periode, site in (("hier", None), (None, "pas un domaine"), (None, "x.y;rm")):
             with self.subTest(periode=periode, site=site), self.assertRaises(ValueError):
-                web_search.definir_options(periode, site)
-        web_search.definir_options("jour")
+                web_search.set_options(periode, site)
+        web_search.set_options("jour")
         vu = []
         t = threading.Thread(target=lambda: vu.append(web_search.options()))
         t.start()
@@ -228,12 +228,12 @@ class Searxng(Base):
 
     def test_requete_envoyee_et_resultats_nettoyes(self):
         web_search.save(URL_SX)
-        web_search.definir_options("semaine", "docs.exemple.org", True, "en")
+        web_search.set_options("semaine", "docs.exemple.org", True, "en")
         web_search.results_searxng("guide installation")
         q = requete_de(derniere("searxng")[1])
         self.assertEqual((q["format"], q["language"], q["time_range"], q["categories"]), (["json"], ["en"], ["week"], ["news"]))
         self.assertEqual(q["q"], ["site:docs.exemple.org guide installation"])
-        web_search.definir_options()
+        web_search.set_options()
         res, _ = web.search_results("guide", 10, options=web_search.options())
         self.assertEqual([x["source"] for x in res], ["searxng"] * 3)
         urls = [x["url"] for x in res]
@@ -280,7 +280,7 @@ class Searxng(Base):
 class Brave(Base):
     def test_cle_en_en_tete_fraicheur_et_description_nettoyee(self):
         web_search.save(brave_cle="cle-brave-123456")
-        web_search.definir_options("jour", None, False, "fr")
+        web_search.set_options("jour", None, False, "fr")
         res = web_search.results_brave("python 3.14")
         self.assertEqual(res[0]["extrait"], "un extrait")
         chemin, en_tetes = derniere("brave")[1], derniere("brave")[2]
@@ -290,7 +290,7 @@ class Brave(Base):
 
     def test_actualites_utilisent_le_point_d_acces_des_nouvelles(self):
         web_search.save(brave_cle="cle-brave-123456")
-        web_search.definir_options(None, None, True)
+        web_search.set_options(None, None, True)
         res = web_search.results_brave("élections")
         self.assertEqual((res[0]["titre"], res[0]["extrait"]), ("Une dépêche", "Dernière minute"))
         self.assertIn("/news/search", derniere("brave")[1])
@@ -501,7 +501,7 @@ class Api(Base):
         try:
             statut, v = self.appel("POST", "/api/web-recherche-config", {"searxng": URL_SX, "brave_cle": "cle-brave-123456"})
             self.assertEqual(statut, 403)
-            self.assertEqual((web_search.vue()["searxng"], web_search.vue()["brave"]), ("", False), "rien n'a été enregistré")
+            self.assertEqual((web_search.view()["searxng"], web_search.view()["brave"]), ("", False), "rien n'a été enregistré")
             self.assertFalse(self.appel("GET", "/api/web-recherche")[1]["modifiable"])
         finally:
             self.serveur.RequestHandlerClass._configurateur_strict = vrai

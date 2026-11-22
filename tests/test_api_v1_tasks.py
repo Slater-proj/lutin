@@ -54,7 +54,7 @@ class Tasks(unittest.TestCase):
     def test_a_task_is_run_now_in_the_background_and_a_task_that_is_not_at_work_cannot_be_stopped(self):
         task = call("POST", "/api/v1/scheduled-tasks", NEW)[1]
         ran = []
-        with mock.patch.object(scheduled_tasks, "executer", side_effect=lambda identifier: ran.append(identifier)):
+        with mock.patch.object(scheduled_tasks, "execute", side_effect=lambda identifier: ran.append(identifier)):
             self.assertEqual(call("POST", "/api/v1/scheduled-tasks/%s/run" % task["id"], {}), (202, {"started": True}))
             for _ in range(100):
                 if ran:
@@ -63,7 +63,7 @@ class Tasks(unittest.TestCase):
         self.assertEqual(ran, [task["id"]])
         status, answer = call("POST", "/api/v1/scheduled-tasks/%s/stop" % task["id"], {})
         self.assertEqual(status, 400, "it does not work now: refused with the reason")
-        with mock.patch.dict(scheduled_tasks.EN_COURS, {task["id"]: mock.Mock()}):
+        with mock.patch.dict(scheduled_tasks.RUNNING, {task["id"]: mock.Mock()}):
             self.assertEqual(call("POST", "/api/v1/scheduled-tasks/%s/run" % task["id"], {})[1]["error"]["code"], "busy")
             self.assertEqual(call("POST", "/api/v1/scheduled-tasks/%s/stop" % task["id"], {}), (200, {"stopped": True}))
             self.assertEqual(call("GET", "/api/v1/scheduled-tasks")[1]["tasks"][0]["running"], True)

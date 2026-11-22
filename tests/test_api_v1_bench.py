@@ -77,7 +77,7 @@ class Comparison(unittest.TestCase):
                                       "premier_jeton_s": 0.4, "tok_s": 40.0, "lecture_tok_s": 800, "ram": 1, "vram": 2}]}}
 
     def test_the_comparison_is_read_in_english(self):
-        with mock.patch.object(engine_bench, "vue", lambda *args: self.SEEN):
+        with mock.patch.object(engine_bench, "view", lambda *args: self.SEEN):
             status, answer = V.call("GET", "/api/v1/engines/comparison", V.DEVICE)
         self.assertEqual(status, 200, answer)
         self.assertEqual((answer["recommendation"]["engine"], answer["result"]["mode"], answer["comparable"]), ("llamacpp", "quick", 2))
@@ -86,7 +86,7 @@ class Comparison(unittest.TestCase):
 
     def test_only_this_machine_starts_it(self):
         launched = []
-        with mock.patch.object(engine_bench, "vue", lambda *args: self.SEEN), mock.patch.object(engine_bench, "launch", lambda *args: launched.append(args)):
+        with mock.patch.object(engine_bench, "view", lambda *args: self.SEEN), mock.patch.object(engine_bench, "launch", lambda *args: launched.append(args)):
             self.assertEqual(V.call("POST", "/api/v1/engines/comparison", V.DEVICE, {"mode": "quick"})[0], 403)
             self.assertEqual(V.call("POST", "/api/v1/engines/comparison", V.OWNER, {"mode": "fast"})[0], 400)
             status, answer = V.call("POST", "/api/v1/engines/comparison", V.OWNER, {"mode": "deep"})

@@ -26,8 +26,8 @@ GB = 1024 ** 3
 
 SIZE_CACHE = {}                                                             # dossier -> (date, octets) : mesurer un gros dossier coûte, on le fait au plus une fois par minute
 MEMO = {}                                                                      # mesure -> (date, valeur, fonction) : voir memo()
-RAFRAICHIS = set()                                                             # dossiers en cours de remesure en arrière-plan
-DUREE_MEMO = {"vram": 4, "comfy": 4, "disques": 30, "jauge": 10}                            # secondes : assez court pour rester juste, assez long pour qu'une rafale de demandes ne remesure pas à chaque fois
+REFRESHED = set()                                                             # dossiers en cours de remesure en arrière-plan
+MEMO_TTL_S = {"vram": 4, "comfy": 4, "disques": 30, "jauge": 10}                            # secondes : assez court pour rester juste, assez long pour qu'une rafale de demandes ne remesure pas à chaque fois
 
 
 def memo(cle, fonction):
@@ -35,7 +35,7 @@ def memo(cle, fonction):
     garde-fou en demande plusieurs avant CHAQUE message. Si la fonction a été remplacée (tests), la mesure gardée est ignorée."""
     maintenant = time.monotonic()
     gardee = MEMO.get(cle)
-    if gardee and gardee[2] is fonction and maintenant - gardee[0] < DUREE_MEMO[cle]:
+    if gardee and gardee[2] is fonction and maintenant - gardee[0] < MEMO_TTL_S[cle]:
         return gardee[1]
     valeur = fonction()
     MEMO[cle] = (maintenant, valeur, fonction)
@@ -120,14 +120,14 @@ def folder_size(d, delai=4.0):
     en_cache = SIZE_CACHE.get(cle)
     if en_cache is None:
         return measure_folder(cle, delai)
-    if time.time() - en_cache[0] >= 60 and cle not in RAFRAICHIS:
-        RAFRAICHIS.add(cle)
+    if time.time() - en_cache[0] >= 60 and cle not in REFRESHED:
+        REFRESHED.add(cle)
 
         def refaire():
             try:
                 measure_folder(cle, delai)
             finally:
-                RAFRAICHIS.discard(cle)
+                REFRESHED.discard(cle)
         threading.Thread(target=refaire, daemon=True).start()
     return en_cache[1]
 
@@ -220,7 +220,7 @@ def assess_health(m, r, besoin_modele=0, charge=None, partiel_possible=False):
     return {"niveau": max((i["niveau"] for i in items), key=lambda x: ordre[x], default="ok"), "items": items}
 
 
-def _repartit_seul(r):
+def _engine_splits_itself(r):
     """Le moteur choisi répartit-il tout seul le modèle entre la carte et le processeur ? Oui pour Ollama et llama.cpp (`--fit`) : un modèle un peu trop gros tourne alors plus lentement mais tourne.
     Un serveur « compatible OpenAI » est un inconnu : on ne promet rien."""
     return ((r or {}).get("moteur") or "ollama") in ("ollama", "llamacpp")
@@ -254,7 +254,7 @@ def health_state(r=None):
     r = r or _m.reglages()
     charge = _m.ps_modele(r["modele"])
     besoin = 0 if _model_on_another_machine(r) else model_size(r["modele"], charge) + _cache_reserve(r, charge)
-    etat = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
+    etat = assess_health(_m.mesures_systeme(), r, besoin, charge, _engine_splits_itself(r))
     try:
         from . import store
         avis = store.notices()                                      # partage réseau, base illisible mise de côté (ADR 0017)
@@ -283,7 +283,7 @@ def _blockers(r, emit, conv_id=""):
     moteur = (r or {}).get("moteur") or "ollama"
     charge = _m.ps_modele(r["modele"])
     besoin = model_size(r["modele"], charge) + _cache_reserve(r, charge)
-    sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _unload_before_loading(r))
+    sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _engine_splits_itself(r) and not _unload_before_loading(r))
     if charge is None and any(i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram") for i in sante["items"]):
         # only Ollama's models were unloaded before: a llama.cpp model of 20 GB kept the card while ExLlamaV3 waited for room nothing would give back
         retenus = _m.modeles_retenus(sauf=moteur)
@@ -292,7 +292,7 @@ def _blockers(r, emit, conv_id=""):
             _m.liberer_vram(tout=True, sauf=moteur)
             time.sleep(1.5)
             forget_measures("vram")
-            sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _unload_before_loading(r))
+            sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _engine_splits_itself(r) and not _unload_before_loading(r))
     surveilles = ("ram", "vram", "comfy", "disque-donnees") if charge is not None else ("ram", "engagement", "vram", "comfy", "disque-donnees")
     for i in sante["items"]:
         if i["id"] in surveilles and ALERTS_SEEN.get((conv_id, i["id"]), "ok") != i["niveau"]:

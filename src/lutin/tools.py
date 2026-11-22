@@ -79,7 +79,7 @@ def outil_lire(chemin, debut=1, fin=None, limite=None):
         from . import text_extraction, recall
         try:
             texte = "\n\n".join(("## {}\n\n".format(t) if t else "") + c for t, c in recall.document_parts(f)).splitlines()
-        except text_extraction.ErreurExtraction as e:
+        except text_extraction.ExtractionError as e:
             raise _m.ErreurOutil(str(e)) from e
     elif f.stat().st_size > 6_000_000:
         raise _m.ErreurOutil(_t("Fichier trop gros pour être lu (plus de 6 Mo)."))
@@ -472,8 +472,8 @@ def outil_document(chemin, contenu, titre, ctx):
     ctx.setdefault("fichiers_joints", []).append(str(f))
     suite = _t(" Ancienne version sauvegardée dans ") + copie + "." if copie else ""
     try:
-        relu = sum(len(texte) for _, texte in text_extraction.parties(str(f)))
-    except text_extraction.ErreurExtraction as erreur:
+        relu = sum(len(texte) for _, texte in text_extraction.parts(str(f)))
+    except text_extraction.ExtractionError as erreur:
         return _t("Écrit : {} ({} Ko).{}\n⚠ Le document n'a pas pu être relu : {}").format(rel(f), len(octets) // 1024 + 1, suite, erreur)
     return _t("Écrit : {} ({} Ko, relu : {} caractères de texte).{}").format(rel(f), len(octets) // 1024 + 1, relu, suite)
 

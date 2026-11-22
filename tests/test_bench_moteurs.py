@@ -182,7 +182,7 @@ class Comparaison(Base):
 
     def test_le_texte_lisible_dit_tout(self):
         r, _ = self.lancer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", 130))
-        t = bm.lisible(r)
+        t = bm.readable(r)
         for attendu in ("Ollama", "llama.cpp", "jetons/s", "Recommandation"):
             self.assertIn(attendu, t)
 
@@ -191,24 +191,24 @@ class Recommandation(unittest.TestCase):
     def test_regles_marquees_comme_non_mesurees(self):
         cas = [(Profil(carte("nvidia", 12)), "ollama"), (Profil(carte("amd", 8)), "llamacpp"), (Profil(None, integrees=True), "ollama"), (Profil(None), "ollama")]
         for profil, attendu in cas:
-            r = bm.recommander(profil)
+            r = bm.recommend(profil)
             self.assertEqual(r["moteur"], attendu)
             self.assertEqual(r["source"], "regles")
             self.assertIn("pas encore mesuré", r["raison"])
             self.assertTrue(r["limites"])
 
     def test_docker_suit_les_memes_regles_car_les_moteurs_s_installent_depuis_la_page(self):
-        r = bm.recommander(Profil(carte("nvidia", 24)), docker=True)
+        r = bm.recommend(Profil(carte("nvidia", 24)), docker=True)
         self.assertEqual(r["moteur"], "ollama")
         self.assertNotIn("image", r["raison"])          # plus d'Ollama dans l'image : la page l'installe
 
 
     def test_sans_modele_installe_la_recommandation_est_theorique(self):
-        self.assertTrue(bm.recommander(Profil(), modele_installe=False)["theorique"])
-        self.assertFalse(bm.recommander(Profil(), modele_installe=True)["theorique"])
+        self.assertTrue(bm.recommend(Profil(), modele_installe=False)["theorique"])
+        self.assertFalse(bm.recommend(Profil(), modele_installe=True)["theorique"])
 
     def test_sans_profil_pas_d_exception(self):
-        self.assertEqual(bm.recommander(None)["moteur"], "ollama")
+        self.assertEqual(bm.recommend(None)["moteur"], "ollama")
 
 
 class Conservation(Base):
@@ -228,15 +228,15 @@ class Conservation(Base):
     def test_a_refaire_quand_le_materiel_ou_une_version_change(self):
         r = self.resultat()
         versions = {"ollama": "1.0", "llamacpp": "b100"}
-        self.assertFalse(bm.a_refaire(r, Profil(cpu="CPU A"), versions))
-        self.assertTrue(bm.a_refaire(r, Profil(cpu="CPU B"), versions), "autre processeur")
-        self.assertTrue(bm.a_refaire(r, Profil(cpu="CPU A"), dict(versions, ollama="2.0")), "nouvelle version d'Ollama")
-        self.assertTrue(bm.a_refaire(r, Profil(cpu="CPU A", ram=64), versions), "autre quantité de mémoire")
-        self.assertTrue(bm.a_refaire(None, Profil(), versions))
+        self.assertFalse(bm.needs_rerun(r, Profil(cpu="CPU A"), versions))
+        self.assertTrue(bm.needs_rerun(r, Profil(cpu="CPU B"), versions), "autre processeur")
+        self.assertTrue(bm.needs_rerun(r, Profil(cpu="CPU A"), dict(versions, ollama="2.0")), "nouvelle version d'Ollama")
+        self.assertTrue(bm.needs_rerun(r, Profil(cpu="CPU A", ram=64), versions), "autre quantité de mémoire")
+        self.assertTrue(bm.needs_rerun(None, Profil(), versions))
 
     def test_le_fichier_partage_ne_contient_rien_de_personnel(self):
         r = self.resultat()
-        texte = bm.exporter(r)
+        texte = bm.export(r)
         d = json.loads(texte)
         self.assertNotIn("recommandation", d)
         self.assertEqual(d["modele"], "m")
@@ -249,11 +249,11 @@ class Conservation(Base):
         r["moteurs"][1]["tok_s"] = 500          # un résultat flatteur pour llama.cpp
         bm.save(d, r)
         self.installer(Faux("ollama", "Ollama", version="1.0"), Faux("llamacpp", "llama.cpp", version="b100"))
-        v = bm.vue(d, "m", Profil(cpu="CPU A"))
+        v = bm.view(d, "m", Profil(cpu="CPU A"))
         self.assertFalse(v["a_refaire"])
         self.assertEqual(v["recommandation"]["moteur"], "llamacpp")
         self.installer(Faux("ollama", "Ollama", version="9.9"), Faux("llamacpp", "llama.cpp", version="b100"))
-        v = bm.vue(d, "m", Profil(cpu="CPU A"))
+        v = bm.view(d, "m", Profil(cpu="CPU A"))
         self.assertTrue(v["a_refaire"])
         self.assertEqual(v["recommandation"]["source"], "regles", "un résultat périmé ne décide plus")
 
@@ -289,7 +289,7 @@ class Lancement(Base):
         with self.assertRaises(ValueError) as e:
             bm.launch("m", "rapide", d, Profil())
         self.assertIn("au moins deux", str(e.exception))
-        v = bm.vue(d, "m", Profil())
+        v = bm.view(d, "m", Profil())
         self.assertEqual(v["comparables"], 1)
         self.assertTrue(any(x["raison"] for x in v["disponibilite"]))
     def test_une_seule_comparaison_a_la_fois_et_resultat_conserve(self):

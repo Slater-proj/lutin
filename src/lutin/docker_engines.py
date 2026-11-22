@@ -26,7 +26,7 @@ MOUNT = "/engines"
 PROCESS = {"proc": None}
 
 
-def en_docker(env=None):
+def in_docker(env=None):
     return (os.environ if env is None else env).get("LUTIN_DOCKER") == "1"
 
 
@@ -54,7 +54,7 @@ def setting_folder_engines():
     return valeur.strip() if isinstance(valeur, str) else ""
 
 
-def dossier_par_defaut(donnees):
+def default_folder(donnees):
     """Le dossier des moteurs dans les données de Lutin : `engines/`. L'ancien nom français `moteurs/` est renommé au passage (rien n'est perdu) ; si le renommage échoue (programme en cours), il reste utilisé."""
     neuf, ancien = Path(donnees) / "engines", Path(donnees) / "moteurs"
     if neuf.exists() or not ancien.is_dir():
@@ -72,13 +72,13 @@ def detail_folder_engines(env=None, monte=is_mounted, ecriture=None):
     source : env, reglage, montage, donnees. probleme (Docker, source « donnees » seulement) : non_monte (aucun volume sur /engines) ou non_modifiable (monté, mais l'utilisateur 1000 ne peut pas y écrire)."""
     env = os.environ if env is None else env
     ecriture = ecriture or (lambda d: os.access(d, os.W_OK))
-    choisi = (env.get("LUTIN_ENGINES") or env.get("LUTIN_MOTEURS") or "").strip() if en_docker(env) else ""
+    choisi = (env.get("LUTIN_ENGINES") or env.get("LUTIN_MOTEURS") or "").strip() if in_docker(env) else ""
     if choisi:
         return {"dossier": Path(choisi), "source": "env", "probleme": ""}
     reglage = setting_folder_engines()
     if reglage:
         return {"dossier": Path(reglage), "source": "reglage", "probleme": ""}
-    docker = en_docker(env)
+    docker = in_docker(env)
     probleme = ""
     if docker:
         if monte(MOUNT):
@@ -90,22 +90,22 @@ def detail_folder_engines(env=None, monte=is_mounted, ecriture=None):
     donnees = engines.CONTEXT["donnees"]() or (env.get("LUTIN_HOME") if docker else None)
     if not donnees:
         return {"dossier": None, "source": "donnees", "probleme": probleme}
-    return {"dossier": dossier_par_defaut(donnees), "source": "donnees", "probleme": probleme}
+    return {"dossier": default_folder(donnees), "source": "donnees", "probleme": probleme}
 
 
 def folder_engines(env=None, monte=is_mounted):
     """Où les moteurs s'installent dans Docker (voir detail_dossier_moteurs). None hors Docker."""
     env = os.environ if env is None else env
-    if not en_docker(env):
+    if not in_docker(env):
         return None
     return detail_folder_engines(env, monte)["dossier"]
 
 
 def base_engines(donnees=None):
     """Le dossier qui contient un sous-dossier par moteur (`ollama`, `llamacpp`, `colibri`), partout : Docker ou non. `donnees` : pour un autre dossier de données que celui de Lutin (tests, colibri en ligne de commande)."""
-    if donnees is not None and not en_docker():
+    if donnees is not None and not in_docker():
         reglage = setting_folder_engines()
-        return Path(reglage) if reglage else dossier_par_defaut(donnees)
+        return Path(reglage) if reglage else default_folder(donnees)
     return detail_folder_engines()["dossier"]
 
 
@@ -114,7 +114,7 @@ def ollama_folder():
     return d / "ollama" if d else None
 
 
-def ollama_installe_par_lutin():
+def ollama_installed_by_lutin():
     """Le programme `ollama` installé par Lutin dans le dossier des moteurs, ou ''."""
     d = ollama_folder()
     exe = d / "bin" / "ollama" if d else None
@@ -123,7 +123,7 @@ def ollama_installe_par_lutin():
 
 def path_ollama():
     """Le programme `ollama` à lancer dans Docker : celui du dossier des moteurs, sinon un `ollama` du PATH (ancienne image complète)."""
-    return ollama_installe_par_lutin() or (shutil.which("ollama") or "")
+    return ollama_installed_by_lutin() or (shutil.which("ollama") or "")
 
 
 def external_ollama(env=None):
@@ -180,7 +180,7 @@ class _Zstd:
         self.p.wait(30)
 
 
-def extraire_tar(flux, destination):
+def extract_tar(flux, destination):
     """Extrait un flux tar en refusant tout ce qui sortirait du dossier (chemins absolus ou avec « .. », liens vers l'extérieur, fichiers spéciaux)."""
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
@@ -234,7 +234,7 @@ def install_ollama(progression, rocm=False, http_json=None, telecharger=None, ou
         progression(_t("Installation…"), deja, total)
         flux = (ouvrir_archive or _Zstd)(f)
         try:
-            extraire_tar(flux, neuf)
+            extract_tar(flux, neuf)
         finally:
             if hasattr(flux, "close"):
                 flux.close()
@@ -256,7 +256,7 @@ def install_ollama(progression, rocm=False, http_json=None, telecharger=None, ou
 
 def uninstall_ollama():
     base = ollama_folder()
-    if base is None or not ollama_installe_par_lutin():
+    if base is None or not ollama_installed_by_lutin():
         raise ValueError(_t("Ollama n'a pas été installé par Lutin : il n'y a rien à supprimer ici."))
     stop_ollama()
     for sous in ("bin", "lib"):
@@ -325,7 +325,7 @@ def actions_ollama(installe, actif, hors_ligne):
     if external_ollama():
         raison = _t("Cet Ollama est un autre conteneur (OLLAMA_URL) : il se gère avec docker compose.")
         return {a: {"possible": False, "raison": raison} for a in engines.ACTIONS}
-    par_lutin = bool(ollama_installe_par_lutin())
+    par_lutin = bool(ollama_installed_by_lutin())
     hl = _t("Mode hors ligne : aucun téléchargement.")
     emplacement = ollama_folder()
     return {"installer": {"possible": not installe and not hors_ligne, "raison": deja if installe else (hl if hors_ligne else _t("Télécharge Ollama (environ 1,5 Go) dans {} : il reste là quand l'image de Lutin est mise à jour.").format(emplacement))},

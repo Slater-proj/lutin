@@ -1545,7 +1545,7 @@ def bench_start(request):
 
 def _comparison_view():
     from . import engine_bench as _engine_bench
-    seen = _engine_bench.vue(_m.DONNEES, _m.reglages()["modele"], _engines.CONTEXT["profil"](), _engines.CONTEXT["en_docker"]())
+    seen = _engine_bench.view(_m.DONNEES, _m.reglages()["modele"], _engines.CONTEXT["profil"](), _engines.CONTEXT["en_docker"]())
     result, advice = seen["resultat"], seen["recommandation"] or {}
     return {"model": seen["modele"], "outdated": bool(seen["a_refaire"]), "comparable": int(seen["comparables"]),
             "availability": [{"name": a["nom"], "reason": a["raison"], "model": a["modele"]} for a in seen["disponibilite"]],
@@ -2350,11 +2350,11 @@ def run_scheduled_task(request):
     """Runs the task now, in the background (202). Refused (409) while it is already at work or while the machine is busy with as many answers as it allows."""
     identifier = request.params["id"]
     _scheduled_one(identifier)
-    if identifier in _scheduled_tasks.EN_COURS:
+    if identifier in _scheduled_tasks.RUNNING:
         raise ApiError(409, "busy", _t("Cette tâche travaille déjà."))
     if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
         raise ApiError(409, "busy", _t("Une réponse est déjà en cours : attends sa fin."))
-    threading.Thread(target=lambda: _scheduled_tasks.executer(identifier), daemon=True, name="scheduled-run").start()
+    threading.Thread(target=lambda: _scheduled_tasks.execute(identifier), daemon=True, name="scheduled-run").start()
     return 202, {"started": True}
 
 
@@ -2362,7 +2362,7 @@ def run_scheduled_task(request):
 def stop_scheduled_task(request):
     """Asks the task at work to stop (it stays scheduled for the next time). Refused with the reason when it is not at work."""
     _scheduled_one(request.params["id"])
-    _scheduled_tasks.arreter(request.params["id"])
+    _scheduled_tasks.stop_task(request.params["id"])
     return {"stopped": True}
 
 
@@ -3505,7 +3505,7 @@ WEB_SEARCH_KEYS = ("brave", "tavily", "exa", "perplexity")
 
 def _web_search_view(request):
     from . import web_search as _web_search
-    kept = _web_search.vue()
+    kept = _web_search.view()
     return {"searxng": kept["searxng"], "keys": [{"provider": name, "kept": bool(kept[name]), "ends_with": kept[name + "_fin"]} for name in WEB_SEARCH_KEYS],
             "engines": [{"id": e["nom"], "configured": bool(e["configure"]), "paused_s": int(e["en_pause_s"]), "at_home": _web_search.is_at_home(e["nom"])}
                         for e in _m.etat_moteurs_recherche()],
@@ -3590,7 +3590,7 @@ def health_unload(request):
     from . import loaded_resources as _loaded_resources
     if set(request.body) != {"id"} or not isinstance(request.body["id"], str) or not request.body["id"]:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("id"))
-    done = _loaded_resources.decharger(request.body["id"])
+    done = _loaded_resources.unload(request.body["id"])
     return {"message": done.get("message", ""), "resources": _resources()}
 
 

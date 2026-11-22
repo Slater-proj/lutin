@@ -27,9 +27,9 @@ class Fichiers(unittest.TestCase):
 
     def conversation(self, *chemins):
         c = _m.conv_nouvelle()
-        c["messages"] = [{"role": "tool", "tool_name": "creer_document", "content": "ok", "fichiers_joints": [produced_files.entree(p) for p in chemins]}]
+        c["messages"] = [{"role": "tool", "tool_name": "creer_document", "content": "ok", "fichiers_joints": [produced_files.entry(p) for p in chemins]}]
         _m.conv_ecrire(c)
-        return c["id"], [produced_files.entree(p)["id"] for p in chemins]
+        return c["id"], [produced_files.entry(p)["id"] for p in chemins]
 
     def test_les_dossiers_d_une_conversation_s_ouvrent_sans_jamais_sortir_des_dossiers_permis(self):
         f = _m.RACINE / "rapports" / "bilan.pdf"
@@ -39,7 +39,7 @@ class Fichiers(unittest.TestCase):
         dehors.parent.mkdir(exist_ok=True)
         dehors.write_bytes(b"x")
         ident, _ = self.conversation(f, dehors)
-        produced_files.save([produced_files.entree(f), produced_files.entree(dehors)], ident)
+        produced_files.save([produced_files.entry(f), produced_files.entry(dehors)], ident)
         dossiers = produced_files.folders_conversation(ident)
         self.assertEqual([d["chemin"] for d in dossiers], [str(f.parent.resolve())], "le dossier où elle a créé des fichiers ; pas celui hors des dossiers de travail")
         with mock.patch.object(produced_files, "_launch", lambda p: self.ouvertures.append(str(p))), mock.patch.object(produced_files, "opening_possible", lambda: True):
@@ -160,8 +160,8 @@ class Fichiers(unittest.TestCase):
         a.write_bytes(b"%PDF" + b"x" * 2000)
         b.write_bytes(b"PK" + b"y" * 500)
         ident, (a_id, b_id) = self.conversation(a, b)
-        produced_files.save([dict(produced_files.entree(a), genre="fichier"), dict(produced_files.entree(b), genre="fichier")], ident)
-        produced_files.save([dict(produced_files.entree(a), genre="fichier")], ident)                     # une seule fois chacun
+        produced_files.save([dict(produced_files.entry(a), genre="fichier"), dict(produced_files.entry(b), genre="fichier")], ident)
+        produced_files.save([dict(produced_files.entry(a), genre="fichier")], ident)                     # une seule fois chacun
         r = produced_files.entries()
         noms = [x["nom"] for x in r["liste"] if x["conversation"] == ident]
         self.assertEqual(sorted(noms), ["a.pdf", "b.docx"])
@@ -182,7 +182,7 @@ class Fichiers(unittest.TestCase):
         f.write_text("# x", encoding="utf-8")
         dehors = _TEMP / "intouchable.pdf"
         dehors.write_bytes(b"x")
-        produced_files.save([dict(produced_files.entree(f), genre="fichier"), dict(produced_files.entree(dehors), genre="fichier")], "deadbeef")
+        produced_files.save([dict(produced_files.entry(f), genre="fichier"), dict(produced_files.entry(dehors), genre="fichier")], "deadbeef")
         ids = [produced_files.identifier(f), produced_files.identifier(dehors)]
         res = produced_files.remove_selection(ids)
         self.assertFalse(f.exists(), "conversation disparue : le fichier est supprimé quand même")

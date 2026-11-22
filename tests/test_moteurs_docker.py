@@ -62,14 +62,14 @@ class Dossier(unittest.TestCase):
 class Extraction(unittest.TestCase):
     def test_extrait_le_programme_et_ses_bibliotheques(self):
         d = Path(tempfile.mkdtemp(dir=_TEMP))
-        md.extraire_tar(io.BytesIO(archive({"bin/ollama": b"x", "lib/ollama/libggml.so": b"y"})), d)
+        md.extract_tar(io.BytesIO(archive({"bin/ollama": b"x", "lib/ollama/libggml.so": b"y"})), d)
         self.assertEqual((d / "bin" / "ollama").read_bytes(), b"x")
         self.assertTrue((d / "lib" / "ollama" / "libggml.so").is_file())
 
     def test_refuse_de_sortir_du_dossier(self):
         d = Path(tempfile.mkdtemp(dir=_TEMP))
         with self.assertRaises(ValueError):
-            md.extraire_tar(io.BytesIO(archive({"../evade.txt": b"x"})), d / "sous")
+            md.extract_tar(io.BytesIO(archive({"../evade.txt": b"x"})), d / "sous")
         self.assertFalse((d / "evade.txt").exists())
 
     def test_refuse_un_lien_vers_l_exterieur(self):
@@ -81,7 +81,7 @@ class Extraction(unittest.TestCase):
             t.addfile(info)
         d = Path(tempfile.mkdtemp(dir=_TEMP))
         with self.assertRaises(ValueError):
-            md.extraire_tar(io.BytesIO(tampon.getvalue()), d)
+            md.extract_tar(io.BytesIO(tampon.getvalue()), d)
 
 
 class Installation(Dossier):
@@ -102,7 +102,7 @@ class Installation(Dossier):
     def test_installe_dans_le_dossier_des_moteurs_et_retient_la_version(self):
         with unittest.mock.patch("platform.machine", return_value="x86_64"):
             self.installer(archive({"bin/ollama": b"prog", "lib/ollama/a.so": b"lib"}))
-        exe = md.ollama_installe_par_lutin()
+        exe = md.ollama_installed_by_lutin()
         self.assertEqual(Path(exe), self.tmp / "engines" / "ollama" / "bin" / "ollama")
         self.assertEqual((self.tmp / "engines" / "ollama" / "version.txt").read_text(encoding="utf-8"), "v9.9.9")
         self.assertEqual(md.path_ollama(), exe)
@@ -113,7 +113,7 @@ class Installation(Dossier):
             with self.assertRaises(ValueError) as e:
                 self.installer(archive({"bin/ollama": b"prog"}), bon_digest=False)
         self.assertIn("corrompu", str(e.exception))
-        self.assertEqual(md.ollama_installe_par_lutin(), "")
+        self.assertEqual(md.ollama_installed_by_lutin(), "")
 
     def test_archive_sans_programme(self):
         with unittest.mock.patch("platform.machine", return_value="x86_64"):
@@ -134,7 +134,7 @@ class Installation(Dossier):
         (modeles / "gros.bin").write_bytes(b"1")
         with unittest.mock.patch.object(md, "stop_ollama"):
             md.uninstall_ollama()
-        self.assertEqual(md.ollama_installe_par_lutin(), "")
+        self.assertEqual(md.ollama_installed_by_lutin(), "")
         self.assertTrue((modeles / "gros.bin").is_file())
 
 

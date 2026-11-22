@@ -23,10 +23,10 @@ TAVILY_URL = _context.current().settings.search_tavily_url
 EXA_URL = _context.current().settings.search_exa_url
 PERPLEXITY_URL = _context.current().settings.search_perplexity_url
 _context.bind(__name__, {"BRAVE_URL": "search_brave_url", "TAVILY_URL": "search_tavily_url", "EXA_URL": "search_exa_url", "PERPLEXITY_URL": "search_perplexity_url"})
-FOURNISSEURS_A_CLE = ("tavily", "exa", "perplexity")
+KEYED_PROVIDERS = ("tavily", "exa", "perplexity")
 RE_DOMAIN = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$")
 PARAMETERS_TRACKING = ("utm_", "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "ref_src", "ref_url")
-PAR_SITE_MAX = 2          # au plus deux résultats du même site : la variété vaut mieux que dix pages d'un seul endroit (sauf si on a demandé un site)
+PER_SITE_MAX = 2          # au plus deux résultats du même site : la variété vaut mieux que dix pages d'un seul endroit (sauf si on a demandé un site)
 LOCK = threading.Lock()
 CURRENT = threading.local()          # les options de la recherche en cours (les fournisseurs n'ont que « requête » comme paramètre)
 
@@ -40,7 +40,7 @@ def _path():
 def config():
     c = _donnees.lire_json(_path(), {})
     sortie = {"searxng": str(c.get("searxng") or ""), "brave_cle": str(c.get("brave_cle") or "")}
-    for nom in FOURNISSEURS_A_CLE:
+    for nom in KEYED_PROVIDERS:
         sortie[nom + "_cle"] = str(c.get(nom + "_cle") or "")
     return sortie
 
@@ -88,13 +88,13 @@ def save(searxng=None, brave_cle=None, tavily_cle=None, exa_cle=None, perplexity
             os.chmod(chemin, 0o600)          # la clé n'est lisible que par son propriétaire (là où le système le permet)
         except OSError:
             pass
-    return vue()
+    return view()
 
 
-def vue():
+def view():
     c = config()
     sortie = {"searxng": c["searxng"], "brave": bool(c["brave_cle"]), "brave_fin": c["brave_cle"][-4:] if c["brave_cle"] else ""}
-    for nom in FOURNISSEURS_A_CLE:
+    for nom in KEYED_PROVIDERS:
         cle = c[nom + "_cle"]
         sortie[nom] = bool(cle)
         sortie[nom + "_fin"] = cle[-4:] if cle else ""
@@ -129,14 +129,14 @@ def options():
     return dict(getattr(CURRENT, "v", None) or {})
 
 
-SYNONYMES_PERIODE = {"année": "an", "annee": "an", "ans": "an", "year": "an", "années": "an", "annees": "an", "annuel": "an", "day": "jour", "jours": "jour", "journée": "jour", "aujourd'hui": "jour", "today": "jour", "24h": "jour",
+PERIOD_SYNONYMS = {"année": "an", "annee": "an", "ans": "an", "year": "an", "années": "an", "annees": "an", "annuel": "an", "day": "jour", "jours": "jour", "journée": "jour", "aujourd'hui": "jour", "today": "jour", "24h": "jour",
                      "week": "semaine", "semaines": "semaine", "hebdomadaire": "semaine", "month": "mois", "mensuel": "mois"}
 
 
-def definir_options(periode=None, site=None, actualites=False, langue=None):
+def set_options(periode=None, site=None, actualites=False, langue=None):
     """Valide et pose les options de la recherche en cours (ce fil seulement). Renvoie le dictionnaire posé."""
     periode = str(periode or "").strip().lower() or None
-    periode = SYNONYMES_PERIODE.get(periode, periode)          # « année », « year »… : le modèle écrit ce qui lui vient, on le comprend
+    periode = PERIOD_SYNONYMS.get(periode, periode)          # « année », « year »… : le modèle écrit ce qui lui vient, on le comprend
     if periode and periode not in PERIODS:
         raise ValueError(_t("Période inconnue : {} (jour, semaine, mois ou an).").format(periode[:20]))
     site = re.sub(r"^https?://", "", str(site or "").strip().lower()).split("/")[0].removeprefix("www.") or None
@@ -170,7 +170,7 @@ def key_of_duplicate(url):
     return ((p.hostname or "").lower().removeprefix("www."), p.path.rstrip("/").lower(), p.query)
 
 
-def clean(resultats, nombre, par_site=PAR_SITE_MAX):
+def clean(resultats, nombre, par_site=PER_SITE_MAX):
     """Adresses sans suivi, doublons retirés, au plus `par_site` résultats par site, titres et extraits propres ; l'ordre du fournisseur est gardé."""
     vus, par_hote, sortie = set(), {}, []
     for x in resultats:
@@ -247,7 +247,7 @@ def results_brave(requete):
     return sortie
 
 
-def _poster(nom, base, chemin, corps, entetes):
+def _post(nom, base, chemin, corps, entetes):
     """POST JSON vers un fournisseur à clé ; renvoie le JSON de la réponse. Une adresse imposée par variable d'environnement (tests) peut être locale ; la vraie est publique."""
     from . import web
     from . import core as _m
@@ -275,7 +275,7 @@ def results_tavily(requete):
     corps = {"query": request_with_site(requete, o), "max_results": 15, "search_depth": "basic", "include_answer": False, "topic": "news" if o.get("actualites") else "general"}
     if o.get("periode"):
         corps["time_range"] = PERIODS[o["periode"]][0]
-    donnees = _poster("tavily", TAVILY_URL, "search", corps, {"Authorization": "Bearer " + _key("tavily")})
+    donnees = _post("tavily", TAVILY_URL, "search", corps, {"Authorization": "Bearer " + _key("tavily")})
     return [{"titre": x.get("title") or "", "url": x.get("url"), "extrait": x.get("content") or "", "date": str(x.get("published_date") or "")[:10]}
             for x in donnees.get("results") or [] if isinstance(x, dict) and x.get("url")]
 
@@ -290,7 +290,7 @@ def results_exa(requete):
     jours = {"jour": 1, "semaine": 7, "mois": 31, "an": 366}.get(o.get("periode") or "")
     if jours:
         corps["startPublishedDate"] = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=jours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    donnees = _poster("exa", EXA_URL, "search", corps, {"x-api-key": _key("exa")})
+    donnees = _post("exa", EXA_URL, "search", corps, {"x-api-key": _key("exa")})
     return [{"titre": x.get("title") or "", "url": x.get("url"), "extrait": re.sub(r"\s+", " ", x.get("text") or " ".join(x.get("highlights") or [])).strip(), "date": str(x.get("publishedDate") or "")[:10]}
             for x in donnees.get("results") or [] if isinstance(x, dict) and x.get("url")]
 
@@ -301,7 +301,7 @@ def results_perplexity(requete):
     corps = {"query": request_with_site(requete, o), "max_results": 15}
     if o.get("periode"):
         corps["search_recency_filter"] = PERIODS[o["periode"]][0]
-    donnees = _poster("perplexity", PERPLEXITY_URL, "search", corps, {"Authorization": "Bearer " + _key("perplexity")})
+    donnees = _post("perplexity", PERPLEXITY_URL, "search", corps, {"Authorization": "Bearer " + _key("perplexity")})
     return [{"titre": x.get("title") or "", "url": x.get("url"), "extrait": re.sub(r"\s+", " ", x.get("snippet") or "").strip(), "date": str(x.get("date") or x.get("last_updated") or "")[:10]}
             for x in donnees.get("results") or [] if isinstance(x, dict) and x.get("url")]
 
