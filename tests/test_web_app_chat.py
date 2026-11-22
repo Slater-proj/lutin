@@ -2253,6 +2253,59 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5ia_a_working_folder_says_what_lutin_finds_there_offers_its_takeover_and_moves(self):
+        """Parity with the old page (2026-11-22): what Lutin reads in a folder, another assistant's data found there taken over after a second click, and
+        the folder moved with its files. Temporary folders only; the conversation taken over is deleted at the end."""
+        p = self.page
+        base = Path(tempfile.mkdtemp(prefix="lutin-projects-details-"))
+        self.addCleanup(shutil.rmtree, base, True)
+        root = T.A.RACINE
+        self.addCleanup(lambda: T.A.definir_racine(root))
+        configuration = Path(tempfile.mkdtemp(prefix="lutin-projects-config-"))
+        self.addCleanup(shutil.rmtree, configuration, True)
+        (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
+        environment = mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(configuration / "config.json")})
+        environment.start()
+        self.addCleanup(environment.stop)
+        folder = base / "site"
+        (folder / "donnees" / "conversations").mkdir(parents=True)
+        (folder / "memoire").mkdir()
+        (folder / "CLAUDE.md").write_text("Rules.", encoding="utf-8")
+        (folder / "donnees" / "conversations" / "0000beef.json").write_text(json.dumps({"id": "0000beef", "titre": "Taken over", "date": "2026-01-02T10:00:00",
+                                                                                        "maj": "2026-01-02T10:00:00", "messages": [{"role": "user", "content": "Hi"}]}), encoding="utf-8")
+        self.addCleanup(lambda: T.A.conv_supprimer("0000beef") if "0000beef" in [c["id"] for c in T.A.conv_liste()] else None)
+        T.A.add_work(str(folder), "Details folder")
+        self.addCleanup(lambda: [T.A.remove_work(entry["id"], False) for entry in T.A.works_state()["liste"] if entry["nom"] == "Details folder"])
+        p.evaluer("location.hash = '#/projects'")
+        card = "[...document.querySelectorAll('.projects .card')].find(c => c.innerText.includes('Details folder'))"
+        p.attendre("!!" + card)
+        p.evaluer(card + ".querySelector('details.details summary').click()")
+        p.attendre("!!%s?.querySelector('.details .facts')" % card)
+        facts = p.evaluer(card + ".querySelector('.details .facts').innerText")
+        self.assertIn("CLAUDE.md", facts, "what Lutin reads there is said")
+        p.attendre("[...%s.querySelectorAll('.details .button')].some(b => b.innerText.startsWith('Reprendre ses données'))" % card)
+        if AXE.is_file():
+            self.axe("on the details of a working folder")
+        p.evaluer("[...%s.querySelectorAll('.details .button')].find(b => b.innerText.startsWith('Reprendre ses données')).click()" % card)
+        p.attendre("!!%s.querySelector('.takeover fieldset')" % card)
+        p.evaluer("[...%s.querySelectorAll('.takeover .button')].find(b => b.innerText === 'Reprendre…').click()" % card)
+        p.attendre("!!%s.querySelector('.takeover [role=group]')" % card)
+        self.assertNotIn("0000beef", [c["id"] for c in T.A.conv_liste()], "asking is not taking over")
+        p.evaluer("%s.querySelector('.takeover [role=group] .button.primary').click()" % card)
+        p.attendre("!!%s.querySelector('.details .taken li')" % card)          # the report stays once the takeover block is gone
+        self.eventually(lambda: "0000beef" in [c["id"] for c in T.A.conv_liste()], "the conversation was taken over")
+        (base / "elsewhere").mkdir()
+        p.evaluer("(() => { const box = [...%s.querySelectorAll('.details label')].find(l => l.innerText.startsWith('Le déplacer')).querySelector('input'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
+                  % (card, json.dumps(str(base / "elsewhere"))))
+        p.evaluer("[...%s.querySelectorAll('.details .button')].find(b => b.innerText === 'Déplacer…').click()" % card)
+        p.attendre("!!%s.querySelector('.details [role=group]')" % card)
+        self.assertTrue(folder.is_dir(), "asking is not moving")
+        p.evaluer("%s.querySelector('.details [role=group] .button.primary').click()" % card)
+        self.eventually(lambda: (base / "elsewhere" / "site" / "CLAUDE.md").is_file(), "the folder went with its files")
+        p.attendre("%s.querySelector('.path').innerText.includes('elsewhere')" % card)
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5j_a_scheduled_task_is_added_paused_run_and_deleted(self):
         p = self.page
         from lutin import scheduled_tasks

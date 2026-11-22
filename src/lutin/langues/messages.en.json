@@ -2303,6 +2303,7 @@
 "Skill tiers installé : {} ({}, {}).": "Third-party skill installed: {} ({}, {}).",
 "Skill tiers retiré : {}.": "Third-party skill removed: {}.",
 "lire les précisions d'un modèle": "read the precisions of a model",
+"La reprise modifie les données de Lutin (une sauvegarde est faite avant) : confirme pour la lancer.": "Taking over changes the data of Lutin (a backup is made first): confirm to start it.",
 "Ce téléchargement peut peser plusieurs Go : confirme pour le lancer.": "This download may weigh several GB: confirm to start it.",
 "chercher une correction de flux": "look for a flow correction",
 "Pas encore de nouvelles de cette machine : sa réponse arrive.": "No news from this machine yet: its answer is on its way.",

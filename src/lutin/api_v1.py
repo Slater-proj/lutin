@@ -2185,6 +2185,87 @@ def select_project(request):
     return _projects_view()
 
 
+def _previous_assistant(found):
+    """What another assistant left in a folder (lutin.migrate.describe), under English names."""
+    return {"conversations": int(found.get("conversations") or 0), "memory": list(found.get("memoire") or []), "skills": int(found.get("skills") or 0),
+            "settings": bool(found.get("reglages"))}
+
+
+@route("GET", "/projects/{id}/preview", SESSION)
+def project_preview(request):
+    """What Lutin finds and uses in this folder, said after it is added (parity with the old page): `{id, error, files, truncated, reads, conversation_copies,
+    git, previous_assistant}`. `previous_assistant`: another assistant's data found there (null when none), with `new` what Lutin does not have yet and
+    `to_take_over` whether there is any (POST /takeover brings it). `error`: the folder cannot be read (a network share switched off…). Nothing is written."""
+    seen = _m.work_preview(request.params["id"])
+    if seen.get("erreur"):
+        return {"id": seen["id"], "error": seen["erreur"], "files": 0, "truncated": False, "reads": [], "conversation_copies": 0, "git": False, "previous_assistant": None}
+    old = seen.get("ancien")
+    previous = None
+    if old:
+        new = old.get("nouvelles") or {}
+        previous = dict(_previous_assistant(old), folder=old.get("dossier", ""), to_take_over=bool(old.get("a_reprendre")),
+                        new={"conversations": int(new.get("conversations") or 0), "memory": int(new.get("memoire") or 0), "skills": int(new.get("skills") or 0)})
+    return {"id": seen["id"], "error": "", "files": int(seen.get("fichiers") or 0), "truncated": bool(seen.get("tronque")), "reads": list(seen.get("lus") or []),
+            "conversation_copies": int(seen.get("copies") or 0), "git": bool(seen.get("git")), "previous_assistant": previous}
+
+
+@route("POST", "/projects/{id}/move", CONFIGURATOR)
+def move_project(request):
+    """`{"parent": "D:/work", "name"?: "new name"}`: moves the folder, its files with it, and updates the list (parity with the old page). Refused while an
+    answer works in it. Answers the projects with `old_path`, `new_path` and `left` (what could not be moved, kept where it was)."""
+    body = request.body
+    if set(body) - {"parent", "name"} or not isinstance(body.get("parent"), str) or not body["parent"].strip() or not isinstance(body.get("name", ""), str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("parent, name"))
+    moved = _m.move_work(request.params["id"], body["parent"].strip(), body.get("name", "").strip())
+    return dict(_projects_view(), old_path=moved.get("ancien", ""), new_path=moved.get("nouveau", ""), left=[str(item) for item in moved.get("restes") or []])
+
+
+@route("PATCH", "/projects/{id}", CONFIGURATOR)
+def change_project_path(request):
+    """`{"path": "E:/code/site"}`: the folder was moved by hand, this is where it is now. Nothing is moved."""
+    if set(request.body) != {"path"} or not isinstance(request.body["path"], str) or not request.body["path"].strip():
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path"))
+    _m.change_work_path(request.params["id"], request.body["path"].strip())
+    return _projects_view()
+
+
+# The data of another assistant (an earlier Lutin, a folder of the same layout, or its .zip): what can be taken over, then the taking over, the present
+# state kept in a .zip first (lutin.migrate). Parity with the old page; also `lutin migrate`. A folder or an archive that cannot be read is a 400 (MigrationError).
+TAKEOVER_CHOICES = {"conversations": "conversations", "memory": "memoire", "skills": "skills", "settings": "reglages"}
+
+
+@route("POST", "/takeover/detect", CONFIGURATOR)
+def takeover_detect(request):
+    """`{"path", "skills_folder"?}`: what that folder or archive holds (`conversations`, `memory`, `skills`, `settings`), the folder it was read from, the
+    projects where its skills can go and the folder they go to by default (`target_skills`). Nothing is written."""
+    body = request.body
+    if set(body) - {"path", "skills_folder"} or not isinstance(body.get("path"), str) or not body["path"].strip() or not isinstance(body.get("skills_folder", ""), str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path, skills_folder"))
+    found = _m.resume_detect(body["path"].strip(), body.get("skills_folder", ""))
+    return dict(_previous_assistant(found), skills_folder=str(found.get("dossier_skills") or ""), folder=str(found.get("dossier_utilise") or ""),
+                projects=[{"id": entry["id"], "name": entry["nom"], "path": entry["chemin"]} for entry in found.get("travaux", [])], current=found.get("actif") or "",
+                target_skills=str(found.get("cible_skills") or ""))
+
+
+@route("POST", "/takeover", CONFIGURATOR)
+def takeover(request):
+    """`{"path", "choices": ["conversations", "memory", "skills", "settings"], "overwrite"?, "project"?, "skills_folder"?, "confirm": true}`: takes over what is
+    chosen. The present data is kept in a .zip first; a memory file that differs from Lutin's is put beside it, not over it, unless `overwrite`. `project`: the
+    project whose folder receives the skills (the current one by default). Answers `{summary: [lines]}`."""
+    body = request.body
+    choices = body.get("choices")
+    if (set(body) - {"path", "choices", "overwrite", "project", "skills_folder", "confirm"} or not isinstance(body.get("path"), str) or not body["path"].strip()
+            or not isinstance(choices, list) or not choices or any(choice not in TAKEOVER_CHOICES for choice in choices)
+            or not isinstance(body.get("overwrite", False), bool) or not isinstance(body.get("project", ""), str) or not isinstance(body.get("skills_folder", ""), str)):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path, choices (conversations, memory, skills, settings), overwrite, project, skills_folder, confirm"))
+    if body.get("confirm") is not True:
+        raise ApiError(400, "confirmation_required", _t("La reprise modifie les données de Lutin (une sauvegarde est faite avant) : confirme pour la lancer."))
+    report = _m.resume_import(body["path"].strip(), [TAKEOVER_CHOICES[choice] for choice in choices], body.get("skills_folder", ""), body.get("overwrite", False),
+                              body.get("project", ""))
+    summary = report.get("resume") or []
+    return {"summary": [str(line) for line in (summary if isinstance(summary, list) else str(summary).splitlines()) if str(line).strip()]}
+
+
 @route("DELETE", "/projects/{id}", CONFIGURATOR)
 def remove_project(request):
     """Takes the folder out of the list. Nothing in it is deleted, except with `?clean=1`: the copies of conversations that Lutin itself wrote there, never another file."""

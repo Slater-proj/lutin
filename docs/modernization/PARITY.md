@@ -82,6 +82,22 @@ switch; each line is ticked here when it is done, with its test.
     « Accept and allow again without asking », « Start <engine> » and « Check the machine » on the stopped-engine banner, ↑/↓ in an empty box
     (test 3zf; the engine banner and the task's result link are not covered by a browser test).
 
+## Second audit, 2026-11-22
+
+Every route the old page calls (183, read from `src/lutin/web/index.html`) was matched with the functions it calls in `server.py` and with `api_v1.py`;
+those with no function in common were read one by one. Found missing, and brought back:
+
+- ~~The title a model gives a new conversation after its first answer~~ — `POST /api/v1/conversations/{id}/ai-title` (`agent.titre_propose`, through the
+  engine in use: the old route only spoke to Ollama), asked by the Chat after the first answer (`tests/test_api_v1.py`).
+- ~~The « / » commands of the old page~~ — 18 more in `lib/slash.ts` (`/rappeler`, `/plan` on the new `POST /api/v1/projects/map/refresh`, `/undo`,
+  `/test`…), French names kept as aliases, a command of the Claude project with the same name winning over them (`slash.test.ts`, test 3zd).
+- ~~What Lutin finds in a work folder, moving it with its files, giving it the path it was moved to by hand~~ — `GET /api/v1/projects/{id}/preview`,
+  `POST …/move`, `PATCH /api/v1/projects/{id}`, `components/ProjectDetails.svelte` (`tests/test_api_v1_projects_takeover.py`, test 5ia).
+- ~~Taking over another assistant's data (the « left » of item 3)~~ — `POST /api/v1/takeover/detect` and `POST /api/v1/takeover` (confirmation, backup
+  first), `components/Takeover.svelte`, in the preview of a folder that holds one and on its own on the Projects screen (same tests).
+- Not brought back, on purpose: `/memoire` (ADR 0019 took it away); the resizable sidebar and the hand-kept model list (superseded, below).
+- Still open from the first audit: the health light on Settings in the navigation, the tab badge.
+
 ## The switch
 
 Done on 2026-11-18, every item above being ticked: `/` serves the new interface when it is built (a copy without a build keeps the old page there),

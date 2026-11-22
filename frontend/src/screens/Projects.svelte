@@ -5,7 +5,9 @@
   import { api, ApiError } from "../lib/api";
   import { t } from "../lib/messages";
   import ClaudeImport from "../components/ClaudeImport.svelte";
+  import ProjectDetails from "../components/ProjectDetails.svelte";
   import ProjectGit from "../components/ProjectGit.svelte";
+  import Takeover from "../components/Takeover.svelte";
 
   type Project = { id: string; name: string; path: string; usable: boolean; problem: string };
   type Projects = { projects: Project[]; current: string };
@@ -129,6 +131,7 @@
                 <button type="button" class="button" disabled={busy} onclick={() => (removing = project.id)}>{t("projects.remove")}</button>
               {/if}
             </div>
+            <ProjectDetails id={project.id} name={project.name} {canConfigure} onchanged={(view) => (data = view)} />
           </li>
         {/each}
       </ul>
@@ -170,6 +173,13 @@
     </form>
     <ClaudeImport onimported={(answer) => (data = { projects: answer.projects as Project[], current: answer.current })} />
     <ProjectGit canConfigure={canConfigure} />
+    {#if canConfigure}
+      <section class="add" aria-labelledby="takeover-title">
+        <h2 id="takeover-title">{t("takeover.title")}</h2>
+        <p class="muted">{t("takeover.intro")}</p>
+        <Takeover ondone={() => void load()} />
+      </section>
+    {/if}
   {:else if !problem}
     <p class="muted">{t("projects.loading")}</p>
   {/if}
