@@ -27,7 +27,7 @@ class LutinVersion(unittest.TestCase):
         self.cache = Path(tempfile.mkdtemp(prefix="lutin-version-")) / "lutin-version.json"
         for patch in (mock.patch.dict(os.environ, {"LUTIN_VERSION_CACHE": str(self.cache)}),
                       mock.patch.object(access, "saved_security", lambda: A.SECURITY),          # the level saved is the one running: no restart waits
-                      mock.patch.dict(access.RESTAURE, {"fait": False}),
+                      mock.patch.dict(access.RESTORED, {"fait": False}),
                       mock.patch.dict(access.UPDATE, {"etat": "", "lignes": [], "avant": "", "apres": ""})):
             patch.start()
             self.addCleanup(patch.stop)
@@ -164,9 +164,9 @@ class LutinVersion(unittest.TestCase):
         self.assertEqual(self.status()["restart"], {"needed": False, "possible": False})
         with mock.patch.object(access, "can_restart", lambda: True):
             self.assertTrue(self.status()["restart"]["possible"])
-        access.RESTAURE["fait"] = True
+        access.RESTORED["fait"] = True
         self.assertTrue(self.status()["restart"]["needed"], "a backup put back")
-        access.RESTAURE["fait"] = False
+        access.RESTORED["fait"] = False
         with mock.patch.object(access, "saved_security", lambda: type(A.SECURITY)(niveau=V.S.LOCAL)):
             self.assertTrue(self.status()["restart"]["needed"], "another access level saved for the next start")
 

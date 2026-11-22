@@ -543,8 +543,8 @@ class Handler(BaseHTTPRequestHandler):
             vitesse = ((_bench.read(_m.bench_path()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
             if not vitesse or not vitesse.get("tok_s"):
                 return self._envoyer(200, {"mesure": None, "conseil": []})
-            from .hardware import detecter
-            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyze(vitesse, detecter(), r, _m._CATALOGUE, _m.engine_state()["installes"], _m.model_ps(r["modele"]))})
+            from .hardware import detect
+            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyze(vitesse, detect(), r, _m._CATALOGUE, _m.engine_state()["installes"], _m.model_ps(r["modele"]))})
         if chemin == "/api/notifications":
             return self._envoyer(200, {"canaux": _notif.list_channels(), "types": _notif.channel_types()})
         if chemin == "/api/planifie":

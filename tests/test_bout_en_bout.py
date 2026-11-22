@@ -77,7 +77,7 @@ class BoutEnBout(unittest.TestCase):
         config.save(d, cfg)
         cls.serveur = subprocess.Popen([sys.executable, "-B", "-m", "lutin", "serve", "--sans-navigateur", "--sans-superviseur"], cwd=tempfile.gettempdir(), env=cls.env,
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
-        cls.client = client.ClientLocal(d["donnees"])
+        cls.client = client.LocalClient(d["donnees"])
         debut = time.time()
         while time.time() - debut < 60 and not cls.client.disponible():
             if cls.serveur.poll() is not None:

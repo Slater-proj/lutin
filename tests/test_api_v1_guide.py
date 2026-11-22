@@ -22,7 +22,7 @@ def setUpModule():
 
 
 def known_machine():
-    return mock.patch.dict(model_fit._state, {"profil": hardware.profil_demo(), "quand": time.time(), "en_cours": False})
+    return mock.patch.dict(model_fit._state, {"profil": hardware.demo_profile(), "quand": time.time(), "en_cours": False})
 
 
 def unknown_machine():
@@ -85,7 +85,7 @@ class Catalog(unittest.TestCase):
     def test_the_verdict_is_the_one_of_model_fit_and_follows_the_size(self):
         with known_machine():
             models = get("/api/v1/models/catalog")[1]["models"]
-            profile = hardware.profil_demo()
+            profile = hardware.demo_profile()
             mapping = api_v1.FIT_LEVELS
             for model in models:
                 source = next(item for item in A._CATALOGUE["modeles"] if item["id"] == model["id"])

@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from .model_catalog import ROLES
 
 CTX_PLAFOND, CTX_PLANCHER = 32768, 8192
-CTX_CONFORT = 16384                       # en dessous, une conversation est « juste » (model_fit) : un modèle à experts préfère alors garder des experts en mémoire vive
+COMFORT_CTX = 16384                       # en dessous, une conversation est « juste » (model_fit) : un modèle à experts préfère alors garder des experts en mémoire vive
 MARGIN_GB = 0.5                       # tampon de calcul d'Ollama
 SCORE_THRESHOLD = 5                       # en dessous, un modèle n'est pas proposé pour ce rôle
 SMALL_GB = 5.0                       # « Rapide » est coché par défaut seulement s'il pèse peu
@@ -81,13 +81,13 @@ def best_context(modele, budget_go, ram_libre_go=0.0, experts_en_ram=True):
             sur_la_carte = ctx, besoin, "gpu"
             break
         ctx //= 2
-    if sur_la_carte is not None and (sur_la_carte[0] >= CTX_CONFORT or not experts_en_ram or not expert_share(modele)):
+    if sur_la_carte is not None and (sur_la_carte[0] >= COMFORT_CTX or not experts_en_ram or not expert_share(modele)):
         return sur_la_carte
     if not experts_en_ram:
         return None
     # La conversation prend de la place sur la carte, qui pousse des experts en mémoire vive : la plus longue qui tient encore. Un modèle à experts qui ne
     # tiendrait sur la carte qu'avec une courte conversation y gagne : quelques experts en mémoire vive coûtent peu, une conversation de 8 192 jetons beaucoup.
-    plancher = CTX_CONFORT if sur_la_carte is not None else min(CTX_PLANCHER, plafond)
+    plancher = COMFORT_CTX if sur_la_carte is not None else min(CTX_PLANCHER, plafond)
     ctx = plafond
     while ctx >= plancher:
         place = experts_split(modele, ctx, budget_go, ram_libre_go)

@@ -4,10 +4,10 @@ import unittest.mock
 
 import context  # noqa: F401
 from lutin import model_catalog, diagnostic
-from lutin.hardware import Profil
+from lutin.hardware import Profile
 
 CAT = model_catalog.load()
-PROFIL = Profil(systeme="linux", ram_go=32.0, ram_libre_go=20.0, gpus=[])
+PROFIL = Profile(systeme="linux", ram_go=32.0, ram_libre_go=20.0, gpus=[])
 
 
 def diag(**kw):

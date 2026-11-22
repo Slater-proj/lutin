@@ -29,7 +29,7 @@ RE_MD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,100}\.md$")
 CONVERSATION_MAX = 50_000_000
 MEMORY_MAX = 1_000_000
 ARCHIVE_MAX = 2 * 1024 ** 3
-MEMBRES_MAX = 100_000
+MAX_MEMBERS = 100_000
 MEMORY_TEMPLATE = ("CONTEXTE.md", "MEMOIRE.md")
 
 
@@ -90,7 +90,7 @@ def _extract(archive, destination):
         raise MigrationError(_t("Cette archive n'est pas lisible : {}").format(e)) from e
     with z:
         infos = z.infolist()
-        if len(infos) > MEMBRES_MAX or sum(i.file_size for i in infos) > ARCHIVE_MAX:
+        if len(infos) > MAX_MEMBERS or sum(i.file_size for i in infos) > ARCHIVE_MAX:
             raise MigrationError(_t("Archive trop grande."))
         for i in infos:
             n = i.filename.replace("\\", "/")

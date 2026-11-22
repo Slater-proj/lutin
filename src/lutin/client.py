@@ -6,11 +6,11 @@ from pathlib import Path
 from .i18n import t as _t
 
 
-class ErreurClient(RuntimeError):
+class ClientError(RuntimeError):
     pass
 
 
-class ClientLocal:
+class LocalClient:
     def __init__(self, dossier_donnees, ouvrir=urllib.request.urlopen):
         self.fichier, self.ouvrir = Path(dossier_donnees) / "console.json", ouvrir
         self.adresse = self.jeton = ""
@@ -25,7 +25,7 @@ class ClientLocal:
 
     def _requete(self, chemin, corps=None, delai=30):
         if not self.adresse and not self.lire_fichier():
-            raise ErreurClient(_t("Lutin ne tourne pas. Lance « lutin serve » dans une autre fenêtre."))
+            raise ClientError(_t("Lutin ne tourne pas. Lance « lutin serve » dans une autre fenêtre."))
         donnees = None if corps is None else json.dumps(corps).encode("utf-8")
         req = urllib.request.Request(self.adresse + chemin, data=donnees, headers={"Content-Type": "application/json", "X-Token": self.jeton})
         try:
@@ -35,9 +35,9 @@ class ClientLocal:
                 message = json.loads(e.read().decode("utf-8")).get("erreur", "")
             except ValueError:
                 message = ""
-            raise ErreurClient(message or "erreur {}".format(e.code)) from e
+            raise ClientError(message or "erreur {}".format(e.code)) from e
         except (OSError, urllib.error.URLError) as e:
-            raise ErreurClient(_t("Lutin ne répond pas ({}). Lance « lutin serve » dans une autre fenêtre.").format(self.adresse or "serveur inconnu")) from e
+            raise ClientError(_t("Lutin ne répond pas ({}). Lance « lutin serve » dans une autre fenêtre.").format(self.adresse or "serveur inconnu")) from e
 
     def disponible(self):
         if not self.lire_fichier():
@@ -45,7 +45,7 @@ class ClientLocal:
         try:
             with self._requete("/api/propositions", delai=3):
                 return True
-        except ErreurClient:
+        except ClientError:
             return False
 
     def obtenir(self, chemin):

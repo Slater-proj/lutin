@@ -11,12 +11,12 @@ from . import updates
 from .i18n import t as _t
 
 OFFICIAL_AUTHOR = "lmstudio-community"
-BPW_ESTIME = 4.85          # Q4_K_M, la quantification la plus courante
+ESTIMATED_BPW = 4.85          # Q4_K_M, la quantification la plus courante
 RE_QUANT = re.compile(r"[-_.]((?:IQ|Q)\d\w*?|BF16|F16|F32|MXFP4)(?:-\d{5}-of-\d{5})?\.gguf$", re.I)
 
 
 def search(q="", tri="recent", communaute=False, page=1, http=updates.http_get):
-    return base.search(q, tri, communaute, page, http, auteur=OFFICIAL_AUTHOR, etiquette="gguf", bpw=BPW_ESTIME)
+    return base.search(q, tri, communaute, page, http, auteur=OFFICIAL_AUTHOR, etiquette="gguf", bpw=ESTIMATED_BPW)
 
 
 def quantizations(depot, http=updates.http_get):

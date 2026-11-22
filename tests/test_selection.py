@@ -6,13 +6,13 @@ from pathlib import Path
 
 import context  # noqa: F401
 from lutin import model_catalog, model_selection
-from lutin.hardware import Gpu, Profil
+from lutin.hardware import Gpu, Profile
 
 CAT = model_catalog.load()
 
 
 def profil(vram=None, ram=32.0, fabricant="nvidia"):
-    return Profil(systeme="windows", ram_go=ram, ram_libre_go=ram * 0.6, gpus=[Gpu("Carte", fabricant, vram)] if vram is not None else [])
+    return Profile(systeme="windows", ram_go=ram, ram_libre_go=ram * 0.6, gpus=[Gpu("Carte", fabricant, vram)] if vram is not None else [])
 
 
 class Catalogue(unittest.TestCase):
@@ -155,7 +155,7 @@ class Selection(unittest.TestCase):
         self.assertEqual(model_selection.best_context(m, 20.4, 22, experts_en_ram=False)[::2], (8192, "gpu"))
         ctx, _, tient = model_selection.best_context(m, 20.4, 22)
         self.assertEqual(tient, "partiel")
-        self.assertGreaterEqual(ctx, model_selection.CTX_CONFORT)
+        self.assertGreaterEqual(ctx, model_selection.COMFORT_CTX)
         self.assertEqual(model_selection.best_context(m, 20.4, 2)[::2], (8192, "gpu"), "sans mémoire vive libre, la carte seule reste le choix")
 
     def test_defaut_et_total_a_telecharger(self):

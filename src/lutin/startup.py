@@ -49,7 +49,7 @@ def ensure_ollama_runs(cfg, profil, ecrire=print):
 
 
 def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
-    profil = hardware.detecter()
+    profil = hardware.detect()
     prepare_environment(cfg, dossiers)
     if not ouvrir_navigateur:
         os.environ["LUTIN_SANS_NAVIGATEUR"] = "1"

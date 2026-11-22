@@ -8,7 +8,7 @@ from pathlib import Path
 
 import context  # noqa: F401
 from lutin import model_catalog, config, updates, ollama_client
-from lutin.hardware import Gpu, Profil
+from lutin.hardware import Gpu, Profile
 from lutin.ollama_client import OllamaError, Ollama
 
 CAT = model_catalog.load()
@@ -226,10 +226,10 @@ class ClientOllama(unittest.TestCase):
             OLLAMA.telecharger("casse")
 
     def test_variables_selon_la_machine(self):
-        gros = Profil(ram_go=32, gpus=[Gpu("x", "nvidia", 24)])
+        gros = Profile(ram_go=32, gpus=[Gpu("x", "nvidia", 24)])
         v = ollama_client.variables_server(gros, "D:\\modeles")
         self.assertEqual((v["OLLAMA_FLASH_ATTENTION"], v["OLLAMA_KV_CACHE_TYPE"], v["OLLAMA_MODELS"]), ("1", "q8_0", "D:\\modeles"))
-        sans = ollama_client.variables_server(Profil(ram_go=8))
+        sans = ollama_client.variables_server(Profile(ram_go=8))
         self.assertNotIn("OLLAMA_FLASH_ATTENTION", sans)
         self.assertNotIn("OLLAMA_MODELS", sans)
 
@@ -357,14 +357,14 @@ class MisesAJour(unittest.TestCase):
         self.assertEqual(updates.available_updates({"qwen3:8b": {"digest": "ancien"}}, h), [], "même empreinte : rien à proposer")
 
     def test_nouveaute_quand_un_modele_mieux_note_tient(self):
-        machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
+        machine = Profile(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         p = updates.news(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})
         self.assertEqual(len(p), 1)
         self.assertEqual((p[0]["role"], p[0]["ancien"]), ("code", "qwen2.5-coder:7b"))
         self.assertGreater(CAT and [m for m in CAT["modeles"] if m["id"] == p[0]["modele"]][0]["notes"]["code"], 7)
 
     def test_pas_de_proposition_si_deja_au_meilleur_ignoree_ou_inutile(self):
-        machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
+        machine = Profile(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         meilleur = __import__("lutin.model_selection", fromlist=["x"]).choose(machine, CAT)["code"].id
         self.assertEqual(updates.news(machine, CAT, {"code": meilleur}, {meilleur: {}}), [])
         deja = updates.news(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})[0]["cle"]
@@ -381,7 +381,7 @@ class MisesAJour(unittest.TestCase):
         self.assertEqual(updates.obsolete(cat, {vieux: {}, neuf: {}}, ignores=[p[0]["cle"]]), [], "« le garder » est respecté")
 
     def test_modele_qui_ne_tient_plus_est_signale(self):
-        petite = Profil(ram_go=16, ram_libre_go=8, gpus=[Gpu("x", "nvidia", 8)])
+        petite = Profile(ram_go=16, ram_libre_go=8, gpus=[Gpu("x", "nvidia", 8)])
         p = updates.news(petite, CAT, {"polyvalent": "llama3.3:70b"}, {"llama3.3:70b": {}})
         self.assertTrue(p and "ne tient plus" in p[0]["raison"])
 
@@ -407,7 +407,7 @@ class MisesAJour(unittest.TestCase):
     def test_verification_complete_limitee_a_une_fois_par_jour_et_sure_hors_ligne(self):
         with tempfile.TemporaryDirectory() as t:
             d = {"cache": Path(t)}
-            machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
+            machine = Profile(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
             cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": ""}
             INSTALLES.clear(); INSTALLES.update({"qwen2.5-coder:7b": "d1"})
             hors_ligne = faux_http({"https://": OSError("hors ligne")})
@@ -423,7 +423,7 @@ class MisesAJour(unittest.TestCase):
 
     def test_ollama_arrete_ne_leve_pas_d_exception(self):
         with tempfile.TemporaryDirectory() as t:
-            r = updates.check(Profil(ram_go=8), {"modeles": {}}, {"cache": Path(t)}, Ollama("http://127.0.0.1:9"), faux_http({}), force=True)
+            r = updates.check(Profile(ram_go=8), {"modeles": {}}, {"cache": Path(t)}, Ollama("http://127.0.0.1:9"), faux_http({}), force=True)
             self.assertEqual(r["propositions"], [])
             self.assertTrue(r["erreurs"])
 
@@ -460,7 +460,7 @@ class Portee(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.TemporaryDirectory()
         self.d = {"cache": Path(self.t.name)}
-        self.machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
+        self.machine = Profile(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         self.cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": ""}
         INSTALLES.clear(); INSTALLES.update({"qwen2.5-coder:7b": "ancien"})
         self.http = faux_http({updates.REGISTRY: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})

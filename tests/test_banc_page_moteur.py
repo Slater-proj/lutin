@@ -46,7 +46,7 @@ class BancDeLaPage(unittest.TestCase):
         agent.local_engine = self.vrai
 
     def test_le_client_du_banc_est_l_adaptateur_pour_un_autre_moteur(self):
-        self.assertIsInstance(agent.bench_client(), bench.AdaptateurMoteur)
+        self.assertIsInstance(agent.bench_client(), bench.EngineAdapter)
 
     def test_la_mesure_rapide_passe_par_le_moteur_choisi(self):
         A._measure_one("m1", True)
@@ -64,7 +64,7 @@ class BancDeLaPage(unittest.TestCase):
 
 class AvecOllama(unittest.TestCase):
     def test_ollama_reste_interroge_directement(self):
-        self.assertNotIsInstance(agent.bench_client({"moteur": "ollama"}), bench.AdaptateurMoteur)
+        self.assertNotIsInstance(agent.bench_client({"moteur": "ollama"}), bench.EngineAdapter)
 
 
 if __name__ == "__main__":

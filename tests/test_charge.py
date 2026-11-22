@@ -17,7 +17,7 @@ for d in ("projet", "donnees", "memoire", "config"):
 
 from lutin import model_catalog, model_selection  # noqa: E402
 from lutin import core as A  # noqa: E402
-from lutin.hardware import Gpu, Profil, integrated_is  # noqa: E402
+from lutin.hardware import Gpu, Profile, integrated_is  # noqa: E402
 
 
 class CartesIntegrees(unittest.TestCase):
@@ -34,7 +34,7 @@ class CartesIntegrees(unittest.TestCase):
         self.assertFalse(integrated_is(Gpu("AMD Radeon 780M Graphics", "amd", 8.0, 0.0, "déclarée (LUTIN_GPU)")))
 
     def test_pc_avec_carte_integree_et_32_go_se_choisit_comme_un_pc_sans_carte(self):
-        p = Profil(systeme="windows", cpu="Ryzen 7 7840U", coeurs=8, ram_go=32.0, ram_libre_go=24.0, gpus=[Gpu("AMD Radeon(TM) Graphics", "amd", 4.0, 0.0, "registre")])
+        p = Profile(systeme="windows", cpu="Ryzen 7 7840U", coeurs=8, ram_go=32.0, ram_libre_go=24.0, gpus=[Gpu("AMD Radeon(TM) Graphics", "amd", 4.0, 0.0, "registre")])
         self.assertTrue(p.sans_gpu())
         self.assertIsNone(p.gpu_principal())
         self.assertEqual(p.budget_go(), 19.2, "60 % de la RAM, pas 85 % des 4 Go de la carte intégrée")
@@ -46,7 +46,7 @@ class CartesIntegrees(unittest.TestCase):
         self.assertGreater(retenu.modele["go"], 4, "un modèle bien plus gros que la mémoire de la carte intégrée")
 
     def test_une_vraie_carte_a_cote_d_une_carte_integree_gagne(self):
-        p = Profil(ram_go=32.0, gpus=[Gpu("Intel(R) UHD Graphics 770", "intel", 0.5), Gpu("NVIDIA GeForce RTX 4060", "nvidia", 8.0, 7.0, "nvidia-smi")])
+        p = Profile(ram_go=32.0, gpus=[Gpu("Intel(R) UHD Graphics 770", "intel", 0.5), Gpu("NVIDIA GeForce RTX 4060", "nvidia", 8.0, 7.0, "nvidia-smi")])
         self.assertEqual(p.gpu_principal().nom, "NVIDIA GeForce RTX 4060")
         self.assertFalse(p.sans_gpu())
 

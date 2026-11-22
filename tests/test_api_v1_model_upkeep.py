@@ -33,7 +33,7 @@ class Upkeep(unittest.TestCase):
         self.proposals.write_text(json.dumps(PROPOSALS), encoding="utf-8")
         self.config.write_text("{}", encoding="utf-8")
         for patch in (mock.patch.dict(os.environ, {"LUTIN_PROPOSITIONS": str(self.proposals), "LUTIN_CONFIG": str(self.config)}),
-                      mock.patch.dict(model_fit._state, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})):
+                      mock.patch.dict(model_fit._state, {"profil": hardware.demo_profile(), "quand": time.time() + 3600, "en_cours": False})):
             patch.start()
             self.addCleanup(patch.stop)
 

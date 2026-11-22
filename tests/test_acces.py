@@ -206,9 +206,9 @@ class ConseilPc(Base):
         from lutin import bench
         # le matériel et Ollama sont simulés : le test ne dépend pas de la machine (ni de son délai)
         from lutin import hardware
-        profil = hardware.Profil(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
+        profil = hardware.Profile(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
         ollama = {"actif": True, "installes": {}, "tailles": {}}
-        with mock.patch("lutin.hardware.detecter", return_value=profil), mock.patch.object(A, "ollama_state", return_value=ollama), mock.patch.object(A, "model_ps", return_value=None):
+        with mock.patch("lutin.hardware.detect", return_value=profil), mock.patch.object(A, "ollama_state", return_value=ollama), mock.patch.object(A, "model_ps", return_value=None):
             self._conseil_avec_mesure(bench)
 
     def _conseil_avec_mesure(self, bench):

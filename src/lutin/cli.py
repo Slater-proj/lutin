@@ -359,7 +359,7 @@ def command_update(args):
         code = update_lutin()
     if args.modeles or tout:
         d, cfg = context()
-        r = updates.check(hardware.detecter(), cfg, d, ollama_client.Ollama(), force=True)
+        r = updates.check(hardware.detect(), cfg, d, ollama_client.Ollama(), force=True)
         for p in r["propositions"]:
             print("• {} : {}".format(p["modele"], p["raison"]))
         print(_t("Modèles : rien de nouveau.") if not r["propositions"] else _t("Pour en installer un :  lutin models install <identifiant>"))
@@ -370,7 +370,7 @@ def command_update(args):
 
 def ready_client():
     d, _ = context()
-    c = client.ClientLocal(d["donnees"])
+    c = client.LocalClient(d["donnees"])
     if not c.disponible():
         print(_t("Lutin ne tourne pas. Lance « lutin serve » (ou « lutin ») dans une autre fenêtre, puis recommence."), file=sys.stderr)
         return None
@@ -391,7 +391,7 @@ def command_chat(args):
 def command_models(args):
     d, cfg = context()
     cat = model_catalog.load(Path(d["cache"]) / "catalogue.json")
-    profil = hardware.detecter()
+    profil = hardware.detect()
     o = ollama_client.Ollama()
     if args.action == "recommander":
         if getattr(args, "moteur", ""):          # les rôles sont propres à chaque moteur : jamais un modèle que ce moteur ne sait pas faire tourner
@@ -461,7 +461,7 @@ def command_pin(args):
         return 1
     try:
         r = c.envoyer("/api/nouveau-pin", {})
-    except client.ErreurClient as e:
+    except client.ClientError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     print(_t("Code PIN : {}   (valable {} minutes, un seul appareil)").format(r["pin"], r["valable_s"] // 60))
@@ -478,7 +478,7 @@ def command_devices(args):
             print(_t("{} appareil(s) déconnecté(s).").format(r["revoques"]))
             return 0
         r = c.envoyer("/api/appareils", {})
-    except client.ErreurClient as e:
+    except client.ClientError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     if not r["appareils"]:
@@ -535,7 +535,7 @@ def command_bench_engines(args):
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
     from . import engine_bench, core as _moteur  # noqa: F401  (importer le moteur enregistre les moteurs)
-    profil = hardware.detecter()
+    profil = hardware.detect()
     modele = args.modele or cfg["modeles"]["choisis"].get("polyvalent") or ""
     if not modele:
         print(_t("Aucun modèle à mesurer : indique-le (lutin bench-engines <modèle>)."), file=sys.stderr)
@@ -644,7 +644,7 @@ def command_bench(args):
             print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
             return 1
         try:
-            o, installes = bench.AdaptateurMoteur(mo), set(mo.modeles()["installes"])
+            o, installes = bench.EngineAdapter(mo), set(mo.modeles()["installes"])
         except (ValueError, OSError) as e:
             print("✘ " + str(e), file=sys.stderr)
             return 1
@@ -659,7 +659,7 @@ def command_bench(args):
     if not cibles or not cibles[0]:
         print(_t("Aucun modèle installé à mesurer."), file=sys.stderr)
         return 1
-    resume = hardware.detecter().resume()
+    resume = hardware.detect().resume()
     code = 0
     for m in cibles:
         if m not in installes:
@@ -667,7 +667,7 @@ def command_bench(args):
             code = 1
             continue
         print(_t("Mesure de {} ({})…").format(m, "vitesse seulement" if args.rapide else "banc complet, quelques minutes"))
-        mesure = bench.executer(o, m, rapide=args.rapide, resume_machine=resume, progression=lambda nom, i, n: print("  {} ({}/{})".format(_t(nom), i + 1, n)))
+        mesure = bench.run(o, m, rapide=args.rapide, resume_machine=resume, progression=lambda nom, i, n: print("  {} ({}/{})".format(_t(nom), i + 1, n)))
         bench.save(Path(d["cache"]) / "bench.json", mesure)
         print("  → " + bench.summary(mesure))
         if mesure["notes"]:
@@ -676,7 +676,7 @@ def command_bench(args):
             print(_t("  ⚠ Mesure incomplète : ") + mesure["erreur"])
             code = 1
         if args.exporter:
-            print(bench.exporter(mesure))
+            print(bench.export(mesure))
     return code
 
 
@@ -700,7 +700,7 @@ def command_restore(args):
     except backup.BackupError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
-    if not args.forcer and client.ClientLocal(d["donnees"]).disponible():
+    if not args.forcer and client.LocalClient(d["donnees"]).disponible():
         print(_t("✘ Lutin tourne : arrête-le avant de restaurer (ou --force)."), file=sys.stderr)
         return 1
     print(_t("Sauvegarde du {} (Lutin {}) : {} fichier(s).").format(m.get("date", "?"), m.get("lutin", "?"), len(m.get("fichiers", []))))
@@ -943,7 +943,7 @@ def diagnostic_base(dossier_donnees):
 def command_doctor(args):
     d, cfg = context()
     from . import docker_doctor
-    for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + diagnostic_base(d["donnees"]) + docker_doctor.diagnose():
+    for niveau, texte in diagnostic(cfg, d, hardware.detect(), ollama_client.Ollama()) + diagnostic_base(d["donnees"]) + docker_doctor.diagnose():
         print("{} {}".format({"ok": "✔", "info": " ", "attention": "⚠", "erreur": "✘"}[niveau], texte))
     return 0
 

@@ -96,7 +96,7 @@ class ModelsFolder(unittest.TestCase):
 
 class CalibrationAndAdvice(unittest.TestCase):
     def setUp(self):
-        patch = mock.patch.dict(model_fit._state, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})
+        patch = mock.patch.dict(model_fit._state, {"profil": hardware.demo_profile(), "quand": time.time() + 3600, "en_cours": False})
         patch.start()
         self.addCleanup(patch.stop)
 

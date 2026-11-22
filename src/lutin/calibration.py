@@ -51,7 +51,7 @@ def state():
 
 def measure_threads(ollama, modele, fils, num_ctx, repetitions=REPEATS):
     """Débit d'écriture moyen (jetons/s) du modèle avec `fils` cœurs, ou None si Ollama n'a rien pu mesurer."""
-    banc = bench.Banc(ollama, modele, num_ctx, 300, options={"num_thread": fils})
+    banc = bench.Bench(ollama, modele, num_ctx, 300, options={"num_thread": fils})
     valeurs = []
     for _ in range(repetitions):
         v = banc.vitesse().get("tok_s")

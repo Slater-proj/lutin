@@ -2,7 +2,7 @@ import unittest
 
 import context  # noqa: F401
 from lutin import hardware
-from lutin.hardware import Disque, Gpu, Profil
+from lutin.hardware import Disk, Gpu, Profile
 
 NVIDIA_4090 = "NVIDIA GeForce RTX 4090, 24564, 23012\n"
 NVIDIA_DEUX = "NVIDIA GeForce RTX 3060, 12288, 11000\nNVIDIA GeForce GTX 1050 Ti, 4096, 3900\n"
@@ -53,21 +53,21 @@ class Detection(unittest.TestCase):
         from pathlib import Path
         with tempfile.TemporaryDirectory() as d:
             racine = Path(d)
-            self.assertEqual(hardware.limite_conteneur(str(racine)), (0.0, 0.0), "pas de fichiers : pas de limite")
+            self.assertEqual(hardware.container_limit(str(racine)), (0.0, 0.0), "pas de fichiers : pas de limite")
             (racine / "memory.max").write_text("max\n")
-            self.assertEqual(hardware.limite_conteneur(str(racine)), (0.0, 0.0), "« max » : illimité")
+            self.assertEqual(hardware.container_limit(str(racine)), (0.0, 0.0), "« max » : illimité")
             (racine / "memory.max").write_text(str(10 * 1024 ** 3) + "\n")
             (racine / "memory.current").write_text(str(3 * 1024 ** 3) + "\n")
-            self.assertEqual(hardware.limite_conteneur(str(racine)), (10.0, 3.0), "cgroup v2 : 10 Go de limite, 3 Go utilisés")
+            self.assertEqual(hardware.container_limit(str(racine)), (10.0, 3.0), "cgroup v2 : 10 Go de limite, 3 Go utilisés")
         with tempfile.TemporaryDirectory() as d:
             racine = Path(d)
             (racine / "memory").mkdir()
             (racine / "memory" / "memory.limit_in_bytes").write_text("9223372036854771712\n")
             (racine / "memory" / "memory.usage_in_bytes").write_text("1\n")
-            self.assertEqual(hardware.limite_conteneur(str(racine)), (0.0, 0.0), "cgroup v1 sans limite : un nombre énorme")
+            self.assertEqual(hardware.container_limit(str(racine)), (0.0, 0.0), "cgroup v1 sans limite : un nombre énorme")
             (racine / "memory" / "memory.limit_in_bytes").write_text(str(8 * 1024 ** 3))
             (racine / "memory" / "memory.usage_in_bytes").write_text(str(2 * 1024 ** 3))
-            self.assertEqual(hardware.limite_conteneur(str(racine)), (8.0, 2.0))
+            self.assertEqual(hardware.container_limit(str(racine)), (8.0, 2.0))
 
     def test_la_limite_de_processeurs_d_un_conteneur_compte(self):
         import os
@@ -94,7 +94,7 @@ class Detection(unittest.TestCase):
 
     def test_le_budget_peut_etre_impose_pour_un_serveur_partage(self):
         import os
-        p = Profil(ram_go=32.0, ram_libre_go=10.0)
+        p = Profile(ram_go=32.0, ram_libre_go=10.0)
         vrai = os.environ.get("LUTIN_BUDGET_GO")
         try:
             os.environ.pop("LUTIN_BUDGET_GO", None)
@@ -129,20 +129,20 @@ class Detection(unittest.TestCase):
             self.assertEqual(hardware.read_gpus_linux(str(Path(t) / "absent")), [])
 
     def test_detecter_ne_plante_jamais_meme_sans_aucune_commande(self):
-        p = hardware.detecter(lanceur=lambda *a, **k: "")
+        p = hardware.detect(lanceur=lambda *a, **k: "")
         self.assertIn(p.systeme, ("windows", "linux", "macos"))
         self.assertGreater(p.coeurs, 0)
         self.assertGreaterEqual(len(p.disques), 1)
 
 
 def profil(vram=None, ram=32.0, fabricant="nvidia", ram_libre=20.0):
-    return Profil(systeme="windows", ram_go=ram, ram_libre_go=ram_libre, gpus=[Gpu("Carte", fabricant, vram)] if vram is not None else [],
-                  disques=[Disque("C:\\", 100, 500)])
+    return Profile(systeme="windows", ram_go=ram, ram_libre_go=ram_libre, gpus=[Gpu("Carte", fabricant, vram)] if vram is not None else [],
+                  disques=[Disk("C:\\", 100, 500)])
 
 
 class CarteDeclaree(unittest.TestCase):
     def test_formats(self):
-        a = hardware.analyser_gpu_declare
+        a = hardware.parse_declared_gpu
         self.assertEqual([(g.nom, g.fabricant, g.vram_go) for g in a("24")], [("Carte déclarée", "nvidia", 24.0)])
         self.assertEqual([(g.nom, g.fabricant, g.vram_go) for g in a("NVIDIA RTX 4090=24")], [("NVIDIA RTX 4090", "nvidia", 24.0)])
         self.assertEqual([(g.fabricant, g.vram_go) for g in a("Radeon RX 7900 XTX=20")], [("amd", 20.0)])
@@ -151,13 +151,13 @@ class CarteDeclaree(unittest.TestCase):
 
     def test_valeurs_absurdes_ignorees(self):
         for texte in ("", None, "beaucoup", "=", "0", "-4", "99999", "x=y"):
-            self.assertEqual(hardware.analyser_gpu_declare(texte), [], texte)
+            self.assertEqual(hardware.parse_declared_gpu(texte), [], texte)
 
     def test_la_declaration_remplace_la_detection(self):
         import os
         from unittest import mock
         with mock.patch.dict(os.environ, {"LUTIN_GPU": "NVIDIA RTX 3060=12"}):
-            p = hardware.detecter(lanceur=lambda *a, **k: NVIDIA_4090 if "nvidia-smi" in str(a) else "")
+            p = hardware.detect(lanceur=lambda *a, **k: NVIDIA_4090 if "nvidia-smi" in str(a) else "")
         self.assertEqual([(g.nom, g.vram_go) for g in p.gpus], [("NVIDIA RTX 3060", 12.0)])
         self.assertEqual(p.classe(), "moyenne")
 
@@ -188,7 +188,7 @@ class Budget(unittest.TestCase):
 
     def test_aller_retour_dict(self):
         p = profil(24)
-        self.assertEqual(Profil.depuis_dict(p.en_dict()).gpu_principal().vram_go, 24)
+        self.assertEqual(Profile.depuis_dict(p.en_dict()).gpu_principal().vram_go, 24)
 
 
 if __name__ == "__main__":

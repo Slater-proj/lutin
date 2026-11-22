@@ -360,7 +360,7 @@ from .web import (  # noqa: F401  (déplacé dans web.py : moteur ré-exporte se
 from .project_map import (  # noqa: F401  (déplacé dans project_map.py : moteur ré-exporte ses noms)
     PLAN,
     PLAN_CACHE,
-    PLAN_DELAI,
+    PLAN_TIMEOUT,
     PLAN_EXT,
     PLAN_MAX,
     RE_SYM_JS,
@@ -847,8 +847,8 @@ def _measure_one(modele, rapide):
     """Mesure un modèle et enregistre le résultat. Ne lève jamais : une panne est notée dans BENCH['erreur']."""
     BENCH.update(en_cours=modele, etape="démarrage")
     try:
-        from .hardware import detecter
-        mesure = _bench.executer(bench_client(), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), settings()["num_ctx"])
+        from .hardware import detect
+        mesure = _bench.run(bench_client(), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detect().resume(), settings()["num_ctx"])
         try:
             moteur = local_engine()
             mesure["moteur"] = {"id": moteur.id, "version": str(getattr(moteur, "version", lambda: "")() or "")[:40]}          # pour dire, plus tard, si une baisse vient d'un changement de moteur

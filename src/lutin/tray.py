@@ -22,7 +22,7 @@ from .i18n import t as _t
 
 CREATE_NO_WINDOW, CREATE_NEW_CONSOLE = 0x08000000, 0x00000010
 MENU_PIN, MENU_OUVRIR, MENU_REDEMARRER, MENU_QUITTER, MENU_MAJ = 1, 2, 3, 4, 5
-MESSAGE_ICONE = 0x0400 + 1          # WM_USER + 1 : message envoyé par l'icône
+ICON_MESSAGE = 0x0400 + 1          # WM_USER + 1 : message envoyé par l'icône
 WM_LBUTTONUP, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WM_CONTEXTMENU = 0x0202, 0x0203, 0x0205, 0x007B
 WM_NULL, WM_CLOSE, WM_DESTROY = 0x0000, 0x0010, 0x0002
 NIM_ADD, NIM_DELETE = 0, 2
@@ -102,13 +102,13 @@ def address_opening(dossiers, cfg):
     if cfg.get("securite", {}).get("niveau") == "reseau":
         try:
             from . import client
-            return base + "#pin=" + client.ClientLocal(dossiers["donnees"]).envoyer("/api/nouveau-pin", {})["pin"]
+            return base + "#pin=" + client.LocalClient(dossiers["donnees"]).envoyer("/api/nouveau-pin", {})["pin"]
         except Exception:  # noqa: BLE001 — le serveur démarre peut-être encore : la page de connexion demandera le code
             pass
     return base
 
 
-def ouvrir_interface(dossiers, cfg):
+def open_interface(dossiers, cfg):
     threading.Thread(target=lambda: webbrowser.open(address_opening(dossiers, cfg)), daemon=True, name="zone-ouvrir").start()
 
 
@@ -128,10 +128,10 @@ def python_console():
     return str(candidat) if candidat.is_file() else str(exe)
 
 
-PREMIERE_CONFIGURATION = ["setup", "--yes", "--no-models", "--no-ollama"]
+FIRST_SETUP = ["setup", "--yes", "--no-models", "--no-ollama"]
 
 
-def preparer(dossiers, cfg):
+def prepare(dossiers, cfg):
     """La configuration à utiliser, ou None. Première utilisation : la configuration de base se fait sans fenêtre, avec les valeurs conseillées (langue
     du système, accès depuis cette machine seulement, dossier de travail habituel), sans installer de moteur ni télécharger de modèle. Les vraies
     questions (moteur, usage, modèle, avec la taille avant chaque téléchargement) sont posées par le guide du premier lancement, dans le navigateur.
@@ -139,7 +139,7 @@ def preparer(dossiers, cfg):
     if cfg.get("installe"):
         return cfg
     from . import config
-    r = subprocess.run([python_console(), "-m", "lutin"] + PREMIERE_CONFIGURATION, creationflags=CREATE_NO_WINDOW, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    r = subprocess.run([python_console(), "-m", "lutin"] + FIRST_SETUP, creationflags=CREATE_NO_WINDOW, capture_output=True, text=True, encoding="utf-8", errors="replace")
     cfg = config.load(dossiers)
     if not cfg.get("installe"):
         log(dossiers, "Configuration de base impossible (code {}) :\n{}\n{}".format(getattr(r, "returncode", "?"), getattr(r, "stdout", "") or "", getattr(r, "stderr", "") or ""))
@@ -147,7 +147,7 @@ def preparer(dossiers, cfg):
     return cfg
 
 
-class Serveur:
+class Server:
     """Le serveur de Lutin dans un processus enfant sans fenêtre. `lancer` est ce que la supervision appelle à chaque démarrage."""
 
     def __init__(self, dossiers, ouvrir=True):
@@ -188,7 +188,7 @@ class Serveur:
         self.tuer()
 
 
-def code_pin(dossiers):
+def pin_code(dossiers):
     """Lance `lutin pin` (le même code que la commande) et renvoie son texte."""
     r = subprocess.run([sys.executable, "-m", "lutin", "pin"], capture_output=True, text=True, encoding="utf-8", errors="replace",
                        creationflags=CREATE_NO_WINDOW)
@@ -206,7 +206,7 @@ def message(titre, texte):
     user32.MessageBoxW(None, texte, titre, MB_OK | MB_ICONINFORMATION | MB_TOPMOST)
 
 
-class Zone:
+class Tray:
     """L'icône et son menu. Une seule boucle de messages (le fil principal) ; les actions lentes tournent dans leur propre fil."""
 
     def __init__(self, cfg, dossiers, serveur):
@@ -240,7 +240,7 @@ class Zone:
         data.hWnd = self.hwnd
         data.uID = 1
         data.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
-        data.uCallbackMessage = MESSAGE_ICONE
+        data.uCallbackMessage = ICON_MESSAGE
         data.hIcon = self.icone
         data.szTip = "Lutin"
         self.data = data
@@ -272,9 +272,9 @@ class Zone:
 
     def action(self, choix):
         if choix == MENU_OUVRIR:
-            ouvrir_interface(self.dossiers, self.cfg)
+            open_interface(self.dossiers, self.cfg)
         elif choix == MENU_PIN:
-            threading.Thread(target=lambda: message(_t("Lutin : code PIN"), code_pin(self.dossiers)), daemon=True, name="zone-pin").start()
+            threading.Thread(target=lambda: message(_t("Lutin : code PIN"), pin_code(self.dossiers)), daemon=True, name="zone-pin").start()
         elif choix == MENU_REDEMARRER:
             threading.Thread(target=self.serveur.redemarrer, daemon=True, name="zone-redemarrer").start()
         elif choix == MENU_MAJ:
@@ -303,10 +303,10 @@ class Zone:
     def traiter(self, hwnd, msg, wparam, lparam):
         """Les messages de la fenêtre. Une exception ici resterait invisible (pas de console) : elle va dans zone.log."""
         try:
-            if msg == MESSAGE_ICONE:
+            if msg == ICON_MESSAGE:
                 evenement = lparam & 0xFFFF
                 if evenement in (WM_LBUTTONUP, WM_LBUTTONDBLCLK):
-                    ouvrir_interface(self.dossiers, self.cfg)
+                    open_interface(self.dossiers, self.cfg)
                 elif evenement in (WM_RBUTTONUP, WM_CONTEXTMENU):
                     self.afficher_menu()
                 return 0
@@ -344,12 +344,12 @@ def commande(dossiers, cfg, ouvrir=True):
             webbrowser.open(address_opening(dossiers, cfg))                 # déjà lancé : on montre l'interface au lieu d'en lancer une deuxième
         return 0
     try:
-        cfg = preparer(dossiers, cfg)
+        cfg = prepare(dossiers, cfg)
         if cfg is None:
             message("Lutin", _t("La configuration de Lutin n'a pas pu se faire : le détail est dans zone.log (dossier des données). Relance Lutin pour réessayer."))
             return 1
-        serveur = Serveur(dossiers, ouvrir)
-        zone = Zone(cfg, dossiers, serveur)
+        serveur = Server(dossiers, ouvrir)
+        zone = Tray(cfg, dossiers, serveur)
         zone.creer()
         from . import cli
         threading.Thread(target=lambda: cli.supervise(serveur.lancer, ecrire=lambda t: log(dossiers, t)) or user32.PostMessageW(zone.hwnd, WM_CLOSE, 0, 0),

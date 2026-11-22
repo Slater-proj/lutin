@@ -96,7 +96,7 @@ def ready_profile(detecter=None):
     def travail():
         try:
             if detecter is None:
-                from .hardware import detecter as d
+                from .hardware import detect as d
             else:
                 d = detecter
             profil = d()

@@ -2,7 +2,7 @@ import unittest
 
 import context  # noqa: F401
 from lutin import low_end_mode, diagnostic, model_variants
-from lutin.hardware import Gpu, Profil
+from lutin.hardware import Gpu, Profile
 
 
 def bloc(nom, tag, taille):
@@ -74,8 +74,8 @@ class Lecture(unittest.TestCase):
         self.assertNotEqual(model_variants.describe("q4_K_M"), model_variants.describe("q8_0"))
 
 
-CPU = Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])
-GROS = Profil(systeme="linux", ram_go=64.0, ram_libre_go=40.0, gpus=[Gpu("RTX", "nvidia", 24)])
+CPU = Profile(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])
+GROS = Profile(systeme="linux", ram_go=64.0, ram_libre_go=40.0, gpus=[Gpu("RTX", "nvidia", 24)])
 
 
 class ConseilMachine(unittest.TestCase):

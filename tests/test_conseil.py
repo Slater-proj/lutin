@@ -5,13 +5,13 @@ from unittest import mock
 
 import context  # noqa: F401
 from lutin import model_catalog, performance_advice
-from lutin.hardware import Gpu, Profil
+from lutin.hardware import Gpu, Profile
 
 CAT = model_catalog.load()
 
 
 def pc(gpu=None, ram=32.0):
-    return Profil(systeme="windows", cpu="Ryzen", coeurs=8, ram_go=ram, ram_libre_go=ram * 0.7, gpus=[gpu] if gpu else [])
+    return Profile(systeme="windows", cpu="Ryzen", coeurs=8, ram_go=ram, ram_libre_go=ram * 0.7, gpus=[gpu] if gpu else [])
 
 
 def textes(lignes):

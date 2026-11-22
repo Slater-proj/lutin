@@ -1904,7 +1904,7 @@ def _speed_level(tokens_per_second):
 def _measure_speed(model):
     from . import bench
     from .ollama_client import Ollama
-    return bench.Banc(Ollama(_m.OLLAMA), model, 4096, 120).vitesse().get("tok_s")
+    return bench.Bench(Ollama(_m.OLLAMA), model, 4096, 120).vitesse().get("tok_s")
 
 
 @route("GET", "/speed-test", SESSION)

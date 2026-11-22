@@ -21,7 +21,7 @@ def quiet(test):
                   mock.patch.object(power, "startup_state_memo", lambda: dict(STARTUP)),
                   mock.patch.object(core, "system_memory", lambda: {"total": 32 * 1024 ** 3, "libre": 16 * 1024 ** 3}),
                   mock.patch.object(core, "video_memory", lambda: None),
-                  mock.patch.dict(model_fit._state, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})):
+                  mock.patch.dict(model_fit._state, {"profil": hardware.demo_profile(), "quand": time.time() + 3600, "en_cours": False})):
         patch.start()
         test.addCleanup(patch.stop)
     machines.NODE_INFO.clear()

@@ -253,8 +253,8 @@ class ReglagesMachine(unittest.TestCase):
     """llama.cpp est réglé d'après la machine, avec les seules options que ce programme-là connaît."""
 
     def profil(self, vram, coeurs=8, ram=32):
-        from lutin.hardware import Gpu, Profil
-        return Profil(systeme="windows", cpu="x", coeurs=coeurs, ram_go=ram, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
+        from lutin.hardware import Gpu, Profile
+        return Profile(systeme="windows", cpu="x", coeurs=coeurs, ram_go=ram, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
 
     def test_fils_de_calcul_et_repartition_selon_la_machine(self):
         aide = "--threads n  --fit [on|off]"

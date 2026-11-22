@@ -16,13 +16,13 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 
 from lutin import core as _m  # noqa: E402,F401  (avant les autres : ils lisent l'état de moteur)
 from lutin import model_fit, locations, workspace_manager, security  # noqa: E402
-from lutin.hardware import Gpu, Profil  # noqa: E402
+from lutin.hardware import Gpu, Profile  # noqa: E402
 
 CAT = {m["id"]: m for m in _m._CATALOGUE["modeles"]}
 
 
 def carte(vram):
-    return Profil(systeme="windows", ram_go=32, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
+    return Profile(systeme="windows", ram_go=32, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
 
 
 class Appreciation(unittest.TestCase):
@@ -38,22 +38,22 @@ class Appreciation(unittest.TestCase):
     def test_un_modele_a_experts_est_juge_sur_la_machine_mesuree_et_le_moteur(self):
         """Demande du mainteneur (2026-11-20) : les modèles qui tiennent et ceux qui sont limites, d'après la carte et la mémoire vive libre mesurée, et
         seulement si le moteur sait garder les experts en mémoire vive."""
-        rtx4090 = Profil(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4090", "nvidia", 24)])
+        rtx4090 = Profile(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4090", "nvidia", 24)])
         a_l_aise = model_fit.judge(CAT["qwen3.6:35b"], rtx4090)
         self.assertEqual(a_l_aise["niveau"], "bien")
         self.assertIn("mémoire vive", a_l_aise["texte"])
-        juste = model_fit.judge(CAT["qwen3.6:35b"], Profil(systeme="windows", ram_go=32, ram_libre_go=16, gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12)]))
+        juste = model_fit.judge(CAT["qwen3.6:35b"], Profile(systeme="windows", ram_go=32, ram_libre_go=16, gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12)]))
         self.assertEqual(juste["niveau"], "limite", "13 Go d'experts en mémoire vive sur 16 libres : il ne reste presque rien")
         self.assertIn("juste", juste["texte"])
         self.assertEqual(model_fit.judge(CAT["qwen3-next:80b"], rtx4090)["niveau"], "trop_gros", "30 Go d'experts : la mémoire vive libre n'y suffit pas")
-        rtx4080 = Profil(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4080", "nvidia", 16)])
+        rtx4080 = Profile(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4080", "nvidia", 16)])
         self.assertEqual(model_fit.judge(CAT["qwen3.6:35b"], rtx4080)["niveau"], "bien", "16 Go : 10 Go d'experts en mémoire vive")
         sans = model_fit.judge(CAT["qwen3.6:35b"], rtx4080, experts_en_ram=False)
         self.assertEqual(sans["niveau"], "trop_gros")
         self.assertIn("ce moteur", sans["texte"], "le moteur est la raison, et on dit lesquels savent le faire")
 
     def test_sans_carte_graphique(self):
-        cpu = Profil(systeme="windows", ram_go=16, ram_libre_go=10)
+        cpu = Profile(systeme="windows", ram_go=16, ram_libre_go=10)
         self.assertEqual(model_fit.judge(CAT["qwen3:1.7b"], cpu)["niveau"], "bien")
         self.assertIn(model_fit.judge(CAT["qwen3:8b"], cpu)["niveau"], ("limite", "trop_gros"))
 
@@ -82,7 +82,7 @@ class ProfilAttendu(unittest.TestCase):
         etat = dict(model_fit._state)
         model_fit._state.update(profil=None, quand=0.0, en_cours=False)
         self.addCleanup(model_fit._state.update, etat)
-        profil = Profil(cpu="x", coeurs=8, ram_go=32, gpus=[Gpu("RTX", "nvidia", 24, 0, "")])
+        profil = Profile(cpu="x", coeurs=8, ram_go=32, gpus=[Gpu("RTX", "nvidia", 24, 0, "")])
 
         def lente():
             _t.sleep(0.6)

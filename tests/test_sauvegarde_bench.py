@@ -168,7 +168,7 @@ class Faux:
 
 class Banc(unittest.TestCase):
     def test_modele_parfait(self):
-        m = bench.executer(Faux(True, 40.0), "qwen3:8b", resume_machine="PC test")
+        m = bench.run(Faux(True, 40.0), "qwen3:8b", resume_machine="PC test")
         r = m["resultats"]
         self.assertEqual((r["outils"]["points"], r["code"]["points"], r["francais"]["points"], r["consignes"]["points"]), (6, 8, 4, 4))
         self.assertEqual(r["vitesse"]["tok_s"], 40.0)
@@ -178,7 +178,7 @@ class Banc(unittest.TestCase):
         self.assertIn("40 jetons/s", bench.summary(m))
 
     def test_mauvais_modele(self):
-        m = bench.executer(Faux(False, 5.0), "petit")
+        m = bench.run(Faux(False, 5.0), "petit")
         self.assertEqual(m["resultats"]["code"]["points"], 0)
         self.assertEqual(m["resultats"]["outils"]["points"], 2, "seules les deux questions sans outil sont réussies")
         det = m["resultats"]["outils"]["details"]
@@ -188,12 +188,12 @@ class Banc(unittest.TestCase):
         self.assertLess(m["notes"]["polyvalent"], 4)
 
     def test_modele_rapide_mais_sans_outils_est_plafonne(self):
-        m = bench.executer(Faux(False, 120.0), "rapide-sans-outils")
+        m = bench.run(Faux(False, 120.0), "rapide-sans-outils")
         self.assertEqual(m["notes"]["rapide"], 4, "très rapide, mais inutilisable pour Lutin sans appel d'outils")
 
     def test_mode_rapide_ne_fait_que_la_vitesse(self):
         faux = Faux(True, 40.0)
-        m = bench.executer(faux, "m", rapide=True)
+        m = bench.run(faux, "m", rapide=True)
         self.assertEqual(list(m["resultats"]), ["vitesse"])
         self.assertFalse(m["complet"])
         self.assertEqual(list(m["notes"]), ["rapide"])
@@ -201,13 +201,13 @@ class Banc(unittest.TestCase):
 
     def test_modele_qui_refuse_think_est_reessaye_sans(self):
         faux = Faux(True, sans_think=True)
-        m = bench.executer(faux, "ancien")
+        m = bench.run(faux, "ancien")
         self.assertNotIn("erreur", m)
         self.assertEqual(m["resultats"]["code"]["points"], 8)
         self.assertTrue(all("think" not in c for c in faux.appels[1:]))
 
     def test_panne_en_cours_de_route_garde_ce_qui_est_mesure(self):
-        m = bench.executer(Faux(True, panne_a="ciel est bleu"), "tombe")
+        m = bench.run(Faux(True, panne_a="ciel est bleu"), "tombe")
         self.assertIn("Français", m["erreur"])
         self.assertIn("vitesse", m["resultats"])
         self.assertIn("code", m["resultats"])
@@ -216,7 +216,7 @@ class Banc(unittest.TestCase):
 
     def test_progression(self):
         vu = []
-        bench.executer(Faux(), "m", progression=lambda nom, i, n: vu.append((nom, i, n)))
+        bench.run(Faux(), "m", progression=lambda nom, i, n: vu.append((nom, i, n)))
         self.assertEqual(vu[0], ("Vitesse", 0, 5))
         self.assertEqual(vu[-1][1:], (4, 5))
 
@@ -251,15 +251,15 @@ class Banc(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             f = Path(t) / "cache" / "bench.json"
             self.assertEqual(bench.read(f), {})
-            m = bench.executer(Faux(), "qwen3:8b", resume_machine="PC test")
+            m = bench.run(Faux(), "qwen3:8b", resume_machine="PC test")
             bench.save(f, m)
             bench.save(f, dict(m, modele="autre"))
             self.assertEqual(set(bench.read(f)), {"qwen3:8b", "autre"})
             f.write_text("{pas du json", encoding="utf-8")
             self.assertEqual(bench.read(f), {})
-            exporte = json.loads(bench.exporter(m))
+            exporte = json.loads(bench.export(m))
             self.assertEqual((exporte["modele"], exporte["machine"]), ("qwen3:8b", "PC test"))
-            self.assertNotIn(str(Path(t)), bench.exporter(m))
+            self.assertNotIn(str(Path(t)), bench.export(m))
 
 
 if __name__ == "__main__":

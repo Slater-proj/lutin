@@ -21,7 +21,7 @@ from .i18n import t as _t
 RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 SHUTDOWN_DELAY_S = 30
 WAKE_WAIT_S = 300          # cinq minutes : au-delà, le réveil n'a pas abouti — l'état revient à « pas démarrée » avec la raison, au lieu de rester bloqué sur « réveil envoyé »
-SEUIL_RAISONS_S = 120          # après deux minutes sans réponse, on liste ce qui bloque d'habitude
+REASONS_THRESHOLD_S = 120          # après deux minutes sans réponse, on liste ce qui bloque d'habitude
 PROBE_PORTS = (445, 135, 139, 3389, 22, 80, 443, 5985)          # un système allumé accepte ou REFUSE une connexion sur l'un d'eux (un port fermé répond « refusé ») : c'est la preuve qu'il est là
 TASK_NAME = "Lutin"
 UNIT_NAME = "lutin.service"
@@ -117,7 +117,7 @@ def send_wake(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socke
 
 def failure_reason(secondes_depuis_reveil, adresse_machine=""):
     """Quand la machine ne répond toujours pas : ce qu'il faut vérifier, dans l'ordre. Vide tant qu'il est trop tôt pour conclure."""
-    if secondes_depuis_reveil < SEUIL_RAISONS_S:
+    if secondes_depuis_reveil < REASONS_THRESHOLD_S:
         return ""
     return _t("Elle ne répond toujours pas. Vérifie : le Wake-on-LAN activé dans le BIOS de la machine ; la carte réseau autorisée à la réveiller ; "
               "un câble Ethernet (le Wi-Fi réveille rarement) ; sous Windows, le « démarrage rapide » désactivé ; l'adresse MAC exacte ; et qu'elle ouvre sa session toute seule (auto-connexion) pour que Lutin démarre.")
@@ -243,7 +243,7 @@ WINDOWS_ADAPTERS_SCRIPT = (
 
 def network_adapters(lanceur=subprocess.run, systeme_actuel=None, racine_sys="/sys/class/net", sortie_ip=None):
     """Les cartes réseau physiques actives de cette machine : [{nom, mac, ip, filaire, reveil}] (reveil : True / False / None si on ne sait pas)."""
-    s = systeme_actuel or systeme()
+    s = systeme_actuel or system()
     try:
         if s == "windows":
             r = lanceur(["powershell", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_ADAPTERS_SCRIPT], capture_output=True, timeout=20, creationflags=0x08000000)
@@ -301,7 +301,7 @@ def windows_fast_startup():
 
 def wake_state(ip_locale="", cartes=None, en_docker=False, systeme_actuel=None, demarrage_rapide=None):
     """Ce que cette machine dit de sa capacité à être réveillée à distance : {mac, carte, pret, avertissements}. `pret` : True (tout est en règle), False (un réglage manque), None (impossible à vérifier d'ici)."""
-    s = systeme_actuel or systeme()
+    s = systeme_actuel or system()
     if en_docker:
         return {"mac": "", "carte": "", "pret": None, "avertissements": [_t("Lutin tourne dans un conteneur : il ne voit pas la carte réseau de la machine hôte. Renseigne son adresse MAC à la main (« ip link » sur l'hôte) et active le Wake-on-LAN sur l'hôte.")]}
     cartes = cartes if cartes is not None else network_adapters(systeme_actuel=s)
@@ -335,7 +335,7 @@ SHUTDOWN = {"minuteur": None, "quand": 0.0, "par": ""}
 LOCK = threading.Lock()
 
 
-def systeme():
+def system():
     if os.name == "nt":
         return "windows"
     return "macos" if sys.platform == "darwin" else "linux"
@@ -343,7 +343,7 @@ def systeme():
 
 def schedule_shutdown(par, lanceur=subprocess.run, delai=SHUTDOWN_DELAY_S, systeme_actuel=None, journaliser=lambda t: None):
     """Éteint cette machine dans `delai` secondes (annulable). Renvoie le délai. À n'appeler que si le propriétaire l'a autorisée."""
-    commande = SHUTDOWN_COMMANDS.get(systeme_actuel or systeme())
+    commande = SHUTDOWN_COMMANDS.get(systeme_actuel or system())
     if not commande:
         raise ValueError(_t("Système non pris en charge."))
 
@@ -404,7 +404,7 @@ def unit_folder(maison=None):
 
 def limits(systeme_actuel=None):
     """Ce que le démarrage automatique ne peut PAS faire, dit à l'utilisateur."""
-    s = systeme_actuel or systeme()
+    s = systeme_actuel or system()
     if s == "windows":
         return _t("Lutin démarre à l'ouverture de ta session Windows (pas comme service : un service n'a ni la carte graphique ni le bureau). Pour un PC qui doit démarrer sans personne, active l'auto-connexion Windows et, dans le BIOS, « redémarrer après une coupure de courant ».")
     if s == "linux":
@@ -461,7 +461,7 @@ def windows_command(commande=None):
 
 def startup_state(lanceur=subprocess.run, systeme_actuel=None, maison=None, registre=None):
     """{installe, possible, limites}."""
-    s = systeme_actuel or systeme()
+    s = systeme_actuel or system()
     if s == "windows":
         installe = bool((registre or WindowsRegistry()).lire(TASK_NAME))
         if not installe:          # une ancienne version a pu créer une tâche planifiée : elle compte aussi (et se retire avec le bouton)
@@ -486,7 +486,7 @@ def startup_state_memo():
 
 
 def install_startup(lanceur=subprocess.run, systeme_actuel=None, maison=None, commande=None, registre=None):
-    s = systeme_actuel or systeme()
+    s = systeme_actuel or system()
     if s == "windows":
         commande = commande or [sys.executable, "-m", "lutin", "zone", "--no-browser"]          # « zone » = le serveur ET l'icône près de l'horloge ; « serve » seul tournait sans aucune icône
         try:
@@ -513,7 +513,7 @@ def install_startup(lanceur=subprocess.run, systeme_actuel=None, maison=None, co
 
 
 def remove_startup(lanceur=subprocess.run, systeme_actuel=None, maison=None, registre=None):
-    s = systeme_actuel or systeme()
+    s = systeme_actuel or system()
     if s == "windows":
         (registre or WindowsRegistry()).supprimer(TASK_NAME)
         try:

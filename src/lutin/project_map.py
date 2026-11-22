@@ -15,7 +15,7 @@ PLAN = {"sections": {}, "date": 0.0, "valide": False, "en_cours": False}
 PLAN_MAX = 6500                 # caractères au plus dans le prompt (environ 2 000 jetons)
 
 
-PLAN_DELAI = 300                # secondes avant de reconstruire le plan quand rien n'a changé
+PLAN_TIMEOUT = 300                # secondes avant de reconstruire le plan quand rien n'a changé
 
 
 PLAN_EXT = {".py", ".js", ".html", ".md", ".bat", ".ps1", ".txt", ".json"}
@@ -89,7 +89,7 @@ def build_plan():
 
 def refresh_plan(force=False):
     """Reconstruit le plan en arrière-plan (jamais bloquant : le tour en cours utilise la dernière version)."""
-    if PLAN["en_cours"] or (not force and PLAN["valide"] and time.time() - PLAN["date"] < PLAN_DELAI):
+    if PLAN["en_cours"] or (not force and PLAN["valide"] and time.time() - PLAN["date"] < PLAN_TIMEOUT):
         return
     PLAN["en_cours"] = True
 

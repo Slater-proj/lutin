@@ -9,7 +9,7 @@ from datetime import date
 from . import core as _m
 from .i18n import t as _t
 
-PETIT_B = 10          # au plus 10 milliards de paramètres : le modèle est « petit » pour cette tâche
+SMALL_B = 10          # au plus 10 milliards de paramètres : le modèle est « petit » pour cette tâche
 REQUEST = re.compile(r"\b(actualit[ée]s?|news|nouvelles?\s+du\s+jour|derni[eè]res?\s+nouvelles?|quoi\s+de\s+neuf|infos?\s+du\s+jour|à\s+la\s+une|headlines|what'?s\s+new\s+today)\b", re.I)
 CLEANUP = re.compile(r"^(?:peux-tu|pourrais-tu|tu\s+peux|donne[- ]moi|dis[- ]moi|je\s+voudrais|j'aimerais|cherche|trouve|résume|résumé\s+de)\s+", re.I)
 
@@ -30,7 +30,7 @@ EMPTY_TOPIC = frozenset("internet web net ligne lien liens link links google rec
 
 
 SEARCH_NAME = re.compile(r"\b(?:de|des|la|une|ta|tes|ma|mes|cette|ces|ton|mon|en|ou|et)\s+recherches?\b", re.I)          # « tes résultats de recherche » : un nom, pas un ordre
-RECLAMATION = re.compile(r"\btu\s+(?:ne|n')|\b(?:m')?as\s+pas\b|\bm[êe]me\s+r[ée]ponse\b|\bd[ée]j[àa]\b", re.I)                    # « tu ne m'as pas donné… », « c'est la même réponse » : un reproche, pas une demande
+COMPLAINT = re.compile(r"\btu\s+(?:ne|n')|\b(?:m')?as\s+pas\b|\bm[êe]me\s+r[ée]ponse\b|\bd[ée]j[àa]\b", re.I)                    # « tu ne m'as pas donné… », « c'est la même réponse » : un reproche, pas une demande
 SEARCH_ORDER = re.compile(r"\b(?:fai[ts]|fais|faire|lance[rz]?|effectue[rz]?|fait)\s+(?:moi\s+)?(?:une\s+)?recherches?\b", re.I)          # « fais une recherche sur… » : là, c'est bien un ordre
 PROPER_NAME = re.compile(r"[A-ZÀ-ÖØ-Þ][\wà-öø-ÿ'’-]+(?:\s+[A-ZÀ-ÖØ-Þ][\wà-öø-ÿ'’-]+)*")
 
@@ -60,7 +60,7 @@ def guided_mode(texte, modele):
         return "lecture"
     if REQUEST.search(texte):
         return "actualites" if small_model(modele) else ""
-    if NOT_THE_WEB.search(texte) or RECLAMATION.search(texte) or not _words(texte):          # code, fichiers... ; un reproche ; ou rien à chercher (« Cherche » tout seul)
+    if NOT_THE_WEB.search(texte) or COMPLAINT.search(texte) or not _words(texte):          # code, fichiers... ; un reproche ; ou rien à chercher (« Cherche » tout seul)
         return ""
     sans_nom = SEARCH_NAME.sub(" ", texte)
     if EXPLICIT.search(sans_nom) or SEARCH_ORDER.search(texte) or (LINK.search(sans_nom) and WEB_TOPIC.search(texte)):
@@ -81,7 +81,7 @@ def model_billions(nom):
 def small_model(nom):
     """Petit, ou de taille inconnue : dans le doute on guide (guider un grand modèle ne coûte presque rien, ne pas guider un petit le fait échouer)."""
     b = model_billions(nom)
-    return b == 0 or b <= PETIT_B
+    return b == 0 or b <= SMALL_B
 
 
 MONTHS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre")

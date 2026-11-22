@@ -96,7 +96,7 @@ class BancIndependant(unittest.TestCase):
                 self.appels.append(corps)
                 return {"message": {"content": "Bonjour"}, "eval_count": 100, "eval_duration": 2_000_000_000, "prompt_eval_count": 30, "prompt_eval_duration": 1_000_000_000}
         mo = Moteur()
-        banc = bench.Banc(bench.AdaptateurMoteur(mo), "m", 4096)
+        banc = bench.Bench(bench.EngineAdapter(mo), "m", 4096)
         v = banc.vitesse()
         self.assertEqual(v["tok_s"], 50.0)
         self.assertEqual(mo.appels[0]["model"], "m")
@@ -106,7 +106,7 @@ class BancIndependant(unittest.TestCase):
             def chat(self, corps, delai=60):
                 raise ValueError("le serveur ne répond pas")
         with self.assertRaises(bench.OllamaError):
-            bench.Banc(bench.AdaptateurMoteur(Panne()), "m").vitesse()
+            bench.Bench(bench.EngineAdapter(Panne()), "m").vitesse()
 
 
 if __name__ == "__main__":

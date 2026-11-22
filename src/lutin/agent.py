@@ -866,7 +866,7 @@ def bench_client(r=None):
     """Ce que le banc d'essai interroge : Ollama directement, ou le moteur choisi (llama.cpp, serveur compatible OpenAI) derrière l'adaptateur du banc."""
     from . import bench
     local = local_engine(r)
-    return _m._Ollama(_m.OLLAMA) if local.id == _moteurs.OLLAMA else bench.AdaptateurMoteur(local)
+    return _m._Ollama(_m.OLLAMA) if local.id == _moteurs.OLLAMA else bench.EngineAdapter(local)
 
 
 def current_engine(r=None):

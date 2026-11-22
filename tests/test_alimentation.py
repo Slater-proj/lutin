@@ -101,7 +101,7 @@ class Reveil(unittest.TestCase):
 
     def test_les_raisons_arrivent_apres_trois_minutes(self):
         self.assertEqual(power.failure_reason(30), "")
-        self.assertIn("BIOS", power.failure_reason(power.SEUIL_RAISONS_S + 1))
+        self.assertIn("BIOS", power.failure_reason(power.REASONS_THRESHOLD_S + 1))
         self.assertIn("démarrage rapide", power.failure_reason(400))
 
 

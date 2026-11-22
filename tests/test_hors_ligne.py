@@ -22,7 +22,7 @@ for d in ("projet", "donnees", "memoire"):
 from lutin import offline, updates, ollama_client  # noqa: E402
 from lutin import core as A  # noqa: E402
 from lutin import security as S  # noqa: E402
-from lutin.hardware import Gpu, Profil  # noqa: E402
+from lutin.hardware import Gpu, Profile  # noqa: E402
 
 
 class FauxOllama(BaseHTTPRequestHandler):
@@ -154,7 +154,7 @@ class Points_de_sortie(Base):
         self.assertTrue({"web_chercher", "web_lire"} <= noms)
 
     def test_verification_des_modeles_ne_sort_pas_sur_internet(self):
-        machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
+        machine = Profile(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": "https://exemple.org/catalogue.json"}
         d = {"cache": Path(self.t.name) / "cache", "config": self.config.parent}
         r = updates.check(machine, cfg, d, ollama_client.Ollama(ADRESSE_OLLAMA), force=True)        # vrai http_get, vraie résolution : rien ne doit partir

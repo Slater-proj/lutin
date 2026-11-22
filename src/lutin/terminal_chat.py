@@ -1,7 +1,7 @@
 """`lutin chat` : discuter dans le terminal, comme dans l'interface web (mêmes outils, mêmes accords, même historique)."""
 import sys
 
-from .client import ErreurClient
+from .client import ClientError
 from .i18n import t as _t
 
 HELP = """Commandes :
@@ -72,10 +72,10 @@ class Terminal:
             if self.conversation:
                 try:
                     self.client.envoyer("/api/arreter", {"conversation": self.conversation})
-                except ErreurClient:
+                except ClientError:
                     pass
             self.ecrire("\n(arrêté)")
-        except ErreurClient as e:
+        except ClientError as e:
             self.erreur("✘ " + str(e))
         self.ecrire()
 
@@ -133,7 +133,7 @@ class Terminal:
                 try:
                     if not self.commande(ligne):
                         return 0
-                except ErreurClient as e:
+                except ClientError as e:
                     self.erreur("✘ " + str(e))
                 continue
             self.repondre(ligne)

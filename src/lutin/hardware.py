@@ -36,14 +36,14 @@ def integrated_is(g):
 
 
 @dataclass
-class Disque:
+class Disk:
     racine: str
     libre_go: float
     total_go: float
 
 
 @dataclass
-class Profil:
+class Profile:
     systeme: str = ""                 # windows | linux | macos
     architecture: str = ""
     cpu: str = ""
@@ -106,9 +106,9 @@ class Profil:
 
     @staticmethod
     def depuis_dict(d):
-        p = Profil(**{k: v for k, v in d.items() if k not in ("gpus", "disques")})
+        p = Profile(**{k: v for k, v in d.items() if k not in ("gpus", "disques")})
         p.gpus = [Gpu(**g) for g in d.get("gpus", [])]
-        p.disques = [Disque(**x) for x in d.get("disques", [])]
+        p.disques = [Disk(**x) for x in d.get("disques", [])]
         return p
 
 
@@ -196,7 +196,7 @@ def parse_gpus_windows(texte):
     return gpus
 
 
-def analyser_gpu_declare(texte):
+def parse_declared_gpu(texte):
     """Carte graphique déclarée à la main (variable LUTIN_GPU, utile en conteneur ou quand la détection échoue) : « 24 », « NVIDIA RTX 4090=24 » ou « Radeon RX 7900=20:amd »."""
     texte = (texte or "").strip()
     if not texte:
@@ -308,7 +308,7 @@ def impose_budget(texte):
     return round(v, 1) if 0.5 <= v <= 4096 else 0.0
 
 
-def limite_conteneur(racine="/sys/fs/cgroup"):
+def container_limit(racine="/sys/fs/cgroup"):
     """(limite, utilisé) en Go de la mémoire d'un conteneur à qui on a donné une limite (mem_limit, --memory), ou (0, 0) sans limite : /proc/meminfo montre alors la RAM de la machine hôte, pas ce que le conteneur a le droit d'utiliser."""
     base = Path(racine)
     for limite_f, usage_f in (("memory.max", "memory.current"), ("memory/memory.limit_in_bytes", "memory/memory.usage_in_bytes")):          # cgroup v2, puis v1
@@ -330,7 +330,7 @@ def read_ram(systeme, lanceur=launch):
             total, dispo = parse_meminfo(Path("/proc/meminfo").read_text())
         except OSError:
             return 0.0, 0.0
-        limite, utilise = limite_conteneur()
+        limite, utilise = container_limit()
         if limite and limite < total:                                           # conteneur limité : c'est cette limite qui compte, pas la RAM de la machine
             total, dispo = limite, min(dispo, max(0.0, limite - utilise))
         return total, dispo
@@ -361,22 +361,22 @@ def list_disks(systeme):
         if cle in vus:
             continue
         vus.add(cle)
-        disques.append(Disque(r, round(u.free / GO, 1), round(u.total / GO, 1)))
+        disques.append(Disk(r, round(u.free / GO, 1), round(u.total / GO, 1)))
     return disques
 
 
-def profil_demo():
+def demo_profile():
     """Une machine fictive (variable LUTIN_DEMO) : les captures d'écran de la documentation ne montrent jamais le matériel ni les chemins de celui qui les prend."""
-    return Profil(systeme="windows", architecture="amd64", cpu="AMD Ryzen 7 7700 8-Core Processor", coeurs=16, ram_go=32.0, ram_libre_go=21.4,
-                  gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12.0, 10.6, "démonstration")], disques=[Disque("C:\\", 412.0, 931.0)])
+    return Profile(systeme="windows", architecture="amd64", cpu="AMD Ryzen 7 7700 8-Core Processor", coeurs=16, ram_go=32.0, ram_libre_go=21.4,
+                  gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12.0, 10.6, "démonstration")], disques=[Disk("C:\\", 412.0, 931.0)])
 
 
-def detecter(lanceur=launch):
+def detect(lanceur=launch):
     """Le profil complet de cette machine."""
     if os.environ.get("LUTIN_DEMO"):
-        return profil_demo()
+        return demo_profile()
     systeme = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), platform.system().lower())
-    p = Profil(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=cpus_available())
+    p = Profile(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=cpus_available())
     if systeme == "linux" and (not p.cpu or p.cpu in ("x86_64", "aarch64")):
         try:
             p.cpu = name_cpu_linux(Path("/proc/cpuinfo").read_text()) or p.cpu
@@ -393,7 +393,7 @@ def detecter(lanceur=launch):
     elif systeme == "macos" and p.architecture in ("arm64", "aarch64"):
         autres = [Gpu("Apple Silicon (mémoire partagée)", "apple", round(p.ram_go, 1), 0.0, "mémoire unifiée")]
     p.gpus = nvidia + autres
-    declare = analyser_gpu_declare(os.environ.get("LUTIN_GPU", ""))
+    declare = parse_declared_gpu(os.environ.get("LUTIN_GPU", ""))
     if declare:
         p.gpus = declare                                     # la déclaration de l'utilisateur l'emporte sur la détection
     p.disques = list_disks(systeme)

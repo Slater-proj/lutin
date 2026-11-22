@@ -11,7 +11,7 @@ from unittest import mock
 
 import context  # noqa: F401
 from lutin import model_catalog, terminal_chat, cli, client, config, setup_wizard, hardware, updates, ollama_client
-from lutin.hardware import Disque, Gpu, Profil
+from lutin.hardware import Disk, Gpu, Profile
 
 PULLS, INSTALLES = [], {}
 
@@ -48,7 +48,7 @@ threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
 os.environ["OLLAMA_URL"] = "http://127.0.0.1:%d" % SERVEUR.server_address[1]
 
 DISQUE_LARGE = mock.Mock(free=800 * 1024 ** 3, total=1000 * 1024 ** 3, used=200 * 1024 ** 3)          # les tests ne dépendent pas de la place libre du PC qui les lance
-GROS = Profil(systeme="linux", ram_go=32, ram_libre_go=20, gpus=[Gpu("RTX", "nvidia", 24)], disques=[Disque("/", 500, 1000)])
+GROS = Profile(systeme="linux", ram_go=32, ram_libre_go=20, gpus=[Gpu("RTX", "nvidia", 24)], disques=[Disk("/", 500, 1000)])
 
 
 def es(reponses=None, oui=False):
@@ -196,7 +196,7 @@ class ChatTerminal(unittest.TestCase):
     def test_erreur_du_serveur_est_affichee_sans_planter(self):
         class Casse(FauxClient):
             def flux(self, chemin, corps):
-                raise client.ErreurClient("Lutin ne répond pas")
+                raise client.ClientError("Lutin ne répond pas")
                 yield
         sortie = []
         t = terminal_chat.Terminal(Casse([]), entree=lambda q: "", sortie=sortie.append, erreur=sortie.append)
@@ -246,7 +246,7 @@ class Cli(unittest.TestCase):
             cli.parser().parse_args(["setup", "--niveau", "ouvert"])
 
     def test_setup_automatique_de_bout_en_bout(self):
-        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"),                 mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
+        with mock.patch.object(hardware, "detect", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"),                 mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
             code, sortie = self.lancer("setup", "--oui", "--travail", str(Path(self.t.name) / "w"))
         self.assertEqual(code, 0, sortie)
         d = config.folders()
@@ -254,7 +254,7 @@ class Cli(unittest.TestCase):
         self.assertEqual(len(PULLS), 1)
 
     def test_setup_proxy_invalide_est_refuse_proprement(self):
-        with mock.patch.object(hardware, "detecter", return_value=GROS):
+        with mock.patch.object(hardware, "detect", return_value=GROS):
             code, sortie = self.lancer("setup", "--oui", "--niveau", "proxy", "--sans-modeles", "--sans-ollama", "--travail", str(Path(self.t.name) / "w"))
         self.assertEqual(code, 2)
         self.assertIn("adresse publique", sortie)
@@ -266,7 +266,7 @@ class Cli(unittest.TestCase):
         self.assertIn("cette machine seulement", sortie)
 
     def test_modeles_recommander_et_lister(self):
-        with mock.patch.object(hardware, "detecter", return_value=GROS):
+        with mock.patch.object(hardware, "detect", return_value=GROS):
             code, sortie = self.lancer("modeles")
             self.assertEqual(code, 0)
             self.assertIn("Polyvalent", sortie)
@@ -303,11 +303,11 @@ class Cli(unittest.TestCase):
 class Console(unittest.TestCase):
     def test_fichier_console_absent_ou_abime(self):
         with tempfile.TemporaryDirectory() as t:
-            c = client.ClientLocal(t)
+            c = client.LocalClient(t)
             self.assertFalse(c.disponible())
             (Path(t) / "console.json").write_text("{pas du json", encoding="utf-8")
             self.assertFalse(c.disponible())
-            with self.assertRaises(client.ErreurClient):
+            with self.assertRaises(client.ClientError):
                 c.obtenir("/api/etat")
 
 
@@ -558,7 +558,7 @@ class CommandesDuQuotidien(unittest.TestCase):
 
     def test_reconfigurer_garde_les_autres_dossiers_de_travail(self):
         self.lancer("travaux", "ajouter", self.dossier("deux"))
-        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
+        with mock.patch.object(hardware, "detect", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
             code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("principal-neuf"))
         self.assertEqual(code, 0, sortie)
         cfg = config.load(self.d)
@@ -612,7 +612,7 @@ class CommandesDuQuotidien(unittest.TestCase):
 
         def reponse(chemin, corps=None, delai=5, methode=None):
             return {"models": [{"name": "qwen3:8b", "digest": "d"}]} if chemin == "/api/tags" else faux
-        with mock.patch.object(ollama_client.Ollama, "json", side_effect=reponse), mock.patch.object(hardware, "detecter", return_value=GROS):
+        with mock.patch.object(ollama_client.Ollama, "json", side_effect=reponse), mock.patch.object(hardware, "detect", return_value=GROS):
             code, sortie = self.lancer("bench", "qwen3:8b", "--rapide", "--exporter")
         self.assertEqual(code, 0, sortie)
         self.assertIn("50 jetons/s", sortie)
@@ -634,7 +634,7 @@ class CommandesDuQuotidien(unittest.TestCase):
         self.assertIn("coupé", self.lancer("hors-ligne", "non")[1])
 
     def test_ecoute_imposee_seulement_hors_niveau_local(self):
-        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"):
+        with mock.patch.object(hardware, "detect", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"):
             code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"), "--ecoute", "0.0.0.0")
             self.assertEqual(code, 2, "au niveau local, on n'impose pas l'adresse d'écoute")
             self.assertIn("écoute", sortie)

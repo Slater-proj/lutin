@@ -228,7 +228,7 @@ def run(cfg, dossiers, es, options=None, profil=None, ollama=None):
     if cfg.get("installe") and not (options.get("reconfigurer") or any(options.get(k) not in (None, False) for k in RECONFIGURATION_KEYS)):
         return installed_already(cfg, dossiers, es, ollama)
     choose_language(es, options, cfg)
-    profil = profil or hardware.detecter()
+    profil = profil or hardware.detect()
     es.dire(_t("Lutin {} : installation guidée.").format(__import__("lutin").__version__))
     es.dire(_t("\nTa machine : ") + profil.resume())
     if profil.sans_gpu():
@@ -298,7 +298,7 @@ def run(cfg, dossiers, es, options=None, profil=None, ollama=None):
     principal = cfg["modeles"]["choisis"].get("polyvalent") or next(iter(cfg["modeles"]["choisis"].values()), "")
     if principal and any(c.id == principal for c in liste) and es.confirmer(_t("Tester la vitesse de {} maintenant ? (une vingtaine de secondes)").format(principal), False):
         try:
-            mesure = bench.executer(ollama or ollama_client.Ollama(), principal, rapide=True, resume_machine=profil.resume())
+            mesure = bench.run(ollama or ollama_client.Ollama(), principal, rapide=True, resume_machine=profil.resume())
             bench.save(Path(dossiers["cache"]) / "bench.json", mesure)
             es.dire("  {} : {}".format(principal, bench.summary(mesure)))
         except (ollama_client.OllamaError, OSError) as e:

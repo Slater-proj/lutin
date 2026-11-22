@@ -38,10 +38,10 @@ CASES_TOOLS = [
 ]
 WORDS_FR = {"le", "la", "les", "de", "des", "du", "un", "une", "et", "est", "que", "qui", "dans", "pour", "pas", "sur", "au", "aux", "ce", "cette", "il", "elle", "à", "en", "par", "se"}
 WORDS_EN = {"the", "and", "is", "of", "to", "in", "that", "it", "for", "with", "this", "are"}
-SURNOMS = {"vitesse": "Vitesse", "outils": "Appel d'outils", "code": "Code (lecture)", "francais": "Français", "consignes": "Consignes"}
+NICKNAMES = {"vitesse": "Vitesse", "outils": "Appel d'outils", "code": "Code (lecture)", "francais": "Français", "consignes": "Consignes"}
 
 
-def etiquette_code(question):
+def code_label(question):
     """Le petit programme de la question, sur une ligne (pour dire dans le détail LESQUELLES ont échoué)."""
     m = re.search(r"```python\s*(.*?)```", question, re.S)
     code = m.group(1) if m else question
@@ -122,7 +122,7 @@ def _result(details):
     return {"points": sum(d["ok"] for d in details), "sur": len(details), "details": details}
 
 
-class AdaptateurMoteur:
+class EngineAdapter:
     """Fait parler le banc à N'IMPORTE QUEL moteur (llama.cpp, serveur compatible OpenAI…) comme à Ollama : le banc envoie des demandes au format d'Ollama, le moteur les traduit.
     Une panne du moteur devient une `ErreurOllama`, que le banc sait noter."""
 
@@ -138,7 +138,7 @@ class AdaptateurMoteur:
             raise OllamaError(str(e)) from e
 
 
-class Banc:
+class Bench:
     def __init__(self, ollama, modele, num_ctx=4096, delai=300, options=None):
         self.ollama, self.modele, self.num_ctx, self.delai = ollama, modele, num_ctx, delai
         self.options = dict(options or {})                 # options d'Ollama en plus (le calibrage y met num_thread)
@@ -193,7 +193,7 @@ class Banc:
         return _result(details)
 
     def code(self):
-        details = [{"test": _t("Lire un programme : {}").format(etiquette_code(q)), "ok": exact_reply(self.texte(q, 80), a)} for q, a in QUESTIONS_CODE]
+        details = [{"test": _t("Lire un programme : {}").format(code_label(q)), "ok": exact_reply(self.texte(q, 80), a)} for q, a in QUESTIONS_CODE]
         return _result(details)
 
     def francais(self):
@@ -217,18 +217,18 @@ class Banc:
                           {"test": _t("Donner une liste numérotée d'exactement 4 éléments"), "ok": len(liste) == 4 and all(re.match(r"^[1-4][.)]", ligne) for ligne in liste)}])
 
 
-def executer(ollama, modele, rapide=False, progression=None, resume_machine="", num_ctx=4096, delai=300, horloge=time.time):
+def run(ollama, modele, rapide=False, progression=None, resume_machine="", num_ctx=4096, delai=300, horloge=time.time):
     """Lance le banc. `rapide` : seulement la vitesse (environ 20 secondes). Renvoie la mesure complète, jamais d'exception : une panne est notée dans `erreur`."""
-    banc = Banc(ollama, modele, num_ctx, delai)
+    banc = Bench(ollama, modele, num_ctx, delai)
     mesure = {"modele": modele, "date": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(horloge())), "machine": resume_machine, "complet": not rapide, "resultats": {}, "notes": {}}
     etapes = [("vitesse", banc.vitesse)] + ([] if rapide else [("outils", banc.outils), ("code", banc.code), ("francais", banc.francais), ("consignes", banc.consignes)])
     for i, (nom, fonction) in enumerate(etapes):
         if progression:
-            progression(SURNOMS[nom], i, len(etapes))
+            progression(NICKNAMES[nom], i, len(etapes))
         try:
             mesure["resultats"][nom] = fonction()
         except (OllamaError, OSError) as e:
-            mesure["erreur"] = "{} : {}".format(SURNOMS[nom], e)
+            mesure["erreur"] = "{} : {}".format(NICKNAMES[nom], e)
             break
     mesure["notes"] = grades_from(mesure["resultats"])
     return mesure
@@ -326,7 +326,7 @@ def regressions(chemin, seuil=0.25):
     return trouvees
 
 
-def exporter(mesure):
+def export(mesure):
     """Bloc à coller dans une proposition de note au catalogue (sans chemin ni donnée personnelle)."""
     return json.dumps({"modele": mesure["modele"], "date": mesure["date"][:10], "machine": mesure.get("machine", ""), "resultats": mesure["resultats"], "notes": mesure["notes"],
                        "complet": mesure["complet"]}, ensure_ascii=False, indent=1)

@@ -26,7 +26,7 @@ MAX_DOCUMENTS = 300
 FORMATS_READ_BY_EXTRACTION = (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx")
 PARTS_CACHE = {}
 INDEX_CACHE = {}                       # fichier -> (signature, morceaux, erreur, fréquences des mots) : seuls les fichiers modifiés sont relus
-RELIRE = "relire"                      # clé d'une erreur de file_chunks : le fichier n'a été lu qu'en partie (illisible un instant), ne pas garder l'index en cache
+REREAD = "relire"                      # clé d'une erreur de file_chunks : le fichier n'a été lu qu'en partie (illisible un instant), ne pas garder l'index en cache
 MAX_TEXT_SIZE = 600_000
 
 
@@ -179,7 +179,7 @@ def file_chunks(f):
     except OSError as e:
         # lu en partie seulement (un fichier ou une archive tenus un instant) : l'erreur le dit, et les index ne le gardent pas en cache sous la
         # signature du fichier (avant, l'index incomplet restait jusqu'à la prochaine modification du fichier)
-        erreur = {"nom": str(f) if isinstance(f, ConversationRef) else recall_label(f), "message": str(e), RELIRE: True}
+        erreur = {"nom": str(f) if isinstance(f, ConversationRef) else recall_label(f), "message": str(e), REREAD: True}
     for m in morceaux:
         m["tf"] = collections.Counter(words(m["titre"] + " " + m["texte"]))
         m["longueur"] = sum(m["tf"].values()) or 1
@@ -224,7 +224,7 @@ def index_recall():
             df_f = collections.Counter()
             for m in morceaux_f:
                 df_f.update(m["tf"].keys())
-            if (erreur_f or {}).get(RELIRE):
+            if (erreur_f or {}).get(REREAD):
                 sig, signature = None, None                        # relu au prochain appel
             INDEX_CACHE[cle] = (sig, morceaux_f, erreur_f, df_f)
     morceaux, erreurs, df = [], [], collections.Counter()
@@ -285,7 +285,7 @@ def thread_chunks(ident):
     for m in morceaux:
         df.update(m["tf"].keys())
     moyenne = (sum(m["longueur"] for m in morceaux) / len(morceaux)) if morceaux else 1.0
-    if (erreur or {}).get(RELIRE):
+    if (erreur or {}).get(REREAD):
         return morceaux, df, moyenne                                   # lu en partie : pas en cache, relu à la prochaine réponse
     if len(THREAD) > 20:
         THREAD.clear()
