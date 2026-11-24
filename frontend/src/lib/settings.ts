@@ -69,6 +69,13 @@ export const FIELDS: readonly Field[] = [
 
 export type Value = boolean | number | string | string[] | null;
 
+/** What may run without an approval is changed only by whoever can configure Lutin, on a route of its own (api_v1.TOOL_SAFETY). */
+const TOOL_SAFETY: ReadonlySet<string> = new Set(["commands_without_approval", "disabled_tools", "tool_command_timeout_s"]);
+
+export function settingsPath(name: string): "/settings" | "/settings/tool-safety" {
+  return TOOL_SAFETY.has(name) ? "/settings/tool-safety" : "/settings";
+}
+
 export function fieldsOf(group: GroupId): Field[] {
   return FIELDS.filter((field) => field.group === group);
 }

@@ -25,7 +25,7 @@
   import LanguageChoice from "../components/LanguageChoice.svelte";
   import { api, ApiError } from "../lib/api";
   import { t, type MessageKey } from "../lib/messages";
-  import { fieldsOf, parseTyped, SECTION_IDS, SECTIONS, sectionOf, shown, type Field, type GroupId, type Part, type SectionId, type Value } from "../lib/settings";
+  import { fieldsOf, parseTyped, SECTION_IDS, SECTIONS, sectionOf, settingsPath, shown, type Field, type GroupId, type Part, type SectionId, type Value } from "../lib/settings";
 
   let section = $state<SectionId | null>(sectionOf(location.hash));
   const current = $derived<SectionId>(section ?? SECTION_IDS[0]);
@@ -56,7 +56,7 @@
     try {
       problem = "";
       errors = { ...errors, [field.name]: "" };
-      values = await api<Record<string, Value>>("PATCH", "/settings", { [field.name]: value });
+      values = await api<Record<string, Value>>("PATCH", settingsPath(field.name), { [field.name]: value });
       saved = label(field);
       clearTimeout(timer);
       timer = setTimeout(() => (saved = ""), 2500);

@@ -352,6 +352,7 @@
 "« pinned » doit être vrai ou faux.": "« pinned » must be true or false.",
 "« approved » doit être vrai ou faux.": "« approved » must be true or false.",
 "Réglage inconnu : {}.": "Unknown setting: {}.",
+"Réglage à changer par PATCH /settings/tool-safety (droit de configurer Lutin) : {}.": "Setting to change with PATCH /settings/tool-safety (right to configure Lutin): {}.",
 "Cette action modifie cette machine : elle demande une confirmation.": "This action changes this machine: it needs a confirmation.",
 "Valeur invalide pour « {} » (attendu : {}).": "Invalid value for « {} » (expected: {}).",
 "Rien à changer.": "Nothing to change.",

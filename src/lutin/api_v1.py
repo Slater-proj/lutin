@@ -341,11 +341,33 @@ def settings(request):
     return _settings(_m.settings())
 
 
+# What may run without an approval, which tools exist and how long a command may run: a stronger « allow » than an approval rule, so the same right
+# (configurator) changes them, on a route of their own (decided by the maintainer on 2026-11-24, review of 1.0).
+TOOL_SAFETY = ("commands_without_approval", "disabled_tools", "tool_command_timeout_s")
+
+
 @route("PATCH", "/settings", SESSION)
 def update_settings(request):
     """Changes some settings: {"temperature": 0.4, "web": false}. All or nothing: one unknown name or one value of the wrong kind and nothing is written.
-    The values are then checked and bounded by the function the French route calls; the answer is every setting as it now stands."""
-    body, changed = request.body, {}
+    The values are then checked and bounded by the function the French route calls; the answer is every setting as it now stands.
+    The settings of TOOL_SAFETY are refused here: they go through PATCH /settings/tool-safety."""
+    reserved = sorted(set(request.body) & set(TOOL_SAFETY))
+    if reserved:
+        raise ApiError(400, "invalid_request", _t("Réglage à changer par PATCH /settings/tool-safety (droit de configurer Lutin) : {}.").format(", ".join(reserved)))
+    return _patch_settings(request.body)
+
+
+@route("PATCH", "/settings/tool-safety", CONFIGURATOR)
+def update_tool_safety(request):
+    """The settings of TOOL_SAFETY, for whoever can configure Lutin; the answer is every setting as it now stands."""
+    others = sorted(set(request.body) - set(TOOL_SAFETY))
+    if others:
+        raise ApiError(400, "invalid_request", _t("Réglage inconnu : {}.").format(", ".join(others)))
+    return _patch_settings(request.body)
+
+
+def _patch_settings(body):
+    changed = {}
     unknown = sorted(set(body) - set(SETTINGS))
     if unknown:
         raise ApiError(400, "invalid_request", _t("Réglage inconnu : {}.").format(", ".join(unknown)))

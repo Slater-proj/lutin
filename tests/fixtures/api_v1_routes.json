@@ -1075,6 +1075,11 @@
   "right": "session"
  },
  {
+  "method": "PATCH",
+  "path": "/api/v1/settings/tool-safety",
+  "right": "configurator"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/setup",
   "right": "session"

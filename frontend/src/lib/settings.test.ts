@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FIELDS, GROUPS, SECTIONS, SECTION_IDS, fieldsOf, parseTyped, sectionOf, shown } from "./settings";
+import { FIELDS, GROUPS, SECTIONS, SECTION_IDS, fieldsOf, parseTyped, sectionOf, settingsPath, shown } from "./settings";
 
 const field = (name: string) => FIELDS.find((item) => item.name === name)!;
 
@@ -45,5 +45,13 @@ describe("settings", () => {
     expect(parseTyped(field("disabled_tools"), " shell \n\nweb_search\n")).toEqual({ ok: true, value: ["shell", "web_search"] });
     expect(shown(field("disabled_tools"), ["a", "b"])).toBe("a\nb");
     expect(shown(field("top_p"), null)).toBe("");
+  });
+});
+
+describe("where a setting is saved", () => {
+  it("what runs without approval goes to the route that asks the right to configure Lutin", () => {
+    for (const name of ["commands_without_approval", "disabled_tools", "tool_command_timeout_s"]) expect(settingsPath(name)).toBe("/settings/tool-safety");
+    expect(settingsPath("temperature")).toBe("/settings");
+    expect(FIELDS.filter((field) => settingsPath(field.name) !== "/settings").map((field) => field.name).sort()).toEqual(["commands_without_approval", "disabled_tools", "tool_command_timeout_s"]);
   });
 });

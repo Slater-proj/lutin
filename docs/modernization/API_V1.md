@@ -86,6 +86,9 @@ routes disappear with the old page, in one deletion.
   it is chosen conversation by conversation. Tool names (`disabled_tools`) are what the models see and are not translated (ADR 0007).
 - A write is all or nothing: an unknown name or a value of the wrong kind answers `400 invalid_request` and nothing is stored. Values are then checked
   and bounded by the function the French route calls (a dangerous command in `commands_without_approval` is refused, `max_steps` is kept within 4-40…).
+- `commands_without_approval`, `disabled_tools` and `tool_command_timeout_s` are read with the others but written only with
+  `PATCH /settings/tool-safety` (right `configurator`, like approval rules): what runs without an approval is a stronger « allow ». `PATCH /settings`
+  refuses them with `400 invalid_request`.
 
 ## Options of a conversation
 

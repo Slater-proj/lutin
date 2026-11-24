@@ -61,8 +61,9 @@ class Settings(unittest.TestCase):
         self.assertEqual((answer["engine"], answer["max_steps"], answer["tool_command_timeout_s"]), ("ollama", 14, 240))
 
     def test_a_change_is_stored_under_the_french_names_and_bounded_by_the_server(self):
+        self.assertEqual(V.call("PATCH", "/api/v1/settings/tool-safety", V.OWNER, body={"disabled_tools": ["calculer"]})[0], 200)
         status, answer = V.call("PATCH", "/api/v1/settings", V.OWNER, body={"temperature": 0.4, "web": False, "mode": "technical", "long_memory": "file", "top_p": 0.9, "max_steps": 99,
-                                                                               "model": "qwen3:4b", "disabled_tools": ["calculer"], "thinking_steps": "first"})
+                                                                               "model": "qwen3:4b", "thinking_steps": "first"})
         self.assertEqual((status, sorted(answer)), (200, sorted(api_v1.SETTINGS)))
         self.assertEqual((answer["temperature"], answer["web"], answer["mode"], answer["long_memory"], answer["top_p"], answer["model"], answer["disabled_tools"], answer["thinking_steps"]),
                          (0.4, False, "technical", "file", 0.9, "qwen3:4b", ["calculer"], "first"))
@@ -81,13 +82,29 @@ class Settings(unittest.TestCase):
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.DEVICE, body={"web": False})[1]["web"], False)
         self.assertEqual(V.call("GET", "/api/v1/settings", V.DEVICE)[1]["web"], False)
 
+    def test_what_runs_without_approval_is_changed_only_with_the_configurator_right(self):
+        """The commands without approval are a stronger « allow »: like approval rules, they need the configurator right (decided 2026-11-24)."""
+        before = V.call("GET", "/api/v1/settings", V.OWNER)[1]
+        for body in ({"commands_without_approval": ["pytest -q"]}, {"disabled_tools": []}, {"tool_command_timeout_s": 60}):
+            status, answer = V.call("PATCH", "/api/v1/settings/tool-safety", V.DEVICE, body=body)
+            self.assertEqual((status, answer["error"]["code"]), (403, "configurator"), body)
+            for caller in (V.DEVICE, V.OWNER):
+                status, answer = V.call("PATCH", "/api/v1/settings", caller, body=dict({"web": False}, **body))
+                self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"), "not through the session route: {}".format(body))
+        self.assertEqual(V.call("GET", "/api/v1/settings", V.OWNER)[1], before, "nothing was written")
+        status, answer = V.call("PATCH", "/api/v1/settings/tool-safety", V.OWNER, body={"commands_without_approval": ["pytest -q"], "tool_command_timeout_s": 60})
+        self.assertEqual((status, answer["commands_without_approval"], answer["tool_command_timeout_s"]), (200, ["pytest -q"], 60))
+        self.assertEqual(V.call("PATCH", "/api/v1/settings/tool-safety", V.OWNER, body={"web": False})[0], 400, "only the three settings it names")
+        self.assertEqual(V.call("PATCH", "/api/v1/settings/tool-safety", V.OWNER, body={"disabled_tools": [1]})[0], 400)
+        V.call("PATCH", "/api/v1/settings/tool-safety", V.OWNER, body={"commands_without_approval": [], "tool_command_timeout_s": 240})
+
     def test_a_write_is_all_or_nothing(self):
         before = V.call("GET", "/api/v1/settings", V.OWNER)[1]
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={"web": False, "modele": "x", "auto": 1}),
                          (400, {"error": {"code": "invalid_request", "message": "Réglage inconnu : auto, modele."}}))
         refused = (({"web": "yes"}, "web", "boolean"), ({"temperature": True}, "temperature", "number"), ({"max_steps": 1.5}, "max_steps", "integer"),
                    ({"top_p": "x"}, "top_p", "number or null"), ({"cluster": 1}, "cluster", "boolean or null"), ({"model": None}, "model", "string"),
-                   ({"disabled_tools": [1]}, "disabled_tools", "strings"), ({"models_by_engine": {"ollama": 3}}, "models_by_engine", "object"),
+                   ({"models_by_engine": {"ollama": 3}}, "models_by_engine", "object"),
                    ({"mode": "polyvalent"}, "mode", "general, technical, scenario, research, chat"), ({"mode": "mission"}, "mode", "general, technical, scenario, research, chat"),
                    ({"long_memory": "resume"}, "long_memory", "summary, file, ask"), ({"auto_recall": 3}, "auto_recall", "scenario, always, never"))
         for body, name, expected in refused:
@@ -98,9 +115,9 @@ class Settings(unittest.TestCase):
         before = V.call("GET", "/api/v1/settings", V.OWNER)[1]
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={"model": "not a name!"}), (400, {"error": {"code": "invalid_request", "message": "Nom de modèle invalide."}}))
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={"engine": "nope"}), (400, {"error": {"code": "invalid_request", "message": "Moteur inconnu."}}))
-        status, answer = V.call("PATCH", "/api/v1/settings", V.OWNER, body={"commands_without_approval": ["rm -rf build"]})
+        status, answer = V.call("PATCH", "/api/v1/settings/tool-safety", V.OWNER, body={"commands_without_approval": ["rm -rf build"]})
         self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"), "a dangerous command is refused, not silently dropped")
-        status, answer = V.call("PATCH", "/api/v1/settings", V.OWNER, body={"disabled_tools": ["no_such_tool"]})
+        status, answer = V.call("PATCH", "/api/v1/settings/tool-safety", V.OWNER, body={"disabled_tools": ["no_such_tool"]})
         self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
         self.assertEqual(V.call("GET", "/api/v1/settings", V.OWNER)[1], before)
 
