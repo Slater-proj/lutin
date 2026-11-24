@@ -164,6 +164,11 @@ class Errors(unittest.TestCase):
             api_v1._read_body(caller)
         self.assertEqual((caller.rfile.tell(), caller.close_connection), (0, True), "beyond the bound nothing is read, and the connection is closed")
 
+    def test_a_connection_that_sends_nothing_does_not_hold_a_thread_forever(self):
+        """Without a timeout, a client that opens connections and sends nothing (or trickles a body) holds one thread each, without end."""
+        self.assertIsNotNone(A.Handler.timeout)
+        self.assertLessEqual(A.Handler.timeout, 120)
+
     def test_an_upload_without_the_right_is_refused_before_its_body_is_kept(self):
         """An upload route accepts up to 1 GiB: read into memory before the right is checked, a few requests without a session would exhaust the memory."""
         class Caller:

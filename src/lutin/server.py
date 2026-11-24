@@ -52,6 +52,7 @@ class _CountedBody:
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "Lutin/" + _m.VERSION
+    timeout = 60          # seconds a read or a write may wait: an idle or trickling client no longer holds a thread forever (streams set their own, shorter)
 
     def log_message(self, fmt, *args):
         pass
