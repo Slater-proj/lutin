@@ -4,7 +4,7 @@
 
 With the **Web** option ticked, the model has two tools: `web_chercher` (search) and `web_lire` (read a page). Nothing is sent when the box is unticked or in strict offline mode ([PRIVACY.md](PRIVACY.md)).
 
-> **Honesty.** The whole chain is tested with **fake servers** (a fake SearXNG, a fake Brave, fake pages). **The real SearXNG image and the real Brave API have not been run by the project**: use the **Test the search** button (Settings > Web search) to see what works on your machine.
+> **Honesty.** The whole chain is tested with **fake servers** (a fake SearXNG, a fake Brave, fake pages). **The real SearXNG image and the real Brave API have not been run by the project**: use the **Test the search** button (Settings › Web and memory › Web search) to see what works on your machine.
 
 ## Which engine answers
 
@@ -52,17 +52,17 @@ A small local model often does not call the search tool: it answers from memory 
 SEARXNG_SECRET=$(openssl rand -hex 32) docker compose -f docker-compose.searxng.yml up -d
 ```
 
-The file [docker-compose.searxng.yml](../docker-compose.searxng.yml) listens on `127.0.0.1:8080` only, and [docker/searxng/settings.yml](../docker/searxng/settings.yml) enables the **json** format (Lutin reads it; without it SearXNG answers HTML and Lutin tells you to enable it). Then, **from this machine**: Settings > Web search > SearXNG address = `http://127.0.0.1:8080` (`http://searxng:8080` if Lutin runs in the same Docker network), Save, **Test the search**.
+The file [docker-compose.searxng.yml](../docker-compose.searxng.yml) listens on `127.0.0.1:8080` only, and [docker/searxng/settings.yml](../docker/searxng/settings.yml) enables the **json** format (Lutin reads it; without it SearXNG answers HTML and Lutin tells you to enable it). Then, **from this machine**: Settings › Web and memory › Web search > SearXNG address = `http://127.0.0.1:8080` (`http://searxng:8080` if Lutin runs in the same Docker network), Save, **Test the search**.
 
 **Security.** SearXNG usually lives on your own network, and Lutin normally **refuses every local address** (a booby-trapped page must not read your internal services). The address you set is the **only exception**, only for searching (never for reading pages), and it can only be set **from this machine**, not from a paired device.
 
 ## Brave Search
 
-Create a key (free tier) at brave.com/search/api, paste it in Settings > Web search > Brave Search. It is stored in `recherche.json` next to your data, readable by you only (where the system allows), and **never sent back to the page** (only its last four characters). Also settable from this machine only.
+Create a key (free tier) at brave.com/search/api, paste it in Settings › Web and memory › Web search > Brave Search. It is stored in `recherche.json` next to your data, readable by you only (where the system allows), and **never sent back to the page** (only its last four characters). Also settable from this machine only.
 
 ## Tavily, Exa, Perplexity (keys)
 
-Paste a key in Settings > Web search; each is stored in `recherche.json` like Brave's, never sent back to the page. **Only the results (title, address, excerpt) are used: the answer a service may write itself is ignored**, so everything goes back through Lutin's own model, which reads, compares and cites. **Every search goes to that service** (it is no longer private, unlike SearXNG at home), and offline mode cuts them. Perplexity uses its *search* API (ranked results), not its answering models. Request formats were written from each service's documentation and are **tested against fake servers only**, not with a real key: if one changes, the "Test the search" button shows which engine fails.
+Paste a key in Settings › Web and memory › Web search; each is stored in `recherche.json` like Brave's, never sent back to the page. **Only the results (title, address, excerpt) are used: the answer a service may write itself is ignored**, so everything goes back through Lutin's own model, which reads, compares and cites. **Every search goes to that service** (it is no longer private, unlike SearXNG at home), and offline mode cuts them. Perplexity uses its *search* API (ranked results), not its answering models. Request formats were written from each service's documentation and are **tested against fake servers only**, not with a real key: if one changes, the "Test the search" button shows which engine fails.
 
 ## What it cannot do
 

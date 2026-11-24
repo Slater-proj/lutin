@@ -11,7 +11,7 @@ This tutorial goes from “a bare Debian” to “Lutin reachable at `https://lu
 | What | Detail |
 |---|---|
 | A Debian 12 or 13 server | a mini PC is enough; `sudo` access |
-| Disk space | 5 GB for Lutin and Ollama, **+ 3 to 10 GB per model** (a 4-billion-parameter model weighs about 3 GB) |
+| Disk space | 5 GB for Lutin and its engine, **+ 3 to 10 GB per model** (a 4-billion-parameter model weighs about 3 GB) |
 | Memory | enough to run a model: **8 GB free** allows small models (3 to 4 billion parameters) and, borderline, 7 to 8 billion |
 | A domain name | for example `lutin.example.com`, pointing to your server (or your router) |
 | A reverse proxy + Authelia | nginx, Traefik or Caddy, already installed; otherwise skip step 7 and use the PIN code (step 8) |

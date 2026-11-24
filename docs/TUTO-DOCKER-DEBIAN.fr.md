@@ -11,7 +11,7 @@ Ce tutoriel va de « Debian vierge » à « Lutin joignable en `https://lutin.ex
 | Quoi | Détail |
 |---|---|
 | Un serveur Debian 12 ou 13 | un mini PC suffit ; accès `sudo` |
-| Place disque | 5 Go pour Lutin et Ollama, **+ 3 à 10 Go par modèle** (un modèle de 4 milliards de paramètres pèse environ 3 Go) |
+| Place disque | 5 Go pour Lutin et son moteur, **+ 3 à 10 Go par modèle** (un modèle de 4 milliards de paramètres pèse environ 3 Go) |
 | Mémoire | de quoi faire tourner un modèle : **8 Go libres** permettent les petits modèles (3 à 4 milliards de paramètres) et, à la limite, 7 à 8 milliards |
 | Un nom de domaine | par exemple `lutin.exemple.fr`, qui pointe vers ton serveur (ou ton routeur) |
 | Un reverse proxy + Authelia | nginx, Traefik ou Caddy, déjà installés ; sinon, saute l'étape 7 et utilise le code PIN (étape 8) |

@@ -6,7 +6,7 @@
 
 **Step by step from a bare Debian**: [TUTO-DOCKER-DEBIAN.md](TUTO-DOCKER-DEBIAN.md).
 
-A ready-to-use image: **Lutin and Ollama in the same container**. You start it, you open the page, you install a model: that is all. Handy on Linux, on a server or a NAS.
+A ready-to-use image of **Lutin alone**: you start it, open the page, let it install the engine it recommends (into `/engines`) and a model: that is all. Handy on Linux, on a server or a NAS.
 
 > **Honesty.** The images are built and started by the CI (login page, PIN code) and published on `ghcr.io`. They have **never been run with a real NVIDIA card** nor on a NAS: if something does not work, open a [bug](https://github.com/Slater-proj/lutin/issues/new/choose) with `docker compose logs`.
 
@@ -63,7 +63,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 In the terminal: `docker exec -it lutin lutin chat`.
 
-**Language**: English by default. Change it in the page (Settings > Language), with `docker exec lutin lutin language fr`, or with `-e LUTIN_LANGUE=fr`.
+**Language**: English by default. Change it in the page (Settings › General › Language), with `docker exec lutin lutin language fr`, or with `-e LUTIN_LANGUE=fr`.
 
 ## The volumes
 
@@ -74,7 +74,7 @@ In the terminal: `docker exec -it lutin lutin chat`.
 | `lutin-models` | `/models` | the models | no (can be downloaded again), but heavy |
 | `lutin-engines` (optional) | `/engines` | **the engines** (Ollama, llama.cpp) that Lutin installs from the page | no (reinstallable in one click), but saves downloading everything again |
 
-**Engines are no longer in the image.** Lutin's image is light (Lutin alone): on first launch the page offers to install the engine recommended for your machine (Ollama, llama.cpp…), or the one you pick in Settings > Engines. It is downloaded once, into `/engines` if you mount that folder (`- /srv/docker/volumes/lutin/engines:/engines`, writable by user 1000), otherwise into `/data/engines`: either way, **updating the image does not erase it**. Ollama's models stay in `/models`, llama.cpp's (GGUF files) in `/models/gguf`. For a server already running elsewhere (another container), give its address (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`): Lutin then neither installs nor stops it. **Not verified on your card**: installing Ollama and llama.cpp in the light image was tested with fake servers, not yet on real hardware.
+**Engines are no longer in the image.** Lutin's image is light (Lutin alone): on first launch the page offers to install the engine recommended for your machine (Ollama, llama.cpp…), or the one you pick in Models › Engines. It is downloaded once, into `/engines` if you mount that folder (`- /srv/docker/volumes/lutin/engines:/engines`, writable by user 1000), otherwise into `/data/engines`: either way, **updating the image does not erase it**. Ollama's models stay in `/models`, llama.cpp's (GGUF files) in `/models/gguf`. For a server already running elsewhere (another container), give its address (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`): Lutin then neither installs nor stops it. **Not verified on your card**: installing Ollama and llama.cpp in the light image was tested with fake servers, not yet on real hardware.
 
 To put the models on another disk, replace `lutin-models:/models` with a path (`/mnt/big-disk/models:/models`).
 
@@ -129,7 +129,7 @@ A container does not see the graphics card unless you hand it over. Without it, 
 
 1. NVIDIA: `docker run --rm --gpus all ubuntu nvidia-smi` must list the card; then `docker exec lutin nvidia-smi` too.
 2. The first lines of `/data/ollama.log` (`docker exec lutin head -20 /data/ollama.log`) say which card the container sees (NVIDIA, `/dev/kfd`, `/dev/dri`); Ollama's own lines then say whether it found a compute device.
-3. In the page, **Health > video memory** shows the card, and once a model is loaded, « model loaded at … % on the card »: **100 %** means the card does the work; **0 %** means the processor does (the card was not given or not supported).
+3. In the page, **Settings › Health › video memory** shows the card, and once a model is loaded, « model loaded at … % on the card »: **100 %** means the card does the work; **0 %** means the processor does (the card was not given or not supported).
 4. `docker exec lutin lutin doctor` says « No usable graphics card » and what to add if the container sees none.
 
 Intel: on a Core Ultra 5 125H (Meteor Lake, 32 GB shared) the integrated chip **works** with `docker-compose.intel.yml` (`ollama ps` says `100% GPU`) but was **slower than the processor** for text generation (about 8 vs 11 tokens/s on `qwen3:4b`): it reads the same memory as the processor, so memory bandwidth, not computing power, is the limit. Keep the processor unless your own measurement says otherwise. Check with `docker exec lutin ollama ps`. Giving `/dev/dri` and the `render` group lets the container use the whole graphics device (and anything else in that group): do it only if you accept it. Lutin keeps the RAM as budget (set `LUTIN_BUDGET_GO` to what you can spare), and the graphics memory is the same RAM.

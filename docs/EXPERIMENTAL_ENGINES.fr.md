@@ -2,9 +2,9 @@
 
 # Moteurs expérimentaux (Colibri, Strata)
 
-Deux moteurs récents sont proposés comme **préréglages externes** : Réglages > Moteurs > carte « Serveur compatible OpenAI » > « Choisir un serveur connu… ». Ils sont marqués **expérimental**, rangés en dernier dans la liste, **jamais préselectionnés, jamais recommandés** (ni par les règles de la recommandation, ni par le banc).
+Deux moteurs récents sont proposés comme **préréglages externes** : Modèles › Moteurs › carte « Serveur compatible OpenAI » › « Choisir un serveur connu… ». Ils sont marqués **expérimental**, rangés en dernier dans la liste, **jamais préselectionnés, jamais recommandés** (ni par les règles de la recommandation, ni par le banc).
 
-> **Colibri s'installe depuis la page** (Réglages > Moteurs > « Serveur compatible OpenAI » > choisir Colibri : Installer, Mettre à jour, Désinstaller, Démarrer, Arrêter, dossier du modèle et port) **et en ligne de commande.** `lutin colibri install` télécharge l'archive officielle de Colibri et **vérifie sa somme SHA-256** (le `SHA256SUMS.txt` de la publication est obligatoire), `lutin colibri start --model <dossier>` le lance sur `127.0.0.1` seulement, `lutin colibri stop` l'arrête. **L'installation a été essayée pour de vrai** (v2.1.0 téléchargée, vérifiée, décompressée) ; **le démarrage ne l'a pas été** : il exige un modèle de plusieurs dizaines de Go préparé par Colibri, et personne ne l'a lancé avec Lutin. L'essai S3 (Ollama, llama.cpp et Colibri sur le même modèle) reste à faire.
+> **Colibri s'installe depuis la page** (Modèles › Moteurs › « Serveur compatible OpenAI » › choisir Colibri : Installer, Mettre à jour, Désinstaller, Démarrer, Arrêter, dossier du modèle et port) **et en ligne de commande.** `lutin colibri install` télécharge l'archive officielle de Colibri et **vérifie sa somme SHA-256** (le `SHA256SUMS.txt` de la publication est obligatoire), `lutin colibri start --model <dossier>` le lance sur `127.0.0.1` seulement, `lutin colibri stop` l'arrête. **L'installation a été essayée pour de vrai** (v2.1.0 téléchargée, vérifiée, décompressée) ; **le démarrage ne l'a pas été** : il exige un modèle de plusieurs dizaines de Go préparé par Colibri, et personne ne l'a lancé avec Lutin. L'essai S3 (Ollama, llama.cpp et Colibri sur le même modèle) reste à faire.
 
 ## Comment s'en servir
 

@@ -10,7 +10,7 @@ lutin migrate <folder> --conversations --skills       # or choose with options (
 lutin migrate <backup.zip>                            # a Lutin backup (lutin backup), or a zip of donnees/ memoire/ skills/
 ```
 
-In the page: **Memory > Take over another assistant…**.
+In the page: the **Projects** screen, *Take over another assistant…*.
 
 | Category | What is taken | Where it goes |
 |---|---|---|

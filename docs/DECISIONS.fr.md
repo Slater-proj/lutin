@@ -4,6 +4,10 @@
 
 Ce que le projet a choisi, pourquoi, et ce qui reste à trancher. Une décision change quand on a une meilleure raison, pas parce que le fichier est vieux : on ajoute alors une ligne datée.
 
+> **Depuis la modernisation, les décisions sont des ADR** dans [adr/](adr/README.md) (en anglais) ; cette page garde les précédentes. Certaines lignes ci-dessous sont dépassées :
+> le code est écrit en anglais ([ADR 0001](adr/0001-english-and-clean-break-at-1.0.md)) ; l'interface est celle en Svelte ([ADR 0002](adr/0002-frontend-svelte-typescript-vite.md))
+> et l'ancienne page est retirée ([ADR 0022](adr/0022-the-old-page-goes-at-1.0.md)) ; l'image Docker contient Lutin seul, la page installe le moteur.
+
 ## Prises
 
 | Date | Décision | Raison |

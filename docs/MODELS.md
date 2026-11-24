@@ -23,9 +23,9 @@ Before loading a model, Lutin **estimates** the memory it will take: the model f
 | barely fits | almost nothing stays free: the PC may slow down |
 | does not fit | do not load |
 
-A model that does not fit, or barely, is flagged **before** loading: in the banner at the top of the page, and in the conversation (once per model per half hour). The estimate is also available on demand (`/api/estimation?modele=…&ctx=…`). It suggests what would make the model fit: a shorter conversation, a lighter cache (q4_0), and for a **mixture-of-experts** model a processor preset.
+A model that does not fit, or barely, is flagged **before** loading: in the banner at the top of the page, and in the conversation (once per model per half hour). It suggests what would make the model fit: a shorter conversation, a lighter cache (q4_0), and for a **mixture-of-experts** model a processor preset.
 
-- **Mixture-of-experts models** (few active parameters per word), for example a 24 GB card and 32 GB of RAM: the experts stay in RAM (llama.cpp's `--n-cpu-moe`, set in Settings > Engines > llama.cpp > Advanced settings) and the rest fits on the card. The number of layers is **estimated** (48 by default), not read from the file: adjust from the video memory actually used.
+- **Mixture-of-experts models** (few active parameters per word), for example a 24 GB card and 32 GB of RAM: the experts stay in RAM (llama.cpp's `--n-cpu-moe`, set in Models › Engines › llama.cpp › Advanced settings) and the rest fits on the card. The number of layers is **estimated** (48 by default), not read from the file: adjust from the video memory actually used.
 - **Cautious mode**: on a modest machine (under 8 GB usable, or no card and under 16 GB of RAM), the page suggests an 8,192-token conversation and a single model loaded at a time. Never applied without your agreement.
 - **Estimate against measurement**: the engine bench (`lutin bench-engines`) compares the estimate to the memory actually used (`estimation.ecart_pct` in the result: positive = overestimated). **No gap has been measured on real hardware yet**: until real results exist, read the estimate as an order of magnitude, not a guarantee.
 
@@ -49,7 +49,7 @@ A graphics card is **not required**, in Docker or elsewhere: without one, Ollama
 
 ## Not crushing the PC
 
-Settings > **Machine load** (and the safeguards just above it):
+Settings › **This machine** (and the safeguards just above it):
 
 | Setting | What it does |
 |---|---|

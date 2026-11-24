@@ -66,7 +66,7 @@ Pas d'erreur, pas d'avertissement : le moteur local répond. L'état est visible
 
 ## La page Machines (menu Réglages ▾)
 
-La page **Machines** est dans le menu **Réglages ▾** en haut, à côté d'Automatisation, Santé et Accès. Elle est désactivée par défaut : elle explique ce qu'est le mode multi-machines et propose un bouton pour l'activer. Ensuite, pour chaque machine :
+La page **Machines** est dans **Modèles › Machines** ; prêter cette machine aux autres se fait dans **Réglages › Cette machine**. Elle est désactivée par défaut : elle explique ce qu'est le mode multi-machines et propose un bouton pour l'activer. Ensuite, pour chaque machine :
 
 - **l'étape où elle en est, en direct** : *réveil envoyé → machine allumée → Lutin démarré → synchronisation → prête* (une connexion refusée distingue « allumée, Lutin pas lancé » de « éteinte ou injoignable »), et *extinction dans N s* avec un bouton Annuler. La page vérifie toutes les 2 secondes tant qu'une machine change d'étape, toutes les 8 secondes sinon ;
 - **sa version de Lutin**, et un bouton **Mettre à jour Lutin** quand elle a une version plus ancienne que celle-ci. Le propriétaire de la machine distante doit avoir coché « Autoriser les machines appairées à mettre Lutin à jour » (décoché par défaut, depuis cette machine seulement, noté dans son journal). Elle redémarre ensuite toute seule si Lutin a été lancé par la commande `lutin`, et la page la suit (*mise à jour en cours*). Sous Docker, c'est l'image qu'on remplace (`docker compose pull && docker compose up -d`) ;

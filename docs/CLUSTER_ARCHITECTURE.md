@@ -66,7 +66,7 @@ No error, no warning: the local engine answers. The state is visible in the Mach
 
 ## The Machines page (Settings ▾ menu)
 
-The **Machines** page lives in the **Settings ▾** menu at the top, next to Automation, Health and Access. It is off by default: it explains what multi-machine mode is and offers one button to turn it on. Then, for each machine:
+The **Machines** page is in **Models › Machines**; lending this machine to others is in **Settings › This machine**. It is off by default: it explains what multi-machine mode is and offers one button to turn it on. Then, for each machine:
 
 - **the step it is at, live**: *wake-up sent → machine powered on → Lutin started → syncing → ready* (a refused connection tells "powered on, Lutin not started" apart from "off or unreachable"), and *shutting down in N s* with a Cancel button. The page checks every 2 seconds while a machine is changing step, every 8 seconds otherwise;
 - **its Lutin version**, and an **Update Lutin** button when it runs an older version than this machine. The owner of the remote machine must have ticked "Allow paired machines to update Lutin" (off by default, set from that machine only, noted in its log). It then restarts by itself if Lutin was started by the `lutin` command, and the page follows it (*update in progress*). In Docker the image is replaced instead (`docker compose pull && docker compose up -d`);

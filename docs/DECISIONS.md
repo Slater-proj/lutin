@@ -4,6 +4,10 @@
 
 What the project chose, why, and what is still to be decided. A decision changes when there is a better reason, not because the file is old: a dated line is then added.
 
+> **Since modernization, decisions are recorded as ADRs** in [adr/](adr/README.md); this page keeps the earlier ones. Some rows below are superseded:
+> the code is written in English ([ADR 0001](adr/0001-english-and-clean-break-at-1.0.md)); the interface is the Svelte one ([ADR 0002](adr/0002-frontend-svelte-typescript-vite.md))
+> and the old page is removed ([ADR 0022](adr/0022-the-old-page-goes-at-1.0.md)); the Docker image holds Lutin alone, the page installs the engine.
+
 ## Made
 
 | Date | Decision | Reason |

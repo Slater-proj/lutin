@@ -2,7 +2,7 @@
 
 # Installer Lutin avec Docker, moteurs compris
 
-Pour l'image « tout-en-un » (Lutin et Ollama dans un conteneur), lis d'abord [DOCKER.fr.md](DOCKER.fr.md). Cette page couvre le cas où **le moteur est un conteneur à côté de Lutin** (Ollama ou llama.cpp), et ce qu'il faut savoir sur Docker Linux et Docker Desktop (Windows, WSL2).
+Pour l'image seule (la page installe le moteur), lis d'abord [DOCKER.fr.md](DOCKER.fr.md). Cette page couvre le cas où **le moteur est un conteneur à côté de Lutin** (Ollama ou llama.cpp), et ce qu'il faut savoir sur Docker Linux et Docker Desktop (Windows, WSL2).
 
 > **Honnêteté.** Les profils Ollama et llama.cpp du fichier `docker-compose.moteurs.yml` sont **vérifiés sur le papier et par des tests de fichiers**, **pas sur du vrai matériel**. Les profils `llamacpp-cuda`, `llamacpp-vulkan` et `llamacpp-intel` n'ont jamais tourné avec une vraie carte : si tu les essaies, dis-moi ce qui s'est passé.
 
@@ -21,7 +21,7 @@ docker compose -f docker-compose.moteurs.yml --profile llamacpp-vulkan up -d   #
 docker compose -f docker-compose.moteurs.yml --profile llamacpp-intel up -d    # Intel (SYCL)
 ```
 
-Lutin sait déjà où est le moteur : le fichier règle `OLLAMA_URL` et `LUTIN_LLAMACPP_URL`. La carte du moteur dans **Réglages > Moteurs** est préremplie, rien à taper. Une adresse que tu règles dans la page l'emporte sur la variable.
+Lutin sait déjà où est le moteur : le fichier règle `OLLAMA_URL` et `LUTIN_LLAMACPP_URL`. La carte du moteur dans **Modèles › Moteurs** est préremplie, rien à taper. Une adresse que tu règles dans la page l'emporte sur la variable.
 
 **Ne sais-tu pas lequel prendre ?** Ollama. Pour comparer sur ta machine, voir [BENCH_MOTEURS.fr.md](BENCH_MOTEURS.fr.md).
 

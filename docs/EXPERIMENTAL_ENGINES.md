@@ -2,9 +2,9 @@
 
 # Experimental engines (Colibri, Strata)
 
-Two recent engines are offered as **external presets**: Settings > Engines > "OpenAI-compatible server" card > "Pick a known server…". They are marked **experimental**, listed last, **never preselected, never recommended** (neither by the recommendation rules nor by the bench).
+Two recent engines are offered as **external presets**: Models › Engines › "OpenAI-compatible server" card › "Pick a known server…". They are marked **experimental**, listed last, **never preselected, never recommended** (neither by the recommendation rules nor by the bench).
 
-> **Colibri installs from the page** (Settings > Engines > "OpenAI-compatible server" > pick Colibri: Install, Update, Uninstall, Start, Stop, model folder and port) **and from the command line.** `lutin colibri install` downloads Colibri's official archive and **checks its SHA-256 sum** (the release's `SHA256SUMS.txt` is mandatory), `lutin colibri start --model <folder>` starts it on `127.0.0.1` only, `lutin colibri stop` stops it. **The install was tried for real** (v2.1.0 downloaded, verified, unpacked); **the start-up was not**: it needs a model of tens of GB prepared by Colibri, and nobody has run it with Lutin yet. Trial S3 (Ollama, llama.cpp and Colibri on the same model) is still to do.
+> **Colibri installs from the page** (Models › Engines › "OpenAI-compatible server" › pick Colibri: Install, Update, Uninstall, Start, Stop, model folder and port) **and from the command line.** `lutin colibri install` downloads Colibri's official archive and **checks its SHA-256 sum** (the release's `SHA256SUMS.txt` is mandatory), `lutin colibri start --model <folder>` starts it on `127.0.0.1` only, `lutin colibri stop` stops it. **The install was tried for real** (v2.1.0 downloaded, verified, unpacked); **the start-up was not**: it needs a model of tens of GB prepared by Colibri, and nobody has run it with Lutin yet. Trial S3 (Ollama, llama.cpp and Colibri on the same model) is still to do.
 
 ## How to use one
 
