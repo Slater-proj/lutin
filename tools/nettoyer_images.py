@@ -2,7 +2,7 @@
 
     python tools/nettoyer_images.py [--garder 5] [--jours 14] [--oui]        # sans --oui : montre ce qui serait supprimé, ne supprime rien
 
-Règles : seules les versions dont TOUTES les étiquettes sont des candidates (`rc-<branche>`, `0.2.0rc12-branche`, avec ou sans `-slim`) sont concernées ; les `latest`, `X.Y.Z` et `slim` ne sont jamais touchées.
+Règles : seules les versions dont TOUTES les étiquettes sont des candidates (`rc-<branche>`, `0.2.0rc12-branche`, `1.0.0.dev12-branche`, avec ou sans `-slim`) sont concernées ; les `latest`, `next`, `X.Y.Z`, les pré-versions publiées (`1.0.0rc1`, `1.0.0a3-slim`) et `slim` ne sont jamais touchées.
 On garde les `--garder` plus récentes et tout ce qui a moins de `--jours` jours. Les versions sans étiquette sont laissées (ce sont des morceaux d'images multi-plateformes ou des attestations).
 Utilise GITHUB_TOKEN (droit packages: write) ; propriétaire et paquet viennent de GITHUB_REPOSITORY.
 """
@@ -16,11 +16,12 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 
-RE_RC = re.compile(r"^(rc-.+|\d+\.\d+\.\d+rc\d+.*)$")
+RE_RC = re.compile(r"^(rc-.+|\d+\.\d+\.\d+(rc\d+|\.dev\d+)-.+)$")          # a branch candidate: rc-<branch>, or its version (rcN, or .devN during a pre-release channel) followed by its branch
+RE_PUBLISHED = re.compile(r"^\d+\.\d+\.\d+((a|b|rc)\d+)?(-slim|-rocm)?$")          # a version published from main (1.0.0rc1, 1.0.0rc1-slim): never touched
 
 
 def est_candidate(etiquettes):
-    return bool(etiquettes) and all(RE_RC.match(e) for e in etiquettes)
+    return bool(etiquettes) and all(RE_RC.match(e) and not RE_PUBLISHED.match(e) for e in etiquettes)
 
 
 def date(texte):

@@ -30,6 +30,15 @@ class Selection(unittest.TestCase):
         self.assertEqual(assert_ids, [1, 2, 3], "les 3 plus récentes (4, 5, 6) restent")
         self.assertEqual(sorted(v["id"] for v in N.selectionner(versions, garder=1, jours=14, maintenant=MAINTENANT)), [1, 2, 3, 4], "5 a moins de 14 jours : gardée")
 
+    def test_a_published_pre_release_is_never_a_candidate(self):
+        """A pre-release published from main (1.0.0rc1, with -slim) keeps only its version tags once :next moves on: it must never be deleted.
+        A branch candidate always carries its branch after the number (0.2.0rc12-i18n)."""
+        for e in (["1.0.0rc1"], ["1.0.0rc1-slim"], ["1.0.0rc1-rocm"], ["1.0.0rc1", "1.0.0rc1-slim"], ["2.1.0rc14"]):
+            self.assertFalse(N.est_candidate(e), e)
+        self.assertTrue(N.est_candidate(["1.0.0.dev12-feature.x", "1.0.0.dev12-feature.x-slim"]), "the form tools/prochaine_version.py gives a branch during a pre-release channel")
+        versions = [version(1, ["1.0.0rc1", "1.0.0rc1-slim"], 400), version(2, ["0.9.0rc3-feature"], 400)]
+        self.assertEqual([v["id"] for v in N.selectionner(versions, garder=0, jours=1, maintenant=MAINTENANT)], [2])
+
     def test_jamais_une_image_publiee_ni_une_version_sans_etiquette(self):
         versions = [version(1, ["latest", "0.3.0"], 400), version(2, ["slim"], 400), version(3, ["0.1.0"], 400), version(4, [], 400), version(5, ["rc-vieille"], 400)]
         self.assertEqual([v["id"] for v in N.selectionner(versions, garder=0, jours=1, maintenant=MAINTENANT)], [5])
