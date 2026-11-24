@@ -1,5 +1,5 @@
 """L'addon VoiceStudio : vérification, voix, lecture à voix haute avec accord, transcription, clonage avec déclaration d'autorisation, clé d'API, garde-fous. Contre un FAUX VoiceStudio
-(l'application réelle n'est pas lancée par les tests : voir docs/TRIALS)."""
+(l'application réelle n'est pas lancée par les tests : voir docs/VALIDATION)."""
 import json
 import os
 import tempfile

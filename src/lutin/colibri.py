@@ -5,7 +5,7 @@ Ce que ce module fait, et seulement sur commande explicite de l'utilisateur (`lu
   - la décompresser dans le dossier de données de Lutin (rien n'est écrit ailleurs) ;
   - lancer `coli serve` (adresse locale 127.0.0.1 seulement) et `coli stop`, les commandes décrites par Colibri lui-même.
 Ce qu'il ne fait PAS : choisir ou télécharger un modèle (plusieurs dizaines de Go : `coli setup` / `coli import` de Colibri), ni l'exposer sur le réseau.
-Les commandes viennent de la lecture du script `coli` de la v2.1.0 ; **Colibri n'a pas été lancé avec un modèle** : le démarrage est à essayer (voir docs/TRIALS.md, S3)."""
+Les commandes viennent de la lecture du script `coli` de la v2.1.0 ; **Colibri n'a pas été lancé avec un modèle** : le démarrage est à essayer (voir docs/VALIDATION.md, moteurs)."""
 import json
 import os
 import re

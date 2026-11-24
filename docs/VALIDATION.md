@@ -8,7 +8,7 @@ For each line: **Do** what is written, **see** what is expected. If not, note th
 
 ## 1. Engines (one by one, on a machine that can run it)
 
-Settings > Engine: only the engines that can run on this machine are offered (the others are folded away, with the reason).
+Models › Engines: only the engines that can run on this machine are offered (the others are folded away, with the reason).
 
 | Engine | Do | See |
 |---|---|---|
@@ -21,13 +21,19 @@ Settings > Engine: only the engines that can run on this machine are offered (th
 
 For **each** engine: the installed models are listed, a model downloads in one click with a progress bar, and "Test" returns an answer. Note the one that fails and at which step.
 
+### llama.cpp from the command line (`lutin engine-trial`)
+
+A real trial with a report, outside the page. `lutin engine-trial llamacpp --test-model` checks in about 30 seconds (a 1 MB model) that the program installs, starts and answers. `lutin engine-trial llamacpp --model unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf` (2.5 GB) adds a conversation with its speed and a tool call. Expected: `✔` lines for each step; a `⚠` on the tool call means the model did not call the tool. If the build chosen does not start, retry with `--variant vulkan`, then `--variant cpu`. Send back what the command printed, or the `essai-llamacpp-….json` file it names (no conversation, no key: the system, the hardware and the measurements). Run the second command twice and keep the second figures (the first load is slower).
+
+Passed on 6 November 2026 (0.16.5, Windows, NVIDIA, CUDA build): about 247 tokens/s, first token in 0.04 s, full tool call. The `moteurs` workflow runs the same trial in Docker's light image on every change to the engine code.
+
 ## 2. Several computers
 
 Do this with two real PCs (A = where you work, B = the other one).
 
 | Step | Do | See |
 |---|---|---|
-| Pair | On B: Settings > Machines, turn on, copy the code; on A: "Add a machine" | B appears, green status within 10 s |
+| Pair | On B: Settings › This machine, turn on lending, copy the code; on A: "Add a machine" | B appears, green status within 10 s |
 | Wake | Switch B off, "Wake" button on A | B starts; the status turns green without a second click (the machine is probed every 2 s) |
 | Icon | On B, after Windows starts | Lutin's icon sits next to the clock (maybe under the "^" arrow) |
 | Answer here | Choose "This machine" or "B" in "Who answers your messages?" | The answer really comes from the chosen engine (engine name shown in the conversation) |
@@ -39,7 +45,7 @@ Do this with two real PCs (A = where you work, B = the other one).
 
 | Step | Do | See |
 |---|---|---|
-| Channel | Automation > Notifications: add Gotify / ntfy / Telegram / webhook, "Send a test" | The message arrives on your phone or your Discord/Slack channel |
+| Channel | Settings › General › Notifications: add Gotify / ntfy / Telegram / webhook, "Send a test" | The message arrives on your phone or your Discord/Slack channel |
 | Task | Create a "tell me the time" task, run it twice | One conversation, two dated exchanges |
 | Result | Attach the channel to the task, run it | The task's answer arrives on your channel |
 | Failure | Switch the engine off, run the task again | The conversation shows the reason (not silence) and the notification says it |

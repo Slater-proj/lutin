@@ -25,7 +25,7 @@ ligne de commande.
 > **La version 1.0 est en préparation.** La nouvelle interface est celle par défaut, à `/` : les cinq espaces ci-dessous, sur une API
 > versionnée (`/api/v1`), dans les deux langues, vérifiés dans un vrai navigateur et par des contrôles d'accessibilité automatiques. L'ancienne
 > page et ses routes sont retirées ([ADR 0022](docs/adr/0022-the-old-page-goes-at-1.0.md)). Testé sous Windows et Linux ; macOS et les cartes AMD et
-> Intel ne sont pas encore vérifiés : [ce qui est vérifié et ce qui ne l'est pas](docs/DECISIONS.fr.md#connu-mais-non-vérifié).
+> Intel ne sont pas encore vérifiés : [ce qui est vérifié et ce qui ne l'est pas](docs/DECISIONS.fr.md#connu-mais-pas-vérifié).
 
 ## Pourquoi Lutin
 
@@ -145,7 +145,7 @@ ce que Lutin peut contacter : [docs/PRIVACY.fr.md](docs/PRIVACY.fr.md) · mettre
 
 Tout, par sujet : [docs/README.fr.md](docs/README.fr.md) — ce que fait Lutin ([FEATURES](docs/FEATURES.fr.md)), les modèles
 ([MODELS](docs/MODELS.fr.md)), Docker ([DOCKER](docs/DOCKER.fr.md)), plusieurs ordinateurs ([CLUSTER_ARCHITECTURE](docs/CLUSTER_ARCHITECTURE.fr.md)),
-un essai pas à pas ([GUIDE-ESSAI](docs/GUIDE-ESSAI.fr.md)).
+les vérifications sur du vrai matériel ([VALIDATION](docs/VALIDATION.fr.md)).
 
 ## Construire et contribuer
 

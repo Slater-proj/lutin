@@ -9,7 +9,6 @@ Un sujet, une page. Si deux pages semblent dire la même chose, l'une ne fait qu
 | Je veux… | Lire |
 |---|---|
 | Voir ce que Lutin fait au quotidien | [FEATURES.fr.md](FEATURES.fr.md) |
-| Parcourir les fonctions pas à pas | [GUIDE-ESSAI.fr.md](GUIDE-ESSAI.fr.md) |
 | Tout vérifier sur du vrai matériel (moteurs, plusieurs PC, notifications) | [VALIDATION.fr.md](VALIDATION.fr.md) |
 | Choisir ou comprendre les modèles | [MODELS.fr.md](MODELS.fr.md) |
 | Régler ou comprendre la recherche web (SearXNG, Brave) | [WEB_SEARCH.fr.md](WEB_SEARCH.fr.md) |
@@ -26,7 +25,6 @@ Un sujet, une page. Si deux pages semblent dire la même chose, l'une ne fait qu
 | Lancer l'image tout-en-un (Lutin + Ollama) | [DOCKER.fr.md](DOCKER.fr.md) |
 | Mettre le moteur dans son propre conteneur (Ollama, llama.cpp), Docker Desktop / WSL2 | [DOCKER_INSTALLATION.fr.md](DOCKER_INSTALLATION.fr.md) |
 | Suivre un tutoriel complet Debian + reverse proxy | [TUTO-DOCKER-DEBIAN.fr.md](TUTO-DOCKER-DEBIAN.fr.md) |
-| Faire écrire mon fichier compose par mon IA locale | [PROMPT-DOCKER-COMPOSE.fr.md](PROMPT-DOCKER-COMPOSE.fr.md) |
 
 ## Sécurité et vie privée
 
@@ -36,7 +34,7 @@ Un sujet, une page. Si deux pages semblent dire la même chose, l'une ne fait qu
 
 | Je veux… | Lire |
 |---|---|
-| Savoir où va le projet et ce qui est vérifié | [ROADMAP.fr.md](ROADMAP.fr.md) · [DECISIONS.fr.md](DECISIONS.fr.md) · [TRIALS.fr.md](TRIALS.fr.md) (essais sur du vrai matériel) |
+| Savoir où va le projet et ce qui est vérifié | [modernization/PLAN.md](modernization/PLAN.md) · [DECISIONS.fr.md](DECISIONS.fr.md) (avant les ADR) · [adr/](adr/README.md) · [VALIDATION.fr.md](VALIDATION.fr.md) (vérifications sur du vrai matériel) |
 | Ajouter un moteur, modifier le catalogue signé | [ENGINE_DEVELOPMENT.fr.md](ENGINE_DEVELOPMENT.fr.md) · [ENGINE_CATALOG.fr.md](ENGINE_CATALOG.fr.md) · [EXPERIMENTAL_ENGINES.fr.md](EXPERIMENTAL_ENGINES.fr.md) |
-| Comprendre le choix de ces moteurs | [ENGINE_STUDY.fr.md](ENGINE_STUDY.fr.md) (étude datée, non tenue à jour) |
+| Contribuer : variables d'environnement, l'API HTTP | [modernization/ENVIRONMENT.md](modernization/ENVIRONMENT.md) · [modernization/API_V1.md](modernization/API_V1.md) (en anglais) |
 | Publier une version | [PUBLISHING.fr.md](PUBLISHING.fr.md) · [../CONTRIBUTING.fr.md](../CONTRIBUTING.fr.md) |

@@ -145,8 +145,8 @@ contact: [docs/PRIVACY.md](docs/PRIVACY.md) · updating and going back: [docs/RO
 ## Documentation
 
 Everything by topic: [docs/README.md](docs/README.md) — what Lutin does ([FEATURES](docs/FEATURES.md)), the models ([MODELS](docs/MODELS.md)),
-Docker ([DOCKER](docs/DOCKER.md)), several computers ([CLUSTER_ARCHITECTURE](docs/CLUSTER_ARCHITECTURE.md)), a step-by-step trial
-([GUIDE-ESSAI](docs/GUIDE-ESSAI.md)).
+Docker ([DOCKER](docs/DOCKER.md)), several computers ([CLUSTER_ARCHITECTURE](docs/CLUSTER_ARCHITECTURE.md)), checks on real hardware
+([VALIDATION](docs/VALIDATION.md)).
 
 ## Building and contributing
 
