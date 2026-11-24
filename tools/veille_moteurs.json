@@ -1,7 +1,7 @@
 {
  "colibri": {
   "depot": "JustVugg/colibri",
-  "vue": "v2.1.0"
+  "vue": "v2.2.0"
  },
  "exllamav3": {
   "depot": "turboderp-org/exllamav3",
@@ -9,14 +9,14 @@
  },
  "llamacpp": {
   "depot": "ggml-org/llama.cpp",
-  "vue": "b12477"
+  "vue": "b12680"
  },
  "ollama": {
   "depot": "ollama/ollama",
-  "vue": "v0.40.16"
+  "vue": "v0.40.18"
  },
  "strata": {
   "depot": "Niko1221/Strata",
-  "vue": "v0.2.15"
+  "vue": "v0.2.21"
  }
 }
