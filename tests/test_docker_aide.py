@@ -103,6 +103,14 @@ class ComposeEtVolumes(unittest.TestCase):
             self.assertIn("lutin-data:/data", t, nom)
             self.assertRegex(t, r"(?m)^volumes:\n(?:[ \t]+.*\n)*?[ \t]+lutin-data:", nom)
 
+    def test_every_compose_mounts_the_workspace_folder_the_docs_create(self):
+        """The docs create and chown ./workspace; a compose that mounts ./travail makes Docker create it as root, and the container refuses to start."""
+        for f in sorted(RACINE.glob("docker-compose*.yml")):
+            t = f.read_text(encoding="utf-8")
+            self.assertNotIn("./travail", t, f.name)
+            if "/data" in t:
+                self.assertIn("./workspace:/workspace", t, f.name)
+
     def test_les_modeles_sont_dans_un_volume_nomme(self):
         self.assertIn("lutin-models:/models", self.lire("docker-compose.yml"))
         self.assertIn("lutin-models:/root/.ollama", self.lire("docker-compose.moteurs.yml"))

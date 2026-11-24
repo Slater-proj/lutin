@@ -85,7 +85,7 @@ services:
       # LUTIN_LANGUE: fr
     volumes:
       - lutin-data:/data
-      - ./travail:/travail
+      - ./workspace:/workspace
 
 volumes:
   lutin-data:

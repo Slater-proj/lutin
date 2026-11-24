@@ -36,7 +36,7 @@ services:
       # LUTIN_GPU: "NVIDIA RTX 4090=24" # the card is not visible from this container: declare it by hand to get models that fit / la carte n'est pas visible ici : déclare-la pour avoir des modèles adaptés
     volumes:
       - lutin-data:/data
-      - ./travail:/travail
+      - ./workspace:/workspace
 
 volumes:
   lutin-data:
