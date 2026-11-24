@@ -164,6 +164,32 @@ class Errors(unittest.TestCase):
             api_v1._read_body(caller)
         self.assertEqual((caller.rfile.tell(), caller.close_connection), (0, True), "beyond the bound nothing is read, and the connection is closed")
 
+    def test_an_upload_without_the_right_is_refused_before_its_body_is_kept(self):
+        """An upload route accepts up to 1 GiB: read into memory before the right is checked, a few requests without a session would exhaust the memory."""
+        class Caller:
+            close_connection = False
+            path = "/api/v1/backup/restore"
+
+            def __init__(self, sent):
+                self.rfile, self.sent, self.reads = io.BytesIO(b"a" * sent), sent, []
+                read = self.rfile.read
+                self.rfile.read = lambda n=-1: self.reads.append(n) or read(n)
+
+            def _taille_corps(self):
+                return self.sent
+
+            def _authentifie(self):
+                return False
+
+            def _envoyer(self, status, payload, *rest):
+                self.answer = (status, payload["error"]["code"])
+
+        caller = Caller(2 * 1024 * 1024)
+        api_v1.dispatch(caller, "POST")
+        self.assertEqual(caller.answer, (401, "no_session"))
+        self.assertTrue(caller.reads and max(caller.reads) <= 65536, "the refused body is drained in bounded chunks, never read in one piece: {}".format(caller.reads[:3]))
+        self.assertEqual(caller.rfile.read(), b"", "and drained to its end, so the caller's connection is not reset")
+
     def test_a_length_that_is_not_a_number_is_refused_without_waiting_for_a_body(self):
         status, answer = call("POST", "/api/v1/conversations", dict(OWNER, **{"Content-Length": "abc"}))
         self.assertEqual((status, answer["error"]["code"]), (413, "too_large"))

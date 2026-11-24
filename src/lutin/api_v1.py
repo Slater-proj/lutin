@@ -205,6 +205,11 @@ def dispatch(handler, method):
         raw = b""
         if found is not None and found[0].raw:
             body = {}
+            try:
+                _check_right(handler, found[0].right)          # an upload may weigh up to 1 GiB: kept in memory only for a caller who has the right (headers only)
+            except ApiError:
+                discard_body(handler)                          # drained in bounded chunks, so the refusal still reaches the caller
+                raise
             raw = _read_raw(handler, found[0].limit)
         elif method in WITH_BODY:
             body = _read_body(handler)
