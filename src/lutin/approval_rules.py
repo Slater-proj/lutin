@@ -27,6 +27,7 @@ from .i18n import t as _t
 FILE = "approval_rules.json"
 PROJECT_FILE = Path(".lutin") / "approvals.json"
 EFFECTS = ("deny", "ask", "allow")
+_CHAINED = re.compile(r"[\x00-\x08\x0a-\x1f\x7f|&;<>`$]")          # what lets a shell run more than the command a rule names (same set as safe_commands._NEVER)
 MAX_RULES = 200
 MAX_COMMAND = 300
 
@@ -112,8 +113,11 @@ def decide(command, conversation="", root=None):
     if reason:
         return "hardline", reason
     found = {}
+    chained = bool(_CHAINED.search(str(command or "")))
     for source, rules in (("yours", user_rules()), ("project", project_rules(root) if root else [])):
         for rule in rules:
+            if rule["effect"] == "allow" and chained and normalise(rule["command"]).endswith(" *"):
+                continue          # `allow git *` names git, not whatever a shell would run after `&`, `;`, `|`, a redirection or a substitution
             if matches(rule["command"], command):
                 found.setdefault(rule["effect"], source)
     for effect in ("deny", "ask"):

@@ -162,6 +162,16 @@ class CommandTool(Base):
         self.assertEqual([item["auto"] for item in asked], [False])
         self.assertTrue(asked[0]["sujet"]["retenir"])
 
+    def test_an_allow_by_beginning_does_not_cover_what_is_chained_after_it(self):
+        R.add("allow", "git *")
+        for chained in ("git status & del important.txt", "git log; rm -rf src", "git diff | sh", "git show `whoami`", "git log $(id)", "git status > out.txt", "git status\ndel x"):
+            self.assertNotEqual(R.decide(chained)[0], "allow", chained)
+            asked, _, _ = self.run_tool(chained, auto=False, answer=False)
+            self.assertEqual([item["auto"] for item in asked], [False], chained)
+        self.assertEqual(R.decide("git log --oneline -5")[0], "allow", "a plain command after the beginning is still allowed")
+        R.add("deny", "npm publish *")
+        self.assertEqual(R.decide("npm publish --tag next & echo done")[0], "deny", "a refusal still covers a chained command")
+
     def test_without_any_rule_the_switch_of_the_conversation_decides_as_before(self):
         self.assertEqual([item["auto"] for item in self.run_tool("npm run build", auto=True)[0]], [True])
         self.assertEqual([item["auto"] for item in self.run_tool("npm run build", auto=False)[0]], [False])
