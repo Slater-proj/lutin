@@ -97,7 +97,7 @@ Way back: every renaming commit is mechanical and reverts cleanly; the data migr
 Acceptance, per screen: functional parity with the old page listed and checked; keyboard-only use possible; automated accessibility checks clean (target WCAG 2.2 AA);
 usable at 360 px wide; works with the network cable unplugged. The old page is removed only when every screen is accepted.
 
-Way back: the old page stays the default until parity (ADR 0002).
+Way back: the old page stays the default until parity (ADR 0002). Superseded: the old page was removed at 1.0 (ADR 0022).
 
 ### Step 5 — Backend, targeted
 

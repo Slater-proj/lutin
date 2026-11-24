@@ -1,7 +1,7 @@
 # Review before 1.0.0 (plan step 7)
 
 The report that step 7 of [PLAN.md](PLAN.md) asks for: what was reviewed, what was found, what was fixed, and what is left. The maintainer placed the
-whole step in 1.0 (2026-11-22, evening). This first part was written that evening; the step is **not finished** — see « Left ».
+whole step in 1.0 (2026-11-22, evening). This first part was written that evening; the step was closed for 1.0 the same evening — see « Step 7 closed for 1.0 » below.
 
 ## What was already in place before the review
 

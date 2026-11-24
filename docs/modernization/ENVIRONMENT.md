@@ -1,6 +1,6 @@
 # Environment variables: English names
 
-Plan step 3. The code still reads the original names (mostly French). `lutin/environment.py` lets the English ones be used today: at the start of the process, an English name that is set fills its original name when that one is not set. If both are set, **the original wins**, so an installation that already works keeps working. Nothing is removed from the environment: a program started by Lutin sees both.
+Plan step 3. The code still reads the original names (mostly French). `lutin/environment.py` lets the English ones be used today: at the start of the process, an English name that is set fills its original name when that one is not set. If both are set, **the original wins**, so an installation that already works keeps working. Nothing is removed from the environment: a program started by Lutin sees both. The Docker entrypoint, which reads some of them in the shell before Lutin starts, reads both names too (the original winning).
 
 | English name | Original name |
 |---|---|
