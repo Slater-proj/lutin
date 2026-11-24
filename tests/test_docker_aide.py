@@ -121,6 +121,14 @@ class ComposeEtVolumes(unittest.TestCase):
         self.assertIn("--no-models", e)
         self.assertIn("--no-ollama", e)
 
+    def test_the_start_reads_the_english_name_of_each_variable_it_reads(self):
+        """The shell reads its variables itself, before Lutin applies lutin.environment: an English name (LUTIN_LEVEL) was ignored in Docker."""
+        from lutin import environment
+        e = self.lire("docker/entrypoint.sh")
+        for english, original in environment.ALIASES.items():
+            if original in e:
+                self.assertIn(english, e, "{} is read by the start, {} must be too".format(original, english))
+
 
 class Reglages(unittest.TestCase):
     def test_l_adresse_de_llamacpp_vient_de_l_environnement(self):
