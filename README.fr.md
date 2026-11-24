@@ -27,6 +27,10 @@ ligne de commande.
 > page et ses routes sont retirées ([ADR 0022](docs/adr/0022-the-old-page-goes-at-1.0.md)). Testé sous Windows et Linux ; macOS et les cartes AMD et
 > Intel ne sont pas encore vérifiés : [ce qui est vérifié et ce qui ne l'est pas](docs/DECISIONS.fr.md#connu-mais-pas-vérifié).
 
+**Démarrage rapide.** Windows (PowerShell) : `irm https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.ps1 | iex` ·
+Linux / macOS : `curl -fsSL https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.sh | bash` · Docker : [plus bas](#installation).
+Ensuite, `lutin` ouvre http://127.0.0.1:8777/ dans ton navigateur.
+
 ## Pourquoi Lutin
 
 | | |
@@ -39,7 +43,7 @@ ligne de commande.
 | **Il travaille pendant ton absence** | Tâches planifiées et longues missions menées seul, avec le résultat envoyé sur Gotify, ntfy, Telegram ou un webhook. |
 | **Extensible, sans risque** | Connecteurs MCP, extensions (Telegram, mail, ComfyUI…) et skills tiers sont coupés tant que tu ne les actives pas, ne joignent que les sites qu'ils déclarent, et sont examinés avant que quoi que ce soit soit copié. |
 | **Ton contexte, gardé** | Reprends un projet Claude Code (`CLAUDE.md`, `.claude/`) ou les données d'un autre assistant, une catégorie à la fois, sans rien écraser. |
-| **Facile à installer** | Une commande sous Windows, une sous Linux, ou une image Docker avec Ollama dedans. Aucune dépendance Python ; relancer l'installation ne casse rien de ce qui marche. |
+| **Facile à installer** | Une commande sous Windows, une sous Linux, ou une image Docker (Lutin seul ; la page installe le moteur). Aucune dépendance Python ; relancer l'installation ne casse rien de ce qui marche. |
 
 ## Un aperçu de la nouvelle interface
 
@@ -56,7 +60,7 @@ Cinq espaces : **Chat**, **Agents**, **Projets**, **Modèles** et **Réglages**,
   <img src="assets/capture-app-settings.fr.png" alt="L'écran Réglages : un menu de rubriques à gauche, la rubrique Général à droite" width="94%">
 </p>
 
-**Réglages** en sept rubriques, une à la fois et gardée dans l'adresse ; sur un téléphone, la liste des rubriques puis celle que tu as choisie.
+**Réglages** en neuf rubriques, une à la fois et gardée dans l'adresse ; sur un téléphone, la liste des rubriques puis celle que tu as choisie.
 **Prêter cette machine** s'y trouve aussi : prêter son moteur, donner un code d'appairage, répondre aux droits que demandent les autres machines.
 
 <p align="center">
@@ -92,9 +96,9 @@ irm https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/instal
 curl -fsSL https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.sh | bash
 ```
 
-**Docker** (serveur, NAS) : une seule image, Lutin et Ollama dedans — [docs/DOCKER.fr.md](docs/DOCKER.fr.md)
+**Docker** (serveur, NAS) : une seule image avec Lutin seul ; la page installe le moteur choisi dans `/engines` — [docs/DOCKER.fr.md](docs/DOCKER.fr.md)
 ```bash
-docker run -d --name lutin -p 127.0.0.1:8777:8777 -v lutin-data:/data -v lutin-models:/models -v "$PWD/workspace":/workspace ghcr.io/slater-proj/lutin:latest
+docker run -d --name lutin -p 127.0.0.1:8777:8777 -v lutin-data:/data -v lutin-models:/models -v lutin-engines:/engines -v "$PWD/workspace":/workspace ghcr.io/slater-proj/lutin:latest
 ```
 
 L'installateur met la dernière version dans un environnement à part, ajoute la commande `lutin`, puis lance l'**installation guidée** : langue,
@@ -110,7 +114,7 @@ ne risque rien : à jour, il ne change rien ; sinon il met à jour sans toucher 
 | `lutin models` | les modèles recommandés pour ta machine, installer, retirer, mettre à jour |
 | `lutin bench [modèle]` | mesurer un modèle ici : vitesse, outils, code, français, consignes |
 | `lutin update` | mettre Lutin à jour et chercher les mises à jour des modèles |
-| `lutin offline on\|non` | mode hors ligne strict |
+| `lutin offline on\|off\|status` | mode hors ligne strict |
 | `lutin log` | ce que Lutin a modifié ou lancé, avec quel accord et pour qui |
 | `lutin backup` · `lutin restore` | exporter ou remettre tes données en `.zip` |
 | `lutin pin` · `lutin devices` · `lutin security` | l'accès depuis tes autres appareils |

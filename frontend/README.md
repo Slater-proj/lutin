@@ -1,7 +1,7 @@
 # The interface of Lutin
 
 Svelte 5 + TypeScript + Vite ([ADR 0002](../docs/adr/0002-frontend-svelte-typescript-vite.md)). The build is written into `src/lutin/web/app/` and served by
-Lutin under `/app/`, next to the present page, which stays the default until parity. State and parity lists: [INTERFACE.md](../docs/modernization/INTERFACE.md).
+Lutin at `/` and under `/app/`; it is the only interface since 1.0 (the old page is removed: [ADR 0022](../docs/adr/0022-the-old-page-goes-at-1.0.md)). State and parity lists: [INTERFACE.md](../docs/modernization/INTERFACE.md).
 
 Node.js is needed to build the interface, never to install or run Lutin: the CI builds it into the wheel, the source archive and the Docker image.
 

@@ -112,6 +112,9 @@ Les addons facultatifs (Telegram, courriel, X, ComfyUI, travail de fond) sont **
 Lutin ne lit et ne modifie que **le dossier de travail** de la conversation. Plusieurs dossiers sont possibles ; un seul est actif à la fois (si une réponse travaille dans un dossier, on ne peut pas en changer avant sa fin, ni en lancer une dans un autre).
 
 - Un dossier doit exister, ne pas être la racine d'un disque, ni **contenir ou être dans les dossiers de Lutin** (configuration, données, mémoire, cache).
+- Les outils de fichiers restent dedans. Une **commande** tourne avec tes propres droits et **sans bac à sable du système** : une fois acceptée, elle peut
+  atteindre ce que tu peux atteindre. Lis-la avant de l'accepter ; les commandes qui détruisent ou prennent la main sur une machine sont toujours
+  demandées, quels que soient les accords automatiques, et cette réponse n'est jamais retenue.
 - **Ajouter ou retirer** un dossier ne se fait que depuis cette machine : au niveau « machine seulement », ou avec `lutin workspaces`. Un appareil appairé (niveau réseau) ou une identité de proxy peut **choisir** un dossier déjà déclaré, jamais en ajouter : sinon un accès à distance pourrait déclarer `/` ou `C:\`.
 
 ## Ce que seule cette machine peut changer

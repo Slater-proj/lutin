@@ -26,6 +26,10 @@ folder you choose, **always with your approval**. In English and French, from th
 > ([ADR 0022](docs/adr/0022-the-old-page-goes-at-1.0.md)). Tested on Windows and Linux; macOS, AMD and Intel cards are not verified yet:
 > [what is verified and what is not](docs/DECISIONS.md#known-but-not-verified).
 
+**Quick start.** Windows (PowerShell): `irm https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.ps1 | iex` ·
+Linux / macOS: `curl -fsSL https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.sh | bash` · Docker: [below](#installation).
+Then `lutin` opens http://127.0.0.1:8777/ in your browser.
+
 ## Why Lutin
 
 | | |
@@ -38,7 +42,7 @@ folder you choose, **always with your approval**. In English and French, from th
 | **It works while you are away** | Scheduled tasks and long missions carried out alone, with the result sent to Gotify, ntfy, Telegram or a webhook. |
 | **Extensible, safely** | MCP connectors, add-ons (Telegram, mail, ComfyUI…) and third-party skills are off until you turn them on, reach only the sites they declare, and are looked into before anything is copied. |
 | **Your context, kept** | Take over a Claude Code project (`CLAUDE.md`, `.claude/`) or the data of another assistant, one category at a time, nothing overwritten. |
-| **Easy to install** | One command on Windows, one on Linux, or one Docker image with Ollama inside. No Python dependency; running the installer again changes nothing that works. |
+| **Easy to install** | One command on Windows, one on Linux, or one Docker image (Lutin alone; the page installs the engine). No Python dependency; running the installer again changes nothing that works. |
 
 ## A look at the new interface
 
@@ -55,7 +59,7 @@ wake-up sequence, and the rights they grant.
   <img src="assets/capture-app-settings.png" alt="The Settings screen: a menu of sections on the left, the General section on the right" width="94%">
 </p>
 
-**Settings** in seven sections, one at a time and kept in the address; on a phone, the list of sections and then the one you chose. **Lend this
+**Settings** in nine sections, one at a time and kept in the address; on a phone, the list of sections and then the one you chose. **Lend this
 machine** is there too: lend its engine, give a pairing code, answer the rights other machines ask for.
 
 <p align="center">
@@ -90,9 +94,9 @@ irm https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/instal
 curl -fsSL https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.sh | bash
 ```
 
-**Docker** (server, NAS): one image, Lutin and Ollama inside — [docs/DOCKER.md](docs/DOCKER.md)
+**Docker** (server, NAS): one image with Lutin alone; the page installs the engine you pick into `/engines` — [docs/DOCKER.md](docs/DOCKER.md)
 ```bash
-docker run -d --name lutin -p 127.0.0.1:8777:8777 -v lutin-data:/data -v lutin-models:/models -v "$PWD/workspace":/workspace ghcr.io/slater-proj/lutin:latest
+docker run -d --name lutin -p 127.0.0.1:8777:8777 -v lutin-data:/data -v lutin-models:/models -v lutin-engines:/engines -v "$PWD/workspace":/workspace ghcr.io/slater-proj/lutin:latest
 ```
 
 The installer puts the latest version in a private environment, adds the `lutin` command, then starts the **guided setup**: language, a look at
@@ -108,7 +112,7 @@ to date, it changes nothing; otherwise it updates without touching your settings
 | `lutin models` | the models recommended for your machine, install, remove, update |
 | `lutin bench [model]` | measure a model here: speed, tools, code, French, instructions |
 | `lutin update` | update Lutin and look for model updates |
-| `lutin offline on\|non` | strict offline mode |
+| `lutin offline on\|off\|status` | strict offline mode |
 | `lutin log` | what Lutin changed or ran, with which approval and for whom |
 | `lutin backup` · `lutin restore` | export or put back your data as a `.zip` |
 | `lutin pin` · `lutin devices` · `lutin security` | access from your other devices |
@@ -117,8 +121,7 @@ to date, it changes nothing; otherwise it updates without touching your settings
 | `lutin language [fr\|en\|auto]` | the language of the application |
 | `lutin doctor` | a diagnosis to paste into a problem report (no personal content) |
 
-Some command names are still French (the project was written in French first and is moving to English for 1.0); `lutin --help` explains them in
-your language.
+Every command has an English name; the older French names still work as aliases. `lutin --help` explains them in your language.
 
 ## Security in brief
 

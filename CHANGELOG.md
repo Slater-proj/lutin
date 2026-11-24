@@ -10,8 +10,8 @@ Not released yet: this is the work of the `modernization` branch since the entry
   and Settings, in English and French, from a phone held upright to a 2560-pixel screen; Settings and Agents in parts kept in the address; the
   open conversation kept in the address too; checked in a real Chrome and by axe in both themes. It does everything the previous page did
   ([PARITY.md](docs/modernization/PARITY.md)): strict offline mode, web search set-up, access, model upkeep and measures, engine settings,
-  conversation tools and Git, background work, documents and notes, « / » commands and the Ctrl+K palette. The previous page stays at
-  `/ancienne/` during 1.x (its bookmarks `/#conv=…` lead to the same place in the new one) and goes in 2.0.
+  conversation tools and Git, background work, documents and notes, « / » commands and the Ctrl+K palette. The previous page and its routes
+  are removed ([ADR 0022](docs/adr/0022-the-old-page-goes-at-1.0.md)).
 - **Long conversations on a small window** ([ADR 0018](docs/adr/0018-keeping-the-thread-on-a-small-window.md)): the first request is never
   dropped and is kept word for word at the head of the request; passages of the conversation come back as soon as its history no longer fits;
   the progress sheet keeps its first decisions and its current step.
@@ -19,7 +19,7 @@ Not released yet: this is the work of the `modernization` branch since the entry
   conversation. The automatic summary and the question « sheet or summary? » are retired; a conversation that has a summary keeps it. The start
   leaves far enough for several exchanges to fit before the next removal.
 - **Health opens in about two seconds** instead of fifteen on Windows when an engine is stopped.
-- **A versioned API, `/api/v1`** ([API_V1.md](docs/modernization/API_V1.md)): 232 routes, each with its right declared in one table and fixed by a
+- **A versioned API, `/api/v1`** ([API_V1.md](docs/modernization/API_V1.md)): 243 routes, each with its right declared in one table and fixed by a
   contract test; English names, the turn stream translated at the border.
 - **Several computers, one assistant** ([ADR 0016](docs/adr/0016-paired-machines-in-v1-and-the-new-interface.md)): pair a machine, use its models
   from the Chat, lend this one (with a clear name for each machine allowed to use it), continue a conversation another machine holds, with its
@@ -29,7 +29,10 @@ Not released yet: this is the work of the `modernization` branch since the entry
 - **Fixes**: on Windows, a data file read while it was being replaced was taken as missing (a list of missions read as empty); the first probe of
   a machine could say « unreachable » for one that was on; the countdown of a shutdown showed while a machine was getting ready.
 - **For contributors**: one entry runs a turn for every launcher ([ADR 0015](docs/adr/0015-one-entry-runs-a-turn.md)); the tests of paired machines
-  no longer start PowerShell, schtasks or nvidia-smi on the machine that runs them; 16 decision records in [docs/adr/](docs/adr/README.md).
+  no longer start PowerShell, schtasks or nvidia-smi on the machine that runs them; 22 decision records in [docs/adr/](docs/adr/README.md).
+- **Upgrading from 0.50 (breaking)**: the old page and the French HTTP routes are gone (only pairing, node and relay routes stay); conversations
+  move into SQLite at the first start ([ADR 0017](docs/adr/0017-conversations-in-sqlite.md)), `lutin export --conversations` writes them back as
+  0.x files; the compose files mount `./workspace` (rename a `./travail` folder; a mounted `/travail` is still accepted).
 
 ## Modernization, steps 0 and 1: security fixes, hermetic tests, decision records
 

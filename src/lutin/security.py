@@ -5,7 +5,8 @@
   proxy    derrière un proxy inverse (Authelia, Authentik…) : l'identité vient du proxy, et seulement de lui
 
 Le module ne touche ni au réseau ni au disque (sauf `Appareils`, qui écrit son fichier à la demande) : tout se teste sans serveur.
-Règle dure : hors du niveau « local », les accords automatiques (écriture, commandes) sont désactivés, quoi que dise le fichier de réglages.
+Les accords automatiques (écriture, commandes) se règlent par conversation, à tous les niveaux, décochés par défaut (décision du 2026-10-31, docs/DECISIONS.md) ;
+une lecture du web les suspend toujours. Les règles d'accord (approval_rules) et la liste dure s'appliquent à tous les niveaux.
 """
 import hashlib
 import hmac

@@ -57,7 +57,7 @@ def state(configurateur, strict=None, admin_distance=False):
 
 
 def apply(donnees, configurateur):
-    """Enregistre le nouveau niveau d'accès dans la configuration (pour le prochain démarrage). Les accords automatiques restent coupés hors du niveau « local » quoi qu'il arrive (règle du moteur)."""
+    """Enregistre le nouveau niveau d'accès dans la configuration (pour le prochain démarrage). Les accords automatiques ne dépendent pas du niveau : ils se règlent par conversation (décision du 2026-10-31)."""
     if in_docker():
         raise ValueError(_t("Dans Docker, le niveau d'accès vient de la variable LUTIN_NIVEAU du conteneur : change-la là (docs/DOCKER.md)."))
     if not configurateur:
