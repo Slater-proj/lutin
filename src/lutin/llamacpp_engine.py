@@ -646,7 +646,7 @@ def extract(archive, destination):
                 sur(m.name)
                 if m.issym() or m.islnk():
                     sur(os.path.join(os.path.dirname(m.name), m.linkname))
-            t.extractall(destination)
+            t.extractall(destination, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))          # the checks above are lexical: the filter checks each member as it is written (chained links)
 
 
 def find_server_in(dossier):

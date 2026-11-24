@@ -97,7 +97,7 @@ def extract(archive, cible):
                 sur(m.name)
                 if m.issym() or m.islnk() or m.isdev():
                     raise ValueError(_t("Archive refusée : lien ou fichier spécial ({}).").format(m.name[:80]))
-            tf.extractall(cible)          # noqa: S202  (chaque nom a été vérifié au-dessus)
+            tf.extractall(cible, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))          # noqa: S202  (chaque nom a été vérifié au-dessus ; le filtre vérifie chaque membre à l'écriture)
 
 
 def archive_root(cible):

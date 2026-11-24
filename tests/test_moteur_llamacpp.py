@@ -89,6 +89,22 @@ class Archives(Base):
         with self.assertRaises(ml.EngineError):
             ml.extract(t, self.tmp / "dest2")
 
+    def test_every_tar_extraction_applies_the_data_filter(self):
+        """The name checks are lexical: two symbolic links chained (`a/d -> ..`, `a/d/e -> ..`) pass them and lead a file outside the folder.
+        Python's `data` filter checks each member as it is written; before 3.14 it is not the default, so it must be asked for."""
+        from lutin import colibri, external_programs
+        t = self.tmp / "ok.tar.gz"
+        with tarfile.open(t, "w:gz") as f:
+            info = tarfile.TarInfo("coli")
+            info.size = 1
+            f.addfile(info, io.BytesIO(b"x"))
+        for name, extract in (("llama.cpp", ml.extract), ("colibri", colibri.extract), ("external programs", external_programs.extract_to)):
+            seen = []
+            real = tarfile.TarFile.extractall
+            with mock.patch.object(tarfile.TarFile, "extractall", lambda archive, *a, **k: seen.append(k.get("filter")) or real(archive, *a, **k)):
+                extract(t, self.tmp / ("dest-" + name.replace(" ", "-")))
+            self.assertEqual(seen, ["data"] if hasattr(tarfile, "data_filter") else [None], name)
+
     def test_zip_et_tar_sont_extraits(self):
         z = self.tmp / "a.zip"
         with zipfile.ZipFile(z, "w") as f:

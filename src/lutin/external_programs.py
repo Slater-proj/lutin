@@ -148,7 +148,7 @@ def extract_to(archive, cible):
                 raise ValueError(_t("Archive refusée : lien ou fichier spécial ({}).").format(m.name[:80]))
             if m.issym() and not dedans((cible / m.name).parent / m.linkname):
                 raise ValueError(_t("Archive refusée : lien ou fichier spécial ({}).").format(m.name[:80]))
-        tf.extractall(cible)          # noqa: S202  (chaque nom et chaque lien a été vérifié au-dessus)
+        tf.extractall(cible, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))          # noqa: S202  (vérification lexicale au-dessus ; le filtre suit les liens chaînés à l'écriture)
 
 
 def _published_checksum(nom, archive, http):
