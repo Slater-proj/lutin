@@ -3537,6 +3537,15 @@ class Assistant(unittest.TestCase):
         self.assertTrue(modes.default_recalls("scenario") and modes.default_recalls("recherche"))
         self.assertFalse(modes.default_recalls("polyvalent") or modes.default_recalls("discussion"))
 
+    def test_a_refused_turn_never_deletes_an_existing_conversation(self):
+        """The cleanup of a refused turn removes only a conversation created for it: the machine id once replaced the conversation id it reads."""
+        ident = appel("POST", "/conversations", {}, attendu=201)["id"]
+        chat("Un", conversation=ident, reponses=[[{"content": "R1"}]])
+        from lutin import modes
+        with mock.patch.object(modes, "is_valid", lambda mode: False):          # the stored mode no longer exists (removed in an upgrade)
+            appel("POST", "/conversations/%s/turns" % ident, {"message": "Deux", "machine": ""}, attendu=400)
+        self.assertEqual([m["content"] for m in A.conv_read(ident)["messages"] if m.get("role") == "user"], ["Un"], "the conversation and its history are still there")
+
     def test_mode_discussion_n_envoie_aucun_outil_au_modele(self):
         ev = chat("Salut, ça va ?", reponses=[[{"content": "Très bien."}]], mode="discussion")
         self.assertNotIn("tools", RECUES[-1], "pas d'outils envoyés : c'est ce qui rend ce mode rapide")

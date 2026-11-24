@@ -648,8 +648,8 @@ class Handler(BaseHTTPRequestHandler):
                 if k in donnees and (k == "modele" or not isinstance(donnees.get("options"), dict)):
                     r[k] = donnees[k]
             if "machine" in donnees:          # le modèle choisi dans la liste peut être celui d'une autre machine (« » : cette machine-ci)
-                ident = str(donnees.get("machine") or "")
-                r["machine"] = ident if ident and _machines.find(ident) else ""
+                machine = str(donnees.get("machine") or "")          # not `ident`: abandon() reads it to know whether the conversation was created for this turn
+                r["machine"] = machine if machine and _machines.find(machine) else ""
             if not _modes.is_valid(r["mode"]):
                 abandon()
                 return self._refus_tour(400, "Mode inconnu.", "invalid_request")
