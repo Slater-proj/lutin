@@ -11,6 +11,7 @@
   import { api, ApiError, streamTurn, upload } from "../lib/api";
   import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
   import { conversationOf } from "../lib/address";
+  import { latestOnly } from "../lib/latest";
   import { markOf, markSeen, readSeen, tabTitle } from "../lib/marks";
   import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
@@ -92,6 +93,7 @@
   let elsewhere = $state(false); // an answer is being written in this conversation, but not by this page (it was reloaded, or another device sent it)
   let elsewhereTurn = $state<TurnState | undefined>(undefined); // where that turn is, when the server says it: waiting for an approval this page cannot show, stalled, being stopped
   let watcher: ReturnType<typeof setInterval> | undefined;
+  const opening = latestOnly(); // two conversations clicked quickly: the slower answer of the first must not replace the second
   let waitingCards = $state<Approval[]>([]); // the cards that answer waits for, read again: a page opened while one waits can answer it (review of plan step 7)
   const busy = $derived(live !== null || elsewhere);
 
@@ -120,6 +122,8 @@
   async function watch(id: string): Promise<void> {
     stopWatching();
     if (live !== null || !(await runningElsewhere(id))) return;
+    if (conversation?.id !== id) return; // another conversation was opened during the question: its own watch decides
+    if (watcher !== undefined) clearInterval(watcher); // a watch started meanwhile for this same conversation is replaced, never left running
     elsewhere = true;
     watcher = setInterval(async () => {
       if (conversation?.id !== id) return stopWatching();
@@ -231,10 +235,15 @@
 
   /** Opens a conversation of this machine, or of the paired machine `machine`: that one keeps it, runs its turns and has its own options. */
   async function open(id: string, machine = ""): Promise<void> {
+    const ticket = opening.begin();
     await guarded(async () => {
-      conversation = await api<Conversation>("GET", conversationPath(machine, id));
+      const read = await api<Conversation>("GET", conversationPath(machine, id));
+      if (!opening.current(ticket)) return; // another conversation was clicked since: its answer is the one to show
+      conversation = read;
       where = machine;
-      options = machine ? null : await api<ConversationOptions>("GET", `/conversations/${encodeURIComponent(id)}/options`);
+      const readOptions = machine ? null : await api<ConversationOptions>("GET", `/conversations/${encodeURIComponent(id)}/options`);
+      if (!opening.current(ticket)) return;
+      options = readOptions;
       optionsToSend = {};
       attachments = [];
       listOpen = false;
@@ -251,6 +260,7 @@
   }
 
   function startNew(): void {
+    opening.begin(); // a conversation still loading does not come back over the new one
     stopWatching();
     conversation = null;
     where = "";
