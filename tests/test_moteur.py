@@ -3982,9 +3982,18 @@ class Assistant(unittest.TestCase):
         finally:
             (PROJET / "docs" / "auto.txt").unlink(missing_ok=True)
 
+    def test_the_event_log_turns_at_its_own_limit(self):
+        """lutin.log and the action journal each have their limit: one name for both made the second (5 MB) replace the first (1 MB)."""
+        f = A.DATA / "lutin.log"
+        f.write_text("x" * 1_000_010, encoding="utf-8")
+        A.log_event("one line")
+        self.assertTrue(f.with_name("lutin.log.1").is_file(), "lutin.log turns beyond 1 MB")
+        self.assertLess(f.stat().st_size, 1000)
+        f.with_name("lutin.log.1").unlink()
+
     def test_journal_tourne_au_dela_de_la_limite(self):
         f = A.log_path()
-        f.write_text("x" * (A.LOG_MAX + 10), encoding="utf-8")
+        f.write_text("x" * (A.ACTION_LOG_MAX + 10), encoding="utf-8")
         A.record_action({"conv": {"id": "c"}}, "executer", {"commande": "echo"}, "ok")
         self.assertTrue(f.with_name(f.name + ".1").is_file())
         self.assertLess(f.stat().st_size, 1000)

@@ -768,7 +768,7 @@ def set_root(chemin):
 
 
 # --------------------------------------------------------------------------- journal des actions (qui a modifié quoi, lancé quelle commande, avec quel accord)
-LOG_MAX = 5_000_000
+ACTION_LOG_MAX = 5_000_000          # its own name: as a second LOG_MAX it replaced the limit of lutin.log (1 MB) above
 LOGGED_TOOLS = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module", "comfy_generer"}
 
 
@@ -792,7 +792,7 @@ def record_action(ctx, outil, args, issue):
                   "issue": issue[:200], "accord": ctx.pop("dernier_accord", "aucun"), "qui": ctx.get("identite", "")}
         f = log_path()
         f.parent.mkdir(parents=True, exist_ok=True)
-        if f.is_file() and f.stat().st_size > LOG_MAX:
+        if f.is_file() and f.stat().st_size > ACTION_LOG_MAX:
             os.replace(str(f), str(f.with_name(f.name + ".1")))
         with open(f, "a", encoding="utf-8") as h:
             h.write(json.dumps(entree, ensure_ascii=False) + "\n")
