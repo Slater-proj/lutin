@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "setuptools-scm>=8"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]          # 77: the licence as an SPDX expression (the table form is deprecated)
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ dynamic = ["version"]                  # calculée par setuptools-scm d'après l
 description = "Un assistant IA local, simple à installer, qui choisit les modèles adaptés à ta machine."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["llm", "ollama", "assistant", "local", "offline", "agent"]
 dependencies = []                      # volontairement vide : bibliothèque standard seulement
 classifiers = [
@@ -16,7 +17,6 @@ classifiers = [
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
-    "License :: OSI Approved :: MIT License",
 ]
 
 [project.urls]
@@ -33,7 +33,7 @@ fallback_version = "0.0.0+inconnue"    # source sans historique git (archive, co
 where = ["src"]
 
 [tool.setuptools.package-data]
-lutin = ["data/*", "data/en/*", "langues/*", "web/*", "web/lib/*", "web/icones/*", "web/app/*", "web/app/assets/*", "addons_livres/*/*.json"]
+lutin = ["data/*", "data/en/*", "langues/*", "web/diagram_frame.js", "web/logo.svg", "web/lutin.ico", "web/lib/mermaid.min.js", "web/icones/*", "web/app/*", "web/app/assets/*", "addons_livres/*/*.json"]          # web/ by name: a file left there from the old page is never shipped
 
 [tool.ruff]
 line-length = 200
