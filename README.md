@@ -5,7 +5,7 @@
 <p align="center"><b>English</b> · <a href="README.fr.md">Français</a></p>
 
 <p align="center">
-  <a href="https://github.com/Slater-proj/lutin/actions/workflows/ci.yml"><img alt="Tests" src="https://github.com/Slater-proj/lutin/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/Slater-proj/lutin/actions/workflows/release.yml?query=branch%3Amain"><img alt="Tests" src="https://github.com/Slater-proj/lutin/actions/workflows/release.yml/badge.svg?branch=main"></a>
   <a href="https://github.com/Slater-proj/lutin/releases/latest"><img alt="Latest version" src="https://img.shields.io/github/v/release/Slater-proj/lutin?label=version&color=2fc08f"></a>
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-2fc08f">
   <img alt="No dependency" src="https://img.shields.io/badge/dependencies-none-2fc08f">

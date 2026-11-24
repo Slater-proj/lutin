@@ -68,7 +68,7 @@ jobs:
         # Les deux extrémités de Python sur Linux (la plus ancienne gérée et la plus récente), et une version courante sur Windows : trois séries au lieu de huit.
         include:
           - {os: ubuntu-latest, python: "3.10"}
-          - {os: ubuntu-latest, python: "3.13"}
+          - {os: ubuntu-latest, python: "3.14"}
           - {os: windows-latest, python: "3.12"}
     steps:
       - uses: actions/checkout@v7
@@ -299,7 +299,7 @@ jobs:
           }
       - name: Shell
         shell: bash
-        run: for f in installateur/*.sh docker/*.sh; do bash -n "$f" && echo "OK $f"; done
+        run: for f in installateur/*.sh docker/*.sh; do bash -n "$f" || exit 1; echo "OK $f"; done          # `|| exit 1`: with `&&`, only the last file decided the result
 
   securite:
     if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}

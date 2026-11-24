@@ -78,7 +78,8 @@ From a terminal, with [GitHub CLI](https://cli.github.com/): `gh workflow run re
 ## Setting up GitHub (once)
 
 1. **Settings > Actions > General**: « Workflow permissions » = *Read and write permissions* (needed to create tags and publish the image).
-2. **Settings > Branches**: protect `main` (require a pull request and the success of the `ci / result` check, which gathers all the others). Without protection, a direct push to `main` publishes too.
+2. **Settings > Branches**: protect `main` (require a pull request and the success of the `tests / ci (résultat)` check, which gathers all the others). Without protection, a direct push to `main` publishes too.
+   Require that exact name: it is the run of `release.yml` on every push, the one that tests. The bare `ci (résultat)` of a pull request from this repository is **skipped** on purpose (the push already ran the tests), and GitHub counts a skipped required check as a success. A pull request from a fork gets only the bare name: push its branch to this repository to get the real check.
 3. **Packages**: after the first image, make the `lutin` package public (Package settings > Change visibility) so that `docker pull` works without signing in.
 4. Optional: **Security > Code security**: enable private vulnerability reporting and Dependabot.
 

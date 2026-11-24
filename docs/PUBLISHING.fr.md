@@ -78,7 +78,8 @@ Depuis un terminal, avec [GitHub CLI](https://cli.github.com/) : `gh workflow ru
 ## Mise en place sur GitHub (une seule fois)
 
 1. **Réglages > Actions > Général** : « Workflow permissions » = *Read and write permissions* (nécessaire pour créer les étiquettes et publier l'image).
-2. **Réglages > Branches** : protéger `main` (exiger une pull request et le succès de la vérification `ci / résultat`, qui rassemble toutes les autres). Sans protection, un envoi direct sur `main` publie aussi.
+2. **Réglages > Branches** : protéger `main` (exiger une pull request et le succès de la vérification `tests / ci (résultat)`, qui rassemble toutes les autres). Sans protection, un envoi direct sur `main` publie aussi.
+   Exiger ce nom exact : c'est l'exécution de `release.yml` à chaque envoi, celle qui teste. Le `ci (résultat)` seul d'une pull request venue de ce dépôt est **sauté** exprès (l'envoi a déjà lancé les tests), et GitHub compte une vérification exigée sautée comme une réussite. Une pull request venue d'un fork n'a que le nom seul : envoyer sa branche dans ce dépôt pour avoir la vraie vérification.
 3. **Packages** : après la première image, rendre le paquet `lutin` public (Package settings > Change visibility) pour que `docker pull` marche sans connexion.
 4. Facultatif : **Security > Code security** : activer le signalement privé de failles et Dependabot.
 
