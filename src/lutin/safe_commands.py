@@ -86,6 +86,9 @@ def split(command, posix):
 
 # ---- git: reading sub-commands only ----
 GIT_READ = ("status", "diff", "log", "show", "branch", "ls-files")
+# A read runs without approval, so it must not start a program that the repository's own .git/config names: a fsmonitor hook (status) or a pager.
+# Residual: a clean filter declared in .gitattributes can still run on `git status`; the model cannot write .git/ (tools.py), the person's own repository can.
+_GIT_PREFIX = ("git", "-c", "core.fsmonitor=false", "-c", "core.pager=cat", "--no-pager")
 # --output writes a file, --no-index compares any two paths of the disk, --ext-diff starts a configured program, --help opens a browser or a pager.
 _GIT_REFUSED = ("--output", "--no-index", "--ext-diff", "--help")
 # No « -l »: it means --list today, but « create the reflog » for a git older than 2.20, where a name after it creates a branch.
@@ -115,7 +118,9 @@ def _git(args):
         return None
     if args[0] == "branch" and not _git_branch(rest):
         return None
-    return ["git"] + args
+    if args[0] in ("diff", "log", "show"):
+        rest = ["--no-ext-diff", "--no-textconv"] + rest          # an external diff or a textconv driver named by the repository is a program
+    return list(_GIT_PREFIX) + [args[0]] + rest
 
 
 # ---- simple readers ----

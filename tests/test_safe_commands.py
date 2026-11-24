@@ -32,6 +32,8 @@ def plan(command, posix, extra=(), which=lambda name: name):
     return safe_commands.plan(command, posix=posix, confine=inside, root=PROJECT, extra=extra, which=which)
 
 
+GIT = ("git", "-c", "core.fsmonitor=false", "-c", "core.pager=cat", "--no-pager")
+
 class Bypasses(unittest.TestCase):
     """The commands reproduced during the audit: all of them used to run without approval."""
 
@@ -65,15 +67,24 @@ class Bypasses(unittest.TestCase):
         script = lambda name: "C:\\tools\\" + name + ".cmd"          # noqa: E731
         self.assertIsNone(plan("git log --format=%H", posix=False, which=script))
         self.assertIsNone(plan("git show HEAD^", posix=False, which=script))
-        self.assertEqual(plan("git status --short", posix=False, which=script).argv, ("git", "status", "--short"))
-        self.assertEqual(plan("git log --format=%H", posix=False).argv, ("git", "log", "--format=%H"), "a real executable gets its arguments untouched")
+        self.assertEqual(plan("git status --short", posix=False, which=script).argv, GIT + ("status", "--short"))
+        self.assertEqual(plan("git log --format=%H", posix=False).argv, GIT + ("log", "--no-ext-diff", "--no-textconv", "--format=%H"), "a real executable gets its arguments untouched")
 
 
 class Allowed(unittest.TestCase):
+    def test_git_runs_no_program_named_by_the_repository(self):
+        """A read without approval must not start what a .git/config names: fsmonitor (status), a pager, an external diff or a textconv driver."""
+        for command in ("git status", "git diff", "git log -p", "git show HEAD"):
+            argv = plan(command, posix=True).argv
+            self.assertEqual(argv[:len(GIT)], GIT, command)
+            if argv[len(GIT)] in ("diff", "log", "show"):
+                self.assertIn("--no-ext-diff", argv, command)
+                self.assertIn("--no-textconv", argv, command)
+
     def test_reads_keep_working_without_a_shell(self):
-        self.assertEqual(plan("git status --short", posix=True).argv, ("git", "status", "--short"))
-        self.assertEqual(plan("git log -3 --oneline -- docs/notes.md", posix=False).argv, ("git", "log", "-3", "--oneline", "--", "docs/notes.md"))
-        self.assertEqual(plan("git diff HEAD~1", posix=True).argv, ("git", "diff", "HEAD~1"))
+        self.assertEqual(plan("git status --short", posix=True).argv, GIT + ("status", "--short"))
+        self.assertEqual(plan("git log -3 --oneline -- docs/notes.md", posix=False).argv, GIT + ("log", "--no-ext-diff", "--no-textconv", "-3", "--oneline", "--", "docs/notes.md"))
+        self.assertEqual(plan("git diff HEAD~1", posix=True).argv, GIT + ("diff", "--no-ext-diff", "--no-textconv", "HEAD~1"))
         self.assertEqual(plan("python -V", posix=True).argv, ("python", "-V"))
         self.assertEqual(plan("ls -la docs", posix=True).argv, ("ls", "-la", "docs"))
         self.assertEqual(plan("cat README.md docs/notes.md", posix=True).argv, ("cat", "README.md", "docs/notes.md"))
@@ -144,7 +155,7 @@ class ThroughTheTool(unittest.TestCase):
             tools.run_tool("git status --short", self.ctx)
         finally:
             tools.start_process = real
-        self.assertEqual(seen, [(["git", "status", "--short"], False, str(A.ROOT))], "a list of arguments and shell=False")
+        self.assertEqual(seen, [(list(GIT) + ["status", "--short"], False, str(A.ROOT))], "a list of arguments and shell=False")
         self.assertEqual(self.asked, [])
 
     def test_a_bypass_asks_for_approval_and_does_not_run_when_refused(self):
