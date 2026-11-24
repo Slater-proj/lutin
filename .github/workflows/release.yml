@@ -160,8 +160,13 @@ jobs:
 
   docker:
     name: image Docker
-    needs: [version, tests]
-    if: needs.version.outputs.publier == 'true' && (github.event.repository.fork == false)
+    # After the GitHub Release when there is one (main, or a pre-release started by hand): an image is never pushed for a version whose Release
+    # failed (a tag that already exists, for example). On another branch `publier` is skipped and the candidate image is pushed as before.
+    needs: [version, tests, publier]
+    if: >-
+      always() && needs.version.result == 'success' && needs.tests.result == 'success'
+      && (needs.publier.result == 'success' || needs.publier.result == 'skipped')
+      && needs.version.outputs.publier == 'true' && (github.event.repository.fork == false)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -183,7 +188,9 @@ jobs:
           context: .
           target: complet
           push: true
-          tags: ${{ needs.version.outputs.balises }}
+          # « :rocm » and « :X.Y.Z-rocm » are the same image (kept for existing compose files; Ollama's ROCm build is chosen at install time):
+          # carried by this build instead of a third one that could fail in silence and leave « :rocm » on an old version.
+          tags: ${{ needs.version.outputs.balises }},${{ needs.version.outputs.balises_rocm }}
           cache-from: type=gha,scope=complet
           cache-to: type=gha,mode=max,scope=complet
           build-args: LUTIN_VERSION=${{ needs.version.outputs.version }}
@@ -201,23 +208,6 @@ jobs:
           cache-from: type=gha,scope=leger
           cache-to: type=gha,mode=max,scope=leger
           build-args: LUTIN_VERSION=${{ needs.version.outputs.version }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ needs.version.outputs.version }}
-            org.opencontainers.image.licenses=MIT
-      # « :rocm » et « :X.Y.Z-rocm » : conservées pour les compose existants, elles sont maintenant identiques (la version ROCm d'Ollama se choisit à l'installation, d'après la carte détectée). Jamais vérifiée sur une vraie carte AMD.
-      - uses: docker/build-push-action@v7
-        continue-on-error: true
-        with:
-          context: .
-          target: complet
-          push: true
-          tags: ${{ needs.version.outputs.balises_rocm }}
-          cache-from: type=gha,scope=rocm
-          cache-to: type=gha,mode=max,scope=rocm
-          build-args: |
-            LUTIN_VERSION=${{ needs.version.outputs.version }}
-            OLLAMA_VARIANT=-rocm
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.version.outputs.version }}
