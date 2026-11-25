@@ -6,8 +6,8 @@ Lutin can run the same model with Ollama or with llama.cpp (Ollama's models are 
 
 ## Using it
 
-- **In the page**: Settings > Engines, "Which engine for my machine?" card: the recommendation and its reason, then "Compare the engines" (about 1 minute) or "Thorough comparison" (about 5 minutes).
-- **On the command line**: `lutin bench-engines [model] [--mode rapide|approfondi] [--output result.json]`.
+- **In the page**: Models › Measures, "Comparison of the engines": the recommendation and its reason, then "Compare the engines" (about 1 minute) or "Thorough comparison" (about 5 minutes).
+- **On the command line**: `lutin bench-engines [model] [--mode fast|deep] [--output result.json]`.
 
 The model has to exist on each engine compared (an Ollama model shows up as is in llama.cpp). The bench **never runs by itself**, never at first launch, and downloads nothing. Before measuring an engine, it unloads the other one's model so memory and the graphics card are all its own.
 

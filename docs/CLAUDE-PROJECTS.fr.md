@@ -24,7 +24,7 @@ Rien ne s'exécute tout seul : ces fichiers sont des **consignes et des notes** 
 | Fichiers | **les mêmes** que ceux de Claude Code : chaque outil voit les changements de l'autre | une copie (historique git compris, sans `node_modules`, `.venv`…) ; l'original n'est jamais touché |
 | Quand | tu veux de la continuité, rien à fusionner | tu veux essayer, ou garder l'original à l'abri ; compare ou fusionne ensuite avec git |
 
-Sans `--here` ni `--copy`, la commande demande (copie par défaut). Dans la page : **Mémoire > Projet Claude > Importer un projet Claude…**. Le dossier devient un dossier de travail et le dossier actif.
+Sans `--here` ni `--copy`, la commande demande (copie par défaut). Dans la page : l'écran **Projets**, *Importer un projet Claude…*. Le dossier devient un dossier de travail et le dossier actif.
 
 À savoir :
 

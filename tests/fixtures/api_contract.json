@@ -1,0 +1,97 @@
+{
+ "GET": {
+  "exact": [
+   "/",
+   "/api/conversation",
+   "/api/noeud/etat",
+   "/icone.svg",
+   "/index.html",
+   "/logo.svg",
+   "/manifest.webmanifest"
+  ],
+  "prefix": [
+   "/api/",
+   "/api/noeud/relais/",
+   "/api/v1/",
+   "/app/",
+   "/fichier/",
+   "/image/",
+   "/piece/"
+  ]
+ },
+ "POST": {
+  "exact": [
+   "/api/annuler-tour",
+   "/api/appairer",
+   "/api/approuver",
+   "/api/arreter",
+   "/api/chat",
+   "/api/document",
+   "/api/epingler",
+   "/api/image",
+   "/api/memoire-choix",
+   "/api/noeud/appairer",
+   "/api/noeud/capacites",
+   "/api/noeud/chat",
+   "/api/noeud/demande",
+   "/api/noeud/eteindre",
+   "/api/noeud/maj",
+   "/api/noeud/partage",
+   "/api/renommer",
+   "/api/supprimer"
+  ],
+  "prefix": [
+   "/api/noeud/relais/",
+   "/api/v1/"
+  ]
+ },
+ "dynamic": [],
+ "events": [
+  "accord_retabli",
+  "accord_suspendu",
+  "approbation",
+  "debut",
+  "erreur",
+  "essai",
+  "etat",
+  "fin",
+  "info",
+  "outil",
+  "pensee",
+  "resultat",
+  "taches",
+  "texte"
+ ],
+ "helpers": {
+  "_api_v1_ecriture": {
+   "exact": [],
+   "prefix": [
+    "/api/v1/"
+   ]
+  },
+  "_controle": {
+   "exact": [],
+   "prefix": [
+    "/api/v1/"
+   ]
+  },
+  "_relais": {
+   "exact": [
+    "/api/chat"
+   ],
+   "prefix": []
+  },
+  "_statique_pwa": {
+   "exact": [
+    "/icone.svg",
+    "/logo.svg",
+    "/manifest.webmanifest"
+   ],
+   "prefix": []
+  }
+ },
+ "rights": {
+  "GET": {},
+  "POST": {}
+ }
+}

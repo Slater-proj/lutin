@@ -29,14 +29,18 @@ if [ "$commande" = "serve" ]; then
   # Les modèles sont dans /models.
   [ -d "${OLLAMA_MODELS:-/models}" ] && [ ! -w "${OLLAMA_MODELS:-/models}" ] && echo "[Lutin] The ${OLLAMA_MODELS:-/models} volume should be writable by user 1000 / Le volume ${OLLAMA_MODELS:-/models} devrait être accessible en écriture pour l'utilisateur 1000." >&2
   [ -d /engines ] && [ ! -w /engines ] && echo "[Lutin] /engines is not writable by user 1000: engines go to /data/engines instead (fix: sudo chown -R 1000:1000 on the host folder) / /engines n'est pas accessible en écriture pour l'utilisateur 1000 : les moteurs iront dans /data/engines." >&2
-  set -- setup --yes --no-models --no-ollama --level "${LUTIN_NIVEAU:-reseau}" --port "${LUTIN_PORT:-8777}" --workspace "$WORKSPACE" --reconfigure
-  [ -n "${LUTIN_ECOUTE:-}" ] && set -- "$@" --listen "$LUTIN_ECOUTE"
-  [ -n "${LUTIN_URL_PUBLIQUE:-}" ] && set -- "$@" --url "$LUTIN_URL_PUBLIQUE"
+  # English names first in the docs (docs/modernization/ENVIRONMENT.md); the original name wins when both are set, as in lutin.environment.
+  LEVEL="${LUTIN_NIVEAU:-${LUTIN_LEVEL:-reseau}}"
+  LISTEN="${LUTIN_ECOUTE:-${LUTIN_LISTEN:-}}"
+  PUBLIC_URL="${LUTIN_URL_PUBLIQUE:-${LUTIN_PUBLIC_URL:-}}"
+  set -- setup --yes --no-models --no-ollama --level "$LEVEL" --port "${LUTIN_PORT:-8777}" --workspace "$WORKSPACE" --reconfigure
+  [ -n "$LISTEN" ] && set -- "$@" --listen "$LISTEN"
+  [ -n "$PUBLIC_URL" ] && set -- "$@" --url "$PUBLIC_URL"
   for ip in $(echo "${LUTIN_PROXY_IP:-}" | tr ',' ' '); do set -- "$@" --proxy-ip "$ip"; done
   lutin "$@" > /dev/null
   # Autres dossiers de travail : LUTIN_WORKSPACES=/workspace/a,/workspace/b (ajoutés s'ils n'y sont pas déjà)
   for dossier in $(echo "${LUTIN_WORKSPACES:-${LUTIN_TRAVAUX:-}}" | tr ',' ' '); do lutin workspaces add "$dossier" > /dev/null || echo "[Lutin] Dossier de travail ignoré : $dossier" >&2; done
-  # Mode hors ligne strict : LUTIN_HORS_LIGNE=1 (lu directement par Lutin à chaque connexion sortante)
+  # Mode hors ligne strict : LUTIN_OFFLINE=1 ou LUTIN_HORS_LIGNE=1 (lu directement par Lutin à chaque connexion sortante)
   exec lutin serve --no-browser --no-supervisor
 fi
 

@@ -1,7 +1,7 @@
 # Lutin behind a reverse proxy with Authelia, on a small shared server (CPU only, limited RAM)
 # Lutin derrière un reverse proxy avec Authelia, sur un petit serveur partagé (processeur seul, RAM limitée).
 #   docker network create --subnet 172.30.0.0/24 proxy        (once / une fois ; your reverse proxy joins this network too / ton reverse proxy la rejoint aussi)
-#   mkdir -p travail && sudo chown 1000:1000 travail
+#   mkdir -p workspace && sudo chown 1000:1000 workspace
 #   docker compose -f docker-compose.proxy.yml up -d
 # See / Voir docs/DOCKER.md (EN) and docs/DOCKER.fr.md (FR), section "Homelab".
 services:
@@ -23,7 +23,7 @@ services:
     volumes:
       - lutin-data:/data
       - lutin-models:/models
-      - ./travail:/travail              # the ONLY place Lutin can read and modify / le SEUL endroit que Lutin peut lire et modifier
+      - ./workspace:/workspace              # the ONLY place Lutin can read and modify / le SEUL endroit que Lutin peut lire et modifier
     networks:
       - proxy
     # No "ports": the reverse proxy reaches http://lutin:8777 on the shared network. If your proxy runs on the host instead:

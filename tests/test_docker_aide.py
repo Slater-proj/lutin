@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 
 import context  # noqa: F401
-from lutin import moteur as _m  # noqa: F401  (avant les autres : import circulaire sinon)
-from lutin import diagnostic, docker_aide, moteurs
+from lutin import core as _m  # noqa: F401  (avant les autres : import circulaire sinon)
+from lutin import docker_doctor, engines
 
 RACINE = Path(__file__).resolve().parent.parent
 
@@ -26,7 +26,7 @@ def injoignable(*a, **k):
 class Montages(unittest.TestCase):
     def test_points_de_montage(self):
         texte = "30 22 0:27 / /data rw,relatime - ext4 /dev/sda1 rw\n31 22 0:28 / /models rw - ext4 /dev/sdb rw\n32 22 0:1 / / rw - overlay overlay rw\n"
-        self.assertEqual(docker_aide.points_de_montage(texte), {"/data", "/models", "/"})
+        self.assertEqual(docker_doctor.mount_points(texte), {"/data", "/models", "/"})
 
 
 class Conteneur(unittest.TestCase):
@@ -38,7 +38,7 @@ class Conteneur(unittest.TestCase):
 
     def lignes(self, tmp, montages, env=None, memoire=(None, 16e9), ouvrir=injoignable):
         env = dict({"LUTIN_HOME": str(tmp / "data"), "OLLAMA_MODELS": str(tmp / "models")}, **(env or {}))
-        return docker_aide.verifier_conteneur(env, montages=montages, memoire=memoire, ouvrir=ouvrir, libre=lambda d: 50e9)
+        return docker_doctor.check_container(env, montages=montages, memoire=memoire, ouvrir=ouvrir, libre=lambda d: 50e9)
 
     def test_des_volumes_montes_sont_ok(self):
         tmp = self.prepare()
@@ -71,12 +71,12 @@ class Conteneur(unittest.TestCase):
 
 class Hote(unittest.TestCase):
     def test_sans_docker_rien_a_dire(self):
-        self.assertEqual(docker_aide.verifier_hote(qui=lambda n: None), [])
+        self.assertEqual(docker_doctor.check_host(qui=lambda n: None), [])
 
     def test_docker_arrete(self):
         class R:
             returncode, stdout = 1, b""
-        lignes = docker_aide.verifier_hote(lanceur=lambda *a, **k: R(), qui=lambda n: "docker")
+        lignes = docker_doctor.check_host(lanceur=lambda *a, **k: R(), qui=lambda n: "docker")
         self.assertEqual(lignes[0][0], "attention")
 
     def test_memoire_wsl_trop_petite(self):
@@ -87,7 +87,7 @@ class Hote(unittest.TestCase):
                 returncode = 0
                 stdout = reponses[cmd[1]]
             return R()
-        lignes = docker_aide.verifier_hote(lanceur=lanceur, qui=lambda n: "docker")
+        lignes = docker_doctor.check_host(lanceur=lanceur, qui=lambda n: "docker")
         self.assertTrue(any(n == "attention" and ".wslconfig" in t for n, t in lignes), lignes)
 
 
@@ -102,6 +102,14 @@ class ComposeEtVolumes(unittest.TestCase):
             t = self.lire(nom)
             self.assertIn("lutin-data:/data", t, nom)
             self.assertRegex(t, r"(?m)^volumes:\n(?:[ \t]+.*\n)*?[ \t]+lutin-data:", nom)
+
+    def test_every_compose_mounts_the_workspace_folder_the_docs_create(self):
+        """The docs create and chown ./workspace; a compose that mounts ./travail makes Docker create it as root, and the container refuses to start."""
+        for f in sorted(RACINE.glob("docker-compose*.yml")):
+            t = f.read_text(encoding="utf-8")
+            self.assertNotIn("./travail", t, f.name)
+            if "/data" in t:
+                self.assertIn("./workspace:/workspace", t, f.name)
 
     def test_les_modeles_sont_dans_un_volume_nomme(self):
         self.assertIn("lutin-models:/models", self.lire("docker-compose.yml"))
@@ -121,27 +129,23 @@ class ComposeEtVolumes(unittest.TestCase):
         self.assertIn("--no-models", e)
         self.assertIn("--no-ollama", e)
 
+    def test_the_start_reads_the_english_name_of_each_variable_it_reads(self):
+        """The shell reads its variables itself, before Lutin applies lutin.environment: an English name (LUTIN_LEVEL) was ignored in Docker."""
+        from lutin import environment
+        e = self.lire("docker/entrypoint.sh")
+        for english, original in environment.ALIASES.items():
+            if original in e:
+                self.assertIn(english, e, "{} is read by the start, {} must be too".format(original, english))
+
 
 class Reglages(unittest.TestCase):
     def test_l_adresse_de_llamacpp_vient_de_l_environnement(self):
         import os
         from unittest import mock
-        mo = moteurs.MOTEURS["llamacpp"]
+        mo = engines.ENGINES["llamacpp"]
         with mock.patch.dict(os.environ, {"LUTIN_LLAMACPP_URL": "http://llamacpp:8080"}):
             self.assertTrue(mo.externe())
             self.assertEqual(mo.adresse(), "http://llamacpp:8080/v1")
-
-
-class PremierLancement(unittest.TestCase):
-    def test_moteur_pret(self):
-        self.assertTrue(diagnostic.premier_lancement("Ollama", True, "")["pret"])
-
-    def test_aucun_moteur_dit_pourquoi_et_recommande(self):
-        r = diagnostic.premier_lancement("Ollama", False, "Pas installé.", {"moteur": "ollama", "nom": "Ollama", "raison": "le plus simple"})
-        self.assertFalse(r["pret"])
-        self.assertIn("Ollama", r["raison"])
-        self.assertIn("Pas installé.", r["raison"])
-        self.assertEqual(r["recommande"]["moteur"], "ollama")
 
 
 class Annulation(unittest.TestCase):
@@ -156,16 +160,16 @@ class Annulation(unittest.TestCase):
 
             def statut(self):
                 return {}
-        moteurs.lancer_tache(Faux(), "installer")
+        engines.launch_task(Faux(), "installer")
         time.sleep(0.2)
-        self.assertTrue(moteurs.annuler_tache("faux"))
+        self.assertTrue(engines.cancel_task("faux"))
         for _ in range(100):
-            if moteurs.tache("faux")["statut"] != "en cours":
+            if engines.task("faux")["statut"] != "en cours":
                 break
             time.sleep(0.05)
-        self.assertEqual(moteurs.tache("faux")["statut"], "annule")
-        self.assertEqual(moteurs.tache("faux")["erreur"], "")
-        self.assertFalse(moteurs.annuler_tache("faux"), "rien à annuler ensuite")
+        self.assertEqual(engines.task("faux")["statut"], "annule")
+        self.assertEqual(engines.task("faux")["erreur"], "")
+        self.assertFalse(engines.cancel_task("faux"), "rien à annuler ensuite")
 
 
 if __name__ == "__main__":

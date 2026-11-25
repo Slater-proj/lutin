@@ -9,9 +9,9 @@ on:
   push:
     branches: [main]
     paths:
-      - "src/lutin/moteur_llamacpp.py"
-      - "src/lutin/moteur_openai.py"
-      - "src/lutin/essai_moteur.py"
+      - "src/lutin/llamacpp_engine.py"
+      - "src/lutin/openai_engine.py"
+      - "src/lutin/engine_trial.py"
       - ".github/workflows/moteurs.yml"
 
 permissions:

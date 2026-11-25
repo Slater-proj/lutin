@@ -9,17 +9,20 @@ python tests/lancer_tests.py            # one process per file (the engine keeps
 python tools/captures.py                # regenerates the README screenshots (English and French) after an interface change
 python tests/lancer_tests.py securite   # only the files whose name contains « securite »
 python -m pip install ruff && python -m ruff check src tests tools
+cd frontend && npm ci --ignore-scripts && npm run check && npm test && npm run build   # the interface
 ```
 
 Nothing to install to run Lutin or its tests: standard library only. Keep it that way. The interface tests use a real browser (Chrome, Chromium or Edge) and are skipped if there is none.
 
 ## Code layout
 
-`src/lutin/moteur.py` holds the shared state (settings, paths, constants) and re-exports the rest. The work lives in modules that read that state late (`from . import moteur as _m`): `serveur` (HTTP routes), `dialogue` (a turn, the agent loop), `outils` (tools), `donnees` (conversations, memory), `rappel` (recall and document search), `planifie` (scheduled tasks), `images`, `acces`, `conseil`, `sante`, `revue`, `plan`. A constant that a test patches must live in `moteur`.
+`src/lutin/core.py` holds the shared state (settings, paths, constants) and re-exports the rest. The work lives in modules that read that state late (`from . import core as _m`): `server` and `api_v1` (HTTP; every v1 route declares its right in one table), `agent` and `turn_runner` (a turn, the agent loop, one entry for every launcher: ADR 0015), `tools`, `storage` and `store` (conversations in SQLite, ADR 0017), `recall` (recall and document search), `scheduled_tasks`, `mission`, `images`, `access`, `health`, `change_review`, `machines` (paired computers). A constant that a test patches must live in `core`. The interface is in `frontend/` (Svelte 5, TypeScript, Vite; see [frontend/README.md](frontend/README.md)); `tools/construire_icones.py` regenerates the icons by hand.
 
 ## Commits and releases
 
 Every merge into `main` **publishes a version** (see [docs/PUBLISHING.md](docs/PUBLISHING.md)). The number comes from the commit titles: write conventional titles (`feat: …` for something new, `fix: …` for a fix, `feat!: …` or « BREAKING CHANGE » for a breaking change; `docs:`, `chore:`, `ci:`, `test:`, `refactor:` for the rest). Merge with a **squash** and a careful title: it is the one shown in the release notes.
+
+Until 1.0 is released, work and pull requests target the `modernization` branch; `main` only receives the release. `tools/release_channel.json` decides whether a merge publishes an alpha, beta, release candidate or stable version.
 
 ## Rules
 
@@ -31,11 +34,12 @@ Every merge into `main` **publishes a version** (see [docs/PUBLISHING.md](docs/P
 
 ## Languages (French and English)
 
-The code, its comments and its tests are written in **French**; the application and the repository are bilingual.
+The code, its comments and its tests are written in **English** ([ADR 0001](docs/adr/0001-english-and-clean-break-at-1.0.md)); a module still in French keeps its language until its names are renamed. The application and the repository are bilingual, and French stays the language the texts are written in.
 
-- Every text shown to the user goes through `_t("texte français")` (`from .i18n import t as _t`) in Python, or `T('texte français')` in the page (`src/lutin/web/index.html`). Its English translation goes into `src/lutin/langues/messages.en.json` (Python) or `interface.en.json` (page), keyed by the exact French text.
+- In Python, every text shown to the user goes through `_t("texte français")` (`from .i18n import t as _t`); its English translation goes into `src/lutin/langues/messages.en.json`, keyed by the exact French text.
+- In the interface, texts live in `frontend/src/lib/messages.ts` (French and English, one key each) and are shown with `t("key")`; a Vitest test fails if a key is missing in one language.
 - A text built by concatenation cannot be translated well: write it as a template (`_t("{} libres sur {}").format(a, b)`).
-- `tests/test_langue.py` and `tests/test_interface.py` fail if a text has no translation, if a translation loses a `{}` variable, or if a translation is left over. Without a translation, the French text is shown: never an error, but never a silent gap either.
+- `tests/test_langue.py` fails if a Python text has no translation, if a translation loses a `{}` variable, or if a translation is left over. Without a translation, the French text is shown: never an error, but never a silent gap either.
 - Documentation: `X.md` is English, `X.fr.md` is French; each starts with a link to the other. Update both in the same pull request.
 
 ## Personal data

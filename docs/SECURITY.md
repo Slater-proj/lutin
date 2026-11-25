@@ -103,7 +103,7 @@ Optional addons (Telegram, email, X, ComfyUI, background work) are **off by defa
 
 - Allowed: this machine, **Ollama** (the `OLLAMA_URL` address), and the extensions you declared (`LUTIN_OUTIL_URL`, `COMFY_URL`).
 - Blocked: web search and reading (the tools are not even offered to the model any more), online catalogue, model and Lutin updates, model downloads (Ollama downloads them itself: the action is refused).
-- A single place in the code decides (`lutin/horsligne.py`) and a test watches the **real connections** (`tests/test_hors_ligne.py`): none to anything other than this machine.
+- A single place in the code decides (`lutin/offline.py`) and a test watches the **real connections** (`tests/test_hors_ligne.py`): none to anything other than this machine.
 - It can only be **turned off** from this machine (not remotely, even with a valid session).
 - Honest limits: Lutin does not control Ollama itself nor the rest of your system. For a total guarantee, also cut the network of the container or machine.
 
@@ -112,6 +112,9 @@ Optional addons (Telegram, email, X, ComfyUI, background work) are **off by defa
 Lutin only reads and modifies the **workspace folder** of the conversation. Several folders are possible; only one is active at a time (if an answer is working in a folder, you cannot switch before it ends, nor start one in another).
 
 - A folder must exist, must not be the root of a disk, nor **contain or be inside Lutin's folders** (configuration, data, memory, cache).
+- The file tools stay inside it. A **command** runs with your own rights and **without an operating-system sandbox**: once approved, it can reach
+  what you can reach. Read it before you approve it; the commands that destroy or take over a machine are always asked, whatever the automatic
+  approvals say, and that answer is never remembered.
 - **Adding or removing** a folder can only be done from this machine: at the « this machine only » level, or with `lutin workspaces`. A paired device (network level) or a proxy identity can **choose** an already declared folder, never add one: otherwise a remote access could declare `/` or `C:\`.
 
 ## What only this machine can change

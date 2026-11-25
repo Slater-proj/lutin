@@ -2,33 +2,42 @@ name: release
 
 # Chaque envoi sur une branche :
 #   - main            -> une publication : version calculée, étiquette vX.Y.Z, GitHub Release (roue, archive source, sommes de contrôle), image Docker :X.Y.Z et :latest
+#                        si tools/release_channel.json demande des pré-versions (alpha, beta, rc) : étiquette vX.Y.ZaN, Release marquée « pre-release »
+#                        (jamais « dernière version », donc jamais proposée par les installateurs ni par l'annonce de mise à jour), image :X.Y.ZaN et :next, jamais :latest
 #   - toute autre     -> une candidate (rc) SANS étiquette ni Release : fichiers joints à l'exécution, image Docker :rc-<branche>
-# Les tests passent d'abord (ci.yml). Les règles de version sont dans tools/prochaine_version.py (docs/PUBLICATIONS.md).
+#   - lancement MANUEL (le bouton : Actions > release > Run workflow, choisir la branche) -> une PRÉ-version publiée depuis cette branche
+#                        (alpha/beta/rc selon tools/release_channel.json) : étiquette, Release « pre-release », image :next. Jamais une version stable hors de main :
+#                        si le canal disait « stable », le travail s'arrête.
+# Les règles de version sont dans tools/prochaine_version.py (docs/PUBLISHING.md).
+#
+# Built once, tested, then published as it is: the version is computed first and given to ci.yml, which builds the wheel, the source archive and the Windows installer
+# with it and tests them. What is published are those very files (artifacts of the run): nothing is built again after the tests, and nothing is published if one fails.
 on:
   push:
     branches: ["**"]
+  workflow_dispatch:          # the button. No box to tick: launching it by hand IS asking for a pre-release of the chosen branch.
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}      # sur main, les publications se suivent ; sur une branche, la plus récente remplace l'ancienne
+  # A publication launched by hand has its own queue: a push on the same branch never cancels it. On main and for a publication, runs follow one another;
+  # on a branch, the newest push replaces the older one.
+  group: release-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && 'manual' || 'push' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.event_name != 'workflow_dispatch' }}
 
 permissions:
   contents: write
   packages: write
 
 jobs:
-  tests:
-    uses: ./.github/workflows/ci.yml
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
-
-  version:
-    needs: tests
-    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
       etiquette: ${{ steps.v.outputs.etiquette }}
       publier: ${{ steps.v.outputs.publier }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
       image: ${{ steps.nom.outputs.image }}
       balises: ${{ steps.nom.outputs.balises }}
       balises_leger: ${{ steps.nom.outputs.balises_leger }}
@@ -43,8 +52,12 @@ jobs:
       - name: Calculer la version
         id: v
         run: |
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+          set -o pipefail          # un canal de publication illisible arrête tout ici, au lieu de laisser des sorties vides
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] || [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
             python tools/prochaine_version.py --mode release | tee -a "$GITHUB_OUTPUT"
+            if [ "${GITHUB_REF}" != "refs/heads/main" ] && ! grep -q '^prerelease=true$' "$GITHUB_OUTPUT"; then
+              echo "refus : hors de main, seule une PRÉ-version se publie (vérifie tools/release_channel.json)"; exit 1
+            fi
           else
             python tools/prochaine_version.py --mode rc --branche "${GITHUB_REF_NAME}" --numero "${GITHUB_RUN_NUMBER}" | tee -a "$GITHUB_OUTPUT"
           fi
@@ -53,7 +66,11 @@ jobs:
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
           VERSION="${{ steps.v.outputs.version }}"
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+          if [ "${{ steps.v.outputs.prerelease }}" = "true" ]; then
+            BALISES="${IMAGE}:${VERSION},${IMAGE}:next"
+            LEGER="${IMAGE}:${VERSION}-slim,${IMAGE}:next-slim"
+            ROCM="${IMAGE}:${VERSION}-rocm,${IMAGE}:next-rocm"
+          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             BALISES="${IMAGE}:${VERSION},${IMAGE}:latest"
             LEGER="${IMAGE}:${VERSION}-slim,${IMAGE}:slim"
             ROCM="${IMAGE}:${VERSION}-rocm,${IMAGE}:rocm"
@@ -67,62 +84,50 @@ jobs:
           echo "balises=${BALISES}" >> "$GITHUB_OUTPUT"
           echo "balises_leger=${LEGER}" >> "$GITHUB_OUTPUT"
           echo "balises_rocm=${ROCM}" >> "$GITHUB_OUTPUT"
+      - name: Dire sur la page de l'exécution ce qui sort et où le prendre
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          PUBLIER: ${{ steps.v.outputs.publier }}
+          PRE: ${{ steps.v.outputs.prerelease }}
+          BALISES: ${{ steps.nom.outputs.balises }}
+        run: |
+          DEPOT="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          {
+            echo "## Lutin ${VERSION}"
+            echo
+            if [ "${PUBLIER}" != "true" ]; then
+              echo "This commit already carries a version tag: the tests run, nothing new is published."
+            elif [ "${GITHUB_REF}" = "refs/heads/main" ] || [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+              if [ "${PRE}" = "true" ]; then echo "**Pre-release** of the branch \`${GITHUB_REF_NAME}\`. When every job is green it is published here: ${DEPOT}/releases/tag/v${VERSION}"
+              else echo "**Release**. When every job is green it is published here: ${DEPOT}/releases/tag/v${VERSION}"; fi
+            else
+              echo "**Candidate** of the branch \`${GITHUB_REF_NAME}\`: no tag, no Release."
+              echo
+              echo "- When the jobs are green, the files to try are under **Artifacts** at the bottom of this page: \`lutin-${VERSION}\` (wheel, source archive) and \`installateur-${VERSION}\` (Windows installer)."
+              echo "- To publish this branch as a pre-release that anyone can download: [Actions > release](${DEPOT}/actions/workflows/release.yml) > **Run workflow** > branch \`${GITHUB_REF_NAME}\`."
+            fi
+            if [ "${PUBLIER}" = "true" ]; then
+              echo
+              echo "Docker, once the job « image Docker » is green: \`docker pull ${BALISES%%,*}\`"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  construire:
+  tests:
     needs: version
-    if: needs.version.outputs.publier == 'true'
-    runs-on: ubuntu-latest
-    env:
-      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - run: python -m pip install build
-      - run: python -m build
-      - run: python tools/verifier_paquet.py dist
-      - name: Sommes de contrôle
-        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
-      - uses: actions/upload-artifact@v7
-        with:
-          name: lutin-${{ needs.version.outputs.version }}
-          path: dist/*
-          retention-days: 30
-
-  installateur:
-    name: installateur Windows
-    needs: version
-    if: needs.version.outputs.publier == 'true'
-    runs-on: windows-latest
-    env:
-      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      - run: python -m pip install build
-      - run: python -m build --wheel
-      - run: choco install innosetup --yes --no-progress
-      - name: Construire l'installateur
-        shell: pwsh
-        run: ./installateur/windows/construire.ps1 -Roue (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName -Version "${{ needs.version.outputs.version }}"
-      - name: Le vérifier (installation, réinstallation, Python embarqué, désinstallation)
-        shell: pwsh
-        run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version "${{ needs.version.outputs.version }}"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: installateur-${{ needs.version.outputs.version }}
-          path: dist/lutin-setup-*.exe
-          retention-days: 30
+    uses: ./.github/workflows/ci.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+    permissions:
+      contents: read
 
   publier:
-    name: publication (main)
-    needs: [version, construire, installateur]
-    if: github.ref == 'refs/heads/main' && needs.version.outputs.publier == 'true'
+    name: publication (version, ou pré-version lancée à la main)
+    needs: [version, tests]
+    if: (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') && needs.version.outputs.publier == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
+      # The files built and tested by ci.yml in this very run.
       - uses: actions/download-artifact@v8
         with:
           name: lutin-${{ needs.version.outputs.version }}
@@ -131,14 +136,15 @@ jobs:
         with:
           name: installateur-${{ needs.version.outputs.version }}
           path: dist
-      - name: Somme de contrôle de l'installateur
-        run: cd dist && sha256sum lutin-setup-*.exe >> SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Sommes de contrôle
+        run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Créer l'étiquette et la publication
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.version.outputs.etiquette }}
           target_commitish: ${{ github.sha }}
           name: Lutin ${{ needs.version.outputs.version }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
           generate_release_notes: true
           files: dist/*
           body: |
@@ -154,11 +160,22 @@ jobs:
 
   docker:
     name: image Docker
-    needs: [version, construire]
-    if: needs.version.outputs.publier == 'true' && (github.event.repository.fork == false)
+    # After the GitHub Release when there is one (main, or a pre-release started by hand): an image is never pushed for a version whose Release
+    # failed (a tag that already exists, for example). On another branch `publier` is skipped and the candidate image is pushed as before.
+    needs: [version, tests, publier]
+    if: >-
+      always() && needs.version.result == 'success' && needs.tests.result == 'success'
+      && (needs.publier.result == 'success' || needs.publier.result == 'skipped')
+      && needs.version.outputs.publier == 'true' && (github.event.repository.fork == false)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+      - name: The interface built and tested for this run
+        uses: actions/download-artifact@v8
+        with:
+          name: interface
+          path: src/lutin/web/app
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -171,7 +188,9 @@ jobs:
           context: .
           target: complet
           push: true
-          tags: ${{ needs.version.outputs.balises }}
+          # « :rocm » and « :X.Y.Z-rocm » are the same image (kept for existing compose files; Ollama's ROCm build is chosen at install time):
+          # carried by this build instead of a third one that could fail in silence and leave « :rocm » on an old version.
+          tags: ${{ needs.version.outputs.balises }},${{ needs.version.outputs.balises_rocm }}
           cache-from: type=gha,scope=complet
           cache-to: type=gha,mode=max,scope=complet
           build-args: LUTIN_VERSION=${{ needs.version.outputs.version }}
@@ -189,23 +208,6 @@ jobs:
           cache-from: type=gha,scope=leger
           cache-to: type=gha,mode=max,scope=leger
           build-args: LUTIN_VERSION=${{ needs.version.outputs.version }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.version=${{ needs.version.outputs.version }}
-            org.opencontainers.image.licenses=MIT
-      # « :rocm » et « :X.Y.Z-rocm » : conservées pour les compose existants, elles sont maintenant identiques (la version ROCm d'Ollama se choisit à l'installation, d'après la carte détectée). Jamais vérifiée sur une vraie carte AMD.
-      - uses: docker/build-push-action@v7
-        continue-on-error: true
-        with:
-          context: .
-          target: complet
-          push: true
-          tags: ${{ needs.version.outputs.balises_rocm }}
-          cache-from: type=gha,scope=rocm
-          cache-to: type=gha,mode=max,scope=rocm
-          build-args: |
-            LUTIN_VERSION=${{ needs.version.outputs.version }}
-            OLLAMA_VARIANT=-rocm
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.version.outputs.version }}

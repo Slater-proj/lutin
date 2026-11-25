@@ -14,9 +14,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs, moteurs_maj
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines, engine_updates
 
 VRAI_POPEN = subprocess.Popen
 FAUX = str(Path(__file__).resolve().parent / "fixtures" / "faux_llama_server.py")
@@ -34,9 +34,9 @@ def port_libre():
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-routeur-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
-        self.m = moteurs.MOTEURS["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.m = engines.ENGINES["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
         self.args = self.tmp / "args.jsonl"
         os.environ["LUTIN_FAUX_ARGS"] = str(self.args)
         self.addCleanup(self.fin)
@@ -44,15 +44,16 @@ class Base(unittest.TestCase):
         d.mkdir(parents=True)
         for nom in ("un", "deux", "nomic-embed-text"):
             (d / (nom + ".gguf")).write_bytes(b"GGUF")
-        ml.regler("llamacpp", port=port_libre(), variante_installee="cpu")
+        ml.configure("llamacpp", port=port_libre(), variante_installee="cpu")
         self.aide = AIDE_COMPLETE
-        patchs = [mock.patch.object(self.m, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(ml, "aide_serveur", lambda exe: self.aide),
+        patchs = [mock.patch.object(self.m, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(ml, "server_help", lambda exe: self.aide),
                   mock.patch.object(ml.subprocess, "Popen", self.lancer_faux)]
         for p in patchs:
             p.start()
             self.addCleanup(p.stop)
 
     def lancer_faux(self, commande, **kw):
+        self.environnements = getattr(self, "environnements", []) + [kw.get("env")]
         return VRAI_POPEN([sys.executable, FAUX] + commande[1:], **kw)
 
     def lancements(self):
@@ -61,12 +62,12 @@ class Base(unittest.TestCase):
     def fin(self):
         self.m.arreter()
         os.environ.pop("LUTIN_FAUX_ARGS", None)
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.update(self.ancien)
 
 
 class Routeur(Base):
     def test_le_preset_decrit_chaque_modele_et_refuse_les_noms_dangereux(self):
-        t = ml.texte_preset([("un", Path("C:/m/un.gguf"), None), ("vision", "/m/v.gguf", "/m/mm.gguf"), ("nomic-embed-text", "/m/e.gguf", None), ("mal]\nmodel = /etc/passwd", "/x.gguf", None)],
+        t = ml.preset_text([("un", Path("C:/m/un.gguf"), None), ("vision", "/m/v.gguf", "/m/mm.gguf"), ("nomic-embed-text", "/m/e.gguf", None), ("mal]\nmodel = /etc/passwd", "/x.gguf", None)],
                             8192, {"fils": 8, "n_cpu_moe": 20, "ngl": 99})
         self.assertIn("[un]\nmodel = C:/m/un.gguf", t)
         self.assertIn("mmproj = /m/mm.gguf", t)
@@ -80,21 +81,21 @@ class Routeur(Base):
     def test_le_fichier_n_est_pas_garde_en_ram_en_plus_de_la_carte(self):
         """Un modèle de 22 Go en VRAM était AUSSI gardé en entier en mémoire vive (mmap) : le PC saturait. `no-mmap` dès qu'une carte graphique sert, y compris avec `--fit`."""
         for ajuste in (False, True):
-            self.assertIn("no-mmap = true", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99 if not ajuste else 0, "sans_mmap": True}))
-        self.assertNotIn("no-mmap", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "sans_mmap": False}))
+            self.assertIn("no-mmap = true", ml.preset_text([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99 if not ajuste else 0, "sans_mmap": True}))
+        self.assertNotIn("no-mmap", ml.preset_text([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "sans_mmap": False}))
 
     def test_deux_modeles_se_suivent_sans_redemarrer_le_serveur(self):
         """Critère : deux modèles (deux rôles) servis l'un après l'autre par le même serveur."""
-        ml.regler_avance("llamacpp", {"routeur": True})
+        ml.configure_advanced("llamacpp", {"routeur": True})
         self.assertTrue(self.m.routeur_actif())
         r1 = self.m.chat({"model": "un", "messages": MESSAGE, "options": {"num_ctx": 4096}}, 30)
         self.assertEqual(r1["message"]["content"].split(" (")[0], "réponse de un")
-        proc = ml.SERVEUR["proc"]
+        proc = ml.SERVER["proc"]
         r2 = self.m.chat({"model": "deux", "messages": MESSAGE, "options": {"num_ctx": 4096}}, 30)
         self.assertEqual(r2["message"]["content"].split(" (")[0], "réponse de deux")
         r3 = self.m.chat({"model": "un", "messages": MESSAGE, "options": {"num_ctx": 4096}}, 30)
         self.assertEqual(r3["message"]["content"].split(" (")[0], "réponse de un")
-        self.assertIs(ml.SERVEUR["proc"], proc, "le même processus a servi les trois réponses")
+        self.assertIs(ml.SERVER["proc"], proc, "le même processus a servi les trois réponses")
         self.assertEqual(len(self.lancements()), 1, "un seul lancement du serveur")
         commande = self.lancements()[0]
         self.assertIn("--models-preset", commande)
@@ -103,13 +104,19 @@ class Routeur(Base):
         self.assertEqual(self.m.en_memoire("un"), {"taille": 0, "vram": 0})
         self.assertEqual(self.m.en_memoire("deux"), {"taille": 0, "vram": 0})
         self.assertIsNone(self.m.en_memoire("absent"))
+        self.assertIs(ml.SERVER["pret"], True, "the server answered: its model is in memory")
+        ml.SERVER["pret"] = False          # as between the launch and its first answer
+        try:
+            self.assertIsNone(self.m.en_memoire("un"), "a server still reading its model is not « in memory » (the pill says « loading »)")
+        finally:
+            ml.SERVER["pret"] = True
         self.assertIn("Routeur démarré", self.m.statut()["detail"])
         preset = (self.m.dossier() / "modeles.ini").read_text(encoding="utf-8")
         for nom in ("un", "deux", "nomic-embed-text"):
             self.assertIn("[{}]".format(nom), preset)
 
     def test_un_modele_telecharge_apres_coup_relance_le_routeur_une_fois(self):
-        ml.regler_avance("llamacpp", {"routeur": True})
+        ml.configure_advanced("llamacpp", {"routeur": True})
         self.m.chat({"model": "un", "messages": MESSAGE}, 30)
         (self.m.dossier_modeles() / "trois.gguf").write_bytes(b"GGUF")
         self.m.chat({"model": "trois", "messages": MESSAGE}, 30)
@@ -124,23 +131,50 @@ class Routeur(Base):
 
     def test_le_routeur_est_refuse_si_le_programme_ne_le_sait_pas(self):
         self.aide = "--api-key --threads"
-        with self.assertRaises(ml.ErreurMoteur):
-            ml.regler_avance("llamacpp", {"routeur": True})
+        with self.assertRaises(ml.EngineError):
+            ml.configure_advanced("llamacpp", {"routeur": True})
         self.assertFalse(self.m.routeur_actif())
 
     def test_embeddings_par_le_routeur_et_refus_sans_routeur(self):
-        with self.assertRaises(ml.ErreurMoteur) as e:
+        with self.assertRaises(ml.EngineError) as e:
             self.m.vecteurs("nomic-embed-text", ["a"])
         self.assertIn("routeur", str(e.exception))
-        ml.regler_avance("llamacpp", {"routeur": True})
+        ml.configure_advanced("llamacpp", {"routeur": True})
         v = self.m.vecteurs("nomic-embed-text", ["a", "bbb"])
         self.assertEqual([x[0] for x in v], [1.0, 3.0])
-        proc = ml.SERVEUR["proc"]
+        proc = ml.SERVER["proc"]
         self.m.chat({"model": "un", "messages": MESSAGE}, 30)
-        self.assertIs(ml.SERVEUR["proc"], proc, "le modèle de recherche et celui de conversation vivent dans le même serveur")
+        self.assertIs(ml.SERVER["proc"], proc, "le modèle de recherche et celui de conversation vivent dans le même serveur")
 
 
 class ClesEtReglages(Base):
+    def test_des_reglages_tenus_un_instant_ne_sont_ni_lus_vides_ni_ecrases(self):
+        """Sous Windows, moteurs.json se lit mal un instant quand un autre programme le tient (antivirus, une autre écriture qui le remplace).
+        lire_config rendait alors {}, et l'appelant réécrivait le fichier avec son seul changement : moteurs externes et clés perdus. Il est
+        relu un peu plus tard ; et une écriture qui tombe sur un fichier tenu réessaie au lieu d'échouer."""
+        ml.write_config({"externes": [{"id": "lmstudio", "url": "http://127.0.0.1:1234/v1"}], "llamacpp": {"cle_serveur": "secrete"}})
+        vrai_lire, vrai_remplacer, refus = Path.read_text, os.replace, []
+
+        def tenu(chemin, *a, **k):
+            if chemin.name == "moteurs.json" and len(refus) < 2:
+                refus.append(chemin)
+                raise PermissionError(13, "Access is denied", str(chemin))
+            return vrai_lire(chemin, *a, **k)
+        with mock.patch.object(Path, "read_text", tenu):
+            config = ml.read_config()
+        self.assertEqual(config["llamacpp"]["cle_serveur"], "secrete", "relu un instant plus tard, pas lu vide")
+        remplacements = []
+
+        def remplacer(source, cible):
+            remplacements.append(cible)
+            if len(remplacements) < 3:
+                raise PermissionError(13, "Access is denied", str(cible))
+            return vrai_remplacer(source, cible)
+        with mock.patch.object(ml.os, "replace", remplacer):
+            ml.write_config(dict(config, nouveau=True))
+        self.assertTrue(ml.read_config()["nouveau"], "écrit au troisième essai")
+        self.assertEqual([f.name for f in Path(self.tmp).iterdir() if f.name.endswith(".tmp")], [], "pas de fichier temporaire laissé")
+
     def test_le_serveur_gere_a_une_cle_generee_et_stable(self):
         k = self.m.cle()
         self.assertGreaterEqual(len(k), 24)
@@ -148,14 +182,23 @@ class ClesEtReglages(Base):
         self.m.chat({"model": "un", "messages": MESSAGE}, 30)
         commande = self.lancements()[0]
         self.assertEqual(commande[commande.index("--api-key") + 1], k)
-        self.assertEqual(ml.lire_config()["llamacpp"]["cle_serveur"], k)
+        self.assertEqual(ml.read_config()["llamacpp"]["cle_serveur"], k)
+
+    def test_la_cle_ne_passe_plus_par_la_ligne_de_commande_quand_le_serveur_lit_la_variable(self):
+        """Sur la ligne de commande, la clé se lisait dans la liste des processus de la machine."""
+        self.aide = AIDE_COMPLETE + " (env: llama_api_key)"
+        k = self.m.cle()
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("--api-key", self.lancements()[0])
+        self.assertNotIn(k, self.lancements()[0])
+        self.assertEqual(self.environnements[-1]["LLAMA_API_KEY"], k)
 
     def test_un_serveur_externe_garde_sa_propre_cle(self):
-        ml.regler("llamacpp", adresse="http://192.168.1.50:8080", cle="secret")
+        ml.configure("llamacpp", adresse="http://192.168.1.50:8080", cle="secret")
         self.assertEqual(self.m.cle(), "secret")
 
     def test_couches_d_experts_passees_seulement_si_le_programme_les_connait(self):
-        ml.regler_avance("llamacpp", {"n_cpu_moe": 12})
+        ml.configure_advanced("llamacpp", {"n_cpu_moe": 12})
         self.m.chat({"model": "un", "messages": MESSAGE}, 30)
         c = self.lancements()[0]
         self.assertEqual(c[c.index("--n-cpu-moe") + 1], "12")
@@ -164,39 +207,111 @@ class ClesEtReglages(Base):
         self.m.chat({"model": "un", "messages": MESSAGE}, 30)
         self.assertNotIn("--n-cpu-moe", self.lancements()[1])
 
+    def test_llama_cpp_1_0_charge_aussi_sans_projeter_le_fichier_en_memoire(self):
+        """llama.cpp 1.0 a retiré `--no-mmap` (remplacé par `--load-mode none`) : sans lui, un modèle sur la carte restait AUSSI en entier en mémoire vive."""
+        ml.configure("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE + " -lm, --load-mode MODE"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertEqual(c[c.index("--load-mode") + 1], "none")
+        self.assertNotIn("--no-mmap", c)
+        self.m.arreter()
+        self.aide = AIDE_COMPLETE + " --no-mmap --load-mode"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertIn("--no-mmap", self.lancements()[1], "un serveur qui connaît encore --no-mmap le garde")
+        self.assertNotIn("--load-mode", self.lancements()[1])
+        self.assertIn("load-mode = none", ml.preset_text([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99, "chargement_direct": True}))
+
+    def test_le_cache_de_conversation_est_en_8_bits_comme_avec_ollama(self):
+        """Maintainer (2026-11-22): « the same model as Ollama, and ExLlamaV3 or llama.cpp says not enough memory ». Ollama and TabbyAPI got a cache in 8 bits from Lutin,
+        llama.cpp kept 16: twice the memory for the same window (9.4 GB instead of 4.7 for a 32B at 36,864 tokens)."""
+        ml.configure("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE + " -fa,   --flash-attn [on|off|auto] -ctk,  --cache-type-k type -ctv,  --cache-type-v type"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertEqual((c[c.index("-fa") + 1], c[c.index("-ctk") + 1], c[c.index("-ctv") + 1]), ("on", "q8_0", "q8_0"), "the values' cache in 8 bits needs flash attention")
+        self.m.arreter()
+        self.aide = AIDE_COMPLETE + " -fa, --flash-attn -ctk, --cache-type-k -ctv, --cache-type-v"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertEqual(self.lancements()[1][self.lancements()[1].index("-fa") + 1], "-ctk", "an older server takes -fa alone")
+        self.m.arreter()
+        ml.configure("llamacpp", variante_installee="vulkan")
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("-ctk", self.lancements()[2], "flash attention is not sure everywhere: left as it was outside CUDA and Metal")
+        self.m.arreter()
+        ml.configure("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("-ctk", self.lancements()[3], "a server that does not know the options")
+        preset = ml.preset_text([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99, "cache_8_bits": True})
+        self.assertIn("cache-type-v = q8_0", preset)
+        self.assertIn("flash-attn = on", preset)
+        self.assertNotIn("cache-type", ml.preset_text([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99}))
+
+    def test_un_serveur_qui_refuse_le_cache_en_8_bits_repart_comme_avant(self):
+        """Some models or cards refuse flash attention: llama-server stops at once. A model that does not start at all would be worse than the memory it saves."""
+        ml.configure("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE + " -fa,   --flash-attn [on|off|auto] -ctk,  --cache-type-k type -ctv,  --cache-type-v type"
+        self.addCleanup(ml.SERVER.pop, "cache_8_refuse", None)
+        with mock.patch.dict(os.environ, {"LUTIN_FAUX_SANS_FA": "1"}):
+            r = self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertTrue(r["message"]["content"].startswith("réponse de un"))
+        self.assertEqual([("-ctk" in c) for c in self.lancements()], [True, False], "tried in 8 bits, then started as before")
+        self.m.arreter()
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("-ctk", self.lancements()[2], "not tried again in the same session")
+
+    def test_des_experts_imposes_ne_laissent_pas_fit_renoncer(self):
+        """`--fit` renonce quand des placements de tenseurs sont déjà donnés (c'est ce que fait --n-cpu-moe) : avec les experts imposés, toutes les couches vont
+        sur la carte (-ngl 99) et --fit n'est pas demandé."""
+        ml.configure("llamacpp", variante_installee="cuda")
+        ml.configure_advanced("llamacpp", {"n_cpu_moe": 20})
+        with mock.patch.object(ml, "machine_settings", lambda *a: (["--threads", "8", "--fit", "on"], True)):
+            self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertNotIn("--fit", c)
+        self.assertEqual((c[c.index("--n-cpu-moe") + 1], c[c.index("-ngl") + 1], c[c.index("--threads") + 1]), ("20", "99", "8"))
+        self.m.arreter()
+        ml.configure_advanced("llamacpp", {"n_cpu_moe": 0})
+        with mock.patch.object(ml, "machine_settings", lambda *a: (["--threads", "8", "--fit", "on"], True)):
+            self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[1]
+        self.assertEqual(c[c.index("--fit") + 1], "on", "sans experts imposés, --fit place lui-même les experts en mémoire vive")
+        self.assertNotIn("-ngl", c)
+
     def test_les_valeurs_sont_controlees(self):
         for donnees in ({"modeles_max": -1}, {"modeles_max": 99}, {"modeles_max": "x"}, {"n_cpu_moe": -1}, {"n_cpu_moe": 9999}, {"n_cpu_moe": "x"}, {"version_epinglee": "latest"}, {"version_epinglee": "b12; rm"}):
-            with self.assertRaises(ml.ErreurMoteur, msg=str(donnees)):
-                ml.regler_avance("llamacpp", donnees)
-        ml.regler_avance("llamacpp", {"modeles_max": 3, "n_cpu_moe": 5, "version_epinglee": "B6500"})
-        v = ml.vue_reglages("llamacpp")["avance"]
+            with self.assertRaises(ml.EngineError, msg=str(donnees)):
+                ml.configure_advanced("llamacpp", donnees)
+        ml.configure_advanced("llamacpp", {"modeles_max": 3, "n_cpu_moe": 5, "version_epinglee": "B6500"})
+        v = ml.settings_view("llamacpp")["avance"]
         self.assertEqual((v["modeles_max"], v["n_cpu_moe"], v["version_epinglee"], v["routeur_possible"]), (3, 5, "b6500", True))
-        ml.regler_avance("llamacpp", {"n_cpu_moe": 0, "version_epinglee": ""})
-        v = ml.vue_reglages("llamacpp")["avance"]
+        ml.configure_advanced("llamacpp", {"n_cpu_moe": 0, "version_epinglee": ""})
+        v = ml.settings_view("llamacpp")["avance"]
         self.assertEqual((v["n_cpu_moe"], v["version_epinglee"]), (0, ""))
-        self.assertFalse(ml.regler_avance("openai", {"routeur": True}), "ces réglages ne concernent que llama.cpp géré")
+        self.assertFalse(ml.configure_advanced("openai", {"routeur": True}), "ces réglages ne concernent que llama.cpp géré")
 
 
 class VersionEpinglee(Base):
     RELEASES = [{"tag_name": "b200", "assets": [{"name": "llama-b200-bin-win-cpu-x64.zip", "browser_download_url": "https://x/b200.zip"}]}, {"tag_name": "b199", "assets": [{"name": "llama-b199-bin-win-cpu-x64.zip", "browser_download_url": "https://x/b199.zip"}]}]
 
     def test_la_version_epinglee_est_la_seule_choisie(self):
-        self.assertEqual(ml.choisir_fichiers(self.RELEASES, "windows", "amd64", "cpu")[0], "b200")
-        self.assertEqual(ml.choisir_fichiers(self.RELEASES, "windows", "amd64", "cpu", "b199")[0], "b199")
-        self.assertIsNone(ml.choisir_fichiers(self.RELEASES, "windows", "amd64", "cpu", "b1"))
+        self.assertEqual(ml.choose_files(self.RELEASES, "windows", "amd64", "cpu")[0], "b200")
+        self.assertEqual(ml.choose_files(self.RELEASES, "windows", "amd64", "cpu", "b199")[0], "b199")
+        self.assertIsNone(ml.choose_files(self.RELEASES, "windows", "amd64", "cpu", "b1"))
 
     def test_l_installation_demande_la_version_epinglee_et_jamais_de_mise_a_jour(self):
-        ml.regler_avance("llamacpp", {"version_epinglee": "b199"})
+        ml.configure_advanced("llamacpp", {"version_epinglee": "b199"})
         vus = []
 
         def faux_json(url):
             vus.append(url)
             return self.RELEASES[1]
-        with mock.patch.object(ml, "_systeme", lambda: "windows"), mock.patch("platform.machine", lambda: "AMD64"):
-            with self.assertRaises(ml.ErreurMoteur):          # le téléchargement lui-même n'est pas simulé ici : seule la recherche de la version compte
+        with mock.patch.object(ml, "_system", lambda: "windows"), mock.patch("platform.machine", lambda: "AMD64"):
+            with self.assertRaises(ml.EngineError):          # le téléchargement lui-même n'est pas simulé ici : seule la recherche de la version compte
                 self.m.installer(lambda *a: None, http_json=faux_json, telecharger=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
         self.assertEqual(vus, [ml.API_VERSION + "b199"])
-        self.assertIsNone(moteurs_maj._derniere_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
+        self.assertIsNone(engine_updates._latest_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
 
 
 if __name__ == "__main__":

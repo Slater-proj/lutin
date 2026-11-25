@@ -23,9 +23,9 @@ Avant de charger un modèle, Lutin **estime** la mémoire qu'il prendra : le fic
 | tient à peine | presque rien ne reste de libre : le PC peut ralentir |
 | ne tient pas | à ne pas charger |
 
-Un modèle qui ne tient pas, ou à peine, est signalé **avant** le chargement : dans la bannière du haut de la page, et dans la conversation (une fois par modèle et par demi-heure). L'estimation est aussi disponible à la demande (`/api/estimation?modele=…&ctx=…`). Elle propose ce qui ferait tenir le modèle : une conversation plus courte, un cache plus léger (q4_0), et pour un modèle **à experts** un préréglage processeur.
+Un modèle qui ne tient pas, ou à peine, est signalé **avant** le chargement : dans la bannière du haut de la page, et dans la conversation (une fois par modèle et par demi-heure). Elle propose ce qui ferait tenir le modèle : une conversation plus courte, un cache plus léger (q4_0), et pour un modèle **à experts** un préréglage processeur.
 
-- **Modèles à experts** (peu de paramètres actifs par mot), par exemple une carte de 24 Go et 32 Go de RAM : les experts restent en mémoire vive (`--n-cpu-moe` de llama.cpp, réglable dans Réglages > Moteurs > llama.cpp > Réglages avancés) et le reste tient sur la carte. Le nombre de couches est **estimé** (48 par défaut), pas lu dans le fichier : ajuste d'après la mémoire vidéo réellement prise.
+- **Modèles à experts** (peu de paramètres actifs par mot), par exemple une carte de 24 Go et 32 Go de RAM : les experts restent en mémoire vive (`--n-cpu-moe` de llama.cpp, réglable dans Modèles › Moteurs › llama.cpp › Réglages avancés) et le reste tient sur la carte. Le nombre de couches est **estimé** (48 par défaut), pas lu dans le fichier : ajuste d'après la mémoire vidéo réellement prise.
 - **Mode prudent** : sur une machine modeste (moins de 8 Go utilisables, ou sans carte et moins de 16 Go de RAM), la page propose une conversation de 8 192 jetons et un seul modèle chargé à la fois. Jamais appliqué sans ton accord.
 - **Estimation contre mesure** : le banc des moteurs (`lutin bench-engines`) compare l'estimation à la mémoire réellement prise (`estimation.ecart_pct` dans le résultat : positif = surestimé). **Aucun écart n'est encore mesuré sur du vrai matériel** : tant que des résultats réels manquent, lis l'estimation comme un ordre de grandeur, pas une garantie.
 
@@ -49,7 +49,7 @@ Une carte graphique n'est **pas obligatoire**, dans Docker comme ailleurs : sans
 
 ## Ne pas écraser le PC
 
-Réglages > **Charge de la machine** (et les garde-fous juste au-dessus) :
+Réglages › **Cette machine** (et les garde-fous juste au-dessus) :
 
 | Réglage | Ce qu'il fait |
 |---|---|

@@ -10,7 +10,7 @@ lutin migrate <dossier> --conversations --skills       # ou choisis avec des opt
 lutin migrate <sauvegarde.zip>                         # une sauvegarde de Lutin (lutin backup), ou un zip de donnees/ memoire/ skills/
 ```
 
-Dans la page : **Mémoire > Reprendre les données d'un autre assistant…**.
+Dans la page : l'écran **Projets**, *Reprendre les données d'un autre assistant…*.
 
 | Catégorie | Ce qui vient | Où ça va |
 |---|---|---|

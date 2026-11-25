@@ -2,12 +2,12 @@ import json
 import unittest
 
 import context  # noqa: F401
-from lutin import moteur as M
-from lutin.dialogue import normaliser_arguments as norm
+from lutin import core as M
+from lutin.agent import normalize_arguments as norm
 
 
 def schema(nom):
-    return next(t["function"]["parameters"] for t in M.OUTILS if t["function"]["name"] == nom)
+    return next(t["function"]["parameters"] for t in M.TOOLS if t["function"]["name"] == nom)
 
 
 class ArgumentsDOutil(unittest.TestCase):

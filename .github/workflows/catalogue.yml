@@ -5,7 +5,7 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   pull_request:
-    paths: ["src/lutin/data/modeles.json", "tools/**"]
+    paths: ["src/lutin/data/modeles.json", "src/lutin/model_catalog.py", "tools/verifier_catalogue.py", ".github/workflows/catalogue.yml"]
   workflow_dispatch:
 
 permissions:
@@ -14,12 +14,13 @@ permissions:
 jobs:
   registre:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Schéma du catalogue
-        run: python -c "import sys; sys.path.insert(0, 'src'); from lutin import catalogue; catalogue.charger(); print('catalogue valide')"
+        run: python -c "import sys; sys.path.insert(0, 'src'); from lutin import model_catalog; model_catalog.load(); print('catalogue valide')"
       - name: Existence dans le registre
         run: python tools/verifier_catalogue.py

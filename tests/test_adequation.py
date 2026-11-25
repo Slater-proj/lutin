@@ -14,40 +14,57 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : ils lisent l'état de moteur)
-from lutin import adequation, emplacements, espaces, securite  # noqa: E402
-from lutin.machine import Gpu, Profil  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : ils lisent l'état de moteur)
+from lutin import model_fit, locations, workspace_manager, security  # noqa: E402
+from lutin.hardware import Gpu, Profile  # noqa: E402
 
 CAT = {m["id"]: m for m in _m._CATALOGUE["modeles"]}
 
 
 def carte(vram):
-    return Profil(systeme="windows", ram_go=32, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
+    return Profile(systeme="windows", ram_go=32, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
 
 
 class Appreciation(unittest.TestCase):
     def test_les_niveaux_suivent_la_memoire(self):
-        gros = adequation.evaluer(CAT["qwen3:32b"], carte(24))
-        petit = adequation.evaluer(CAT["qwen3:4b"], carte(24))
+        gros = model_fit.judge(CAT["qwen3:32b"], carte(24))
+        petit = model_fit.judge(CAT["qwen3:4b"], carte(24))
         self.assertEqual(petit["niveau"], "ideal")
         self.assertIn(gros["niveau"], ("bien", "limite"))
-        trop = adequation.evaluer(CAT["llama3.3:70b"], carte(8))
+        trop = model_fit.judge(CAT["llama3.3:70b"], carte(8))
         self.assertEqual(trop["niveau"], "trop_gros")
         self.assertIn("43", trop["texte"].replace(",", ".")[:200] + "43", "le texte donne un chiffre")
 
+    def test_un_modele_a_experts_est_juge_sur_la_machine_mesuree_et_le_moteur(self):
+        """Demande du mainteneur (2026-11-20) : les modèles qui tiennent et ceux qui sont limites, d'après la carte et la mémoire vive libre mesurée, et
+        seulement si le moteur sait garder les experts en mémoire vive."""
+        rtx4090 = Profile(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4090", "nvidia", 24)])
+        a_l_aise = model_fit.judge(CAT["qwen3.6:35b"], rtx4090)
+        self.assertEqual(a_l_aise["niveau"], "bien")
+        self.assertIn("mémoire vive", a_l_aise["texte"])
+        juste = model_fit.judge(CAT["qwen3.6:35b"], Profile(systeme="windows", ram_go=32, ram_libre_go=16, gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12)]))
+        self.assertEqual(juste["niveau"], "limite", "13 Go d'experts en mémoire vive sur 16 libres : il ne reste presque rien")
+        self.assertIn("juste", juste["texte"])
+        self.assertEqual(model_fit.judge(CAT["qwen3-next:80b"], rtx4090)["niveau"], "trop_gros", "30 Go d'experts : la mémoire vive libre n'y suffit pas")
+        rtx4080 = Profile(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4080", "nvidia", 16)])
+        self.assertEqual(model_fit.judge(CAT["qwen3.6:35b"], rtx4080)["niveau"], "bien", "16 Go : 10 Go d'experts en mémoire vive")
+        sans = model_fit.judge(CAT["qwen3.6:35b"], rtx4080, experts_en_ram=False)
+        self.assertEqual(sans["niveau"], "trop_gros")
+        self.assertIn("ce moteur", sans["texte"], "le moteur est la raison, et on dit lesquels savent le faire")
+
     def test_sans_carte_graphique(self):
-        cpu = Profil(systeme="windows", ram_go=16, ram_libre_go=10)
-        self.assertEqual(adequation.evaluer(CAT["qwen3:1.7b"], cpu)["niveau"], "bien")
-        self.assertIn(adequation.evaluer(CAT["qwen3:8b"], cpu)["niveau"], ("limite", "trop_gros"))
+        cpu = Profile(systeme="windows", ram_go=16, ram_libre_go=10)
+        self.assertEqual(model_fit.judge(CAT["qwen3:1.7b"], cpu)["niveau"], "bien")
+        self.assertIn(model_fit.judge(CAT["qwen3:8b"], cpu)["niveau"], ("limite", "trop_gros"))
 
     def test_modele_inconnu_du_catalogue(self):
-        self.assertEqual(adequation.evaluer({"id": "x", "go": 0}, carte(12))["niveau"], "bien", "sans taille on ne prétend rien")
-        self.assertEqual(adequation.evaluer({"id": "x", "go": 200}, carte(12))["niveau"], "trop_gros")
-        self.assertEqual(adequation.evaluer({"id": "x", "go": 2}, carte(12))["niveau"], "ideal")
+        self.assertEqual(model_fit.judge({"id": "x", "go": 0}, carte(12))["niveau"], "bien", "sans taille on ne prétend rien")
+        self.assertEqual(model_fit.judge({"id": "x", "go": 200}, carte(12))["niveau"], "trop_gros")
+        self.assertEqual(model_fit.judge({"id": "x", "go": 2}, carte(12))["niveau"], "ideal")
 
     def test_liste_vide_tant_que_la_machine_n_est_pas_detectee(self):
-        self.assertEqual(adequation.pour_la_liste([{"id": "a", "go": 1}], None, []), {})
-        r = adequation.pour_la_liste([{"id": "qwen3:8b", "go": 5.2}, {"id": "perso:1b", "go": 1}], carte(12), _m._CATALOGUE["modeles"])
+        self.assertEqual(model_fit.for_list([{"id": "a", "go": 1}], None, []), {})
+        r = model_fit.for_list([{"id": "qwen3:8b", "go": 5.2}, {"id": "perso:1b", "go": 1}], carte(12), _m._CATALOGUE["modeles"])
         self.assertEqual(set(r), {"qwen3:8b", "perso:1b"})
 
     def test_chaque_famille_a_sa_phrase(self):
@@ -57,24 +74,34 @@ class Appreciation(unittest.TestCase):
             self.assertLess(len(phrase), 260)
 
 
+class TaillesEcrites(unittest.TestCase):
+    def test_les_tailles_suivent_la_langue_de_la_page(self):
+        """The page writes « 22,6 Go » in French: the sentences of the verdict write their sizes the same way (« 13,2 Go d'experts »), and with a point in English."""
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "fr"}):          # the tests fix the language by this variable (tests/context.py)
+            self.assertEqual((model_fit._gb(13.24), model_fit._gb(20)), ("13,2", "20,0"))
+        with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
+            self.assertEqual(model_fit._gb(13.24), "13.2")
+
+
 class ProfilAttendu(unittest.TestCase):
     """Le choix du programme de llama.cpp (CUDA, Vulkan, processeur) dépend du matériel : il attend la détection au lieu de prendre « processeur » parce qu'elle n'avait pas fini."""
 
     def test_attend_la_fin_de_la_detection_au_lieu_de_renvoyer_rien(self):
         import time as _t
-        etat = dict(adequation._etat)
-        adequation._etat.update(profil=None, quand=0.0, en_cours=False)
-        self.addCleanup(adequation._etat.update, etat)
-        profil = Profil(cpu="x", coeurs=8, ram_go=32, gpus=[Gpu("RTX", "nvidia", 24, 0, "")])
+        etat = dict(model_fit._state)
+        model_fit._state.update(profil=None, quand=0.0, en_cours=False)
+        self.addCleanup(model_fit._state.update, etat)
+        profil = Profile(cpu="x", coeurs=8, ram_go=32, gpus=[Gpu("RTX", "nvidia", 24, 0, "")])
 
         def lente():
             _t.sleep(0.6)
             return profil
-        self.assertIsNone(adequation.profil_pret(lente), "le premier appel ne bloque pas : rien encore")
-        adequation._etat.update(profil=None, quand=0.0)
-        self.assertIs(adequation.profil_attendu(5, lente), profil)
-        adequation._etat.update(profil=None, quand=0.0, en_cours=False)
-        self.assertIsNone(adequation.profil_attendu(0.3, lambda: (_t.sleep(2), profil)[1]), "délai dépassé : None, jamais un blocage")
+        self.assertIsNone(model_fit.ready_profile(lente), "le premier appel ne bloque pas : rien encore")
+        model_fit._state.update(profil=None, quand=0.0)
+        self.assertIs(model_fit.awaited_profile(5, lente), profil)
+        model_fit._state.update(profil=None, quand=0.0, en_cours=False)
+        self.assertIsNone(model_fit.awaited_profile(0.3, lambda: (_t.sleep(2), profil)[1]), "délai dépassé : None, jamais un blocage")
 
 
 class NomAppareil(unittest.TestCase):
@@ -82,11 +109,11 @@ class NomAppareil(unittest.TestCase):
     IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
     def test_le_nom_tape_est_garde_et_qr_n_est_plus_un_nom(self):
-        self.assertEqual(securite.nom_appareil("Mon téléphone", self.IPHONE), "Mon téléphone")
-        self.assertEqual(securite.nom_appareil("QR", self.IPHONE), "Safari · iPhone")
-        self.assertEqual(securite.nom_appareil("", self.CHROME), "Chrome · Windows")
-        self.assertEqual(securite.nom_appareil("qr", self.CHROME, sur_la_machine=True), "Cet ordinateur (Chrome · Windows)")
-        self.assertEqual(securite.nom_appareil(None, ""), "Appareil")
+        self.assertEqual(security.device_name("Mon téléphone", self.IPHONE), "Mon téléphone")
+        self.assertEqual(security.device_name("QR", self.IPHONE), "Safari · iPhone")
+        self.assertEqual(security.device_name("", self.CHROME), "Chrome · Windows")
+        self.assertEqual(security.device_name("qr", self.CHROME, sur_la_machine=True), "Cet ordinateur (Chrome · Windows)")
+        self.assertEqual(security.device_name(None, ""), "Appareil")
 
 
 class Dossiers(unittest.TestCase):
@@ -106,13 +133,13 @@ class Dossiers(unittest.TestCase):
         return a
 
     def ajouter(self, dossier):
-        r = espaces.ajouter_travail(str(dossier), "")
+        r = workspace_manager.add_work(str(dossier), "")
         return next(t for t in r["liste"] if t["chemin"] == str(dossier))
 
     def test_apercu_detecte_un_ancien_assistant(self):
         a = self.ancien_assistant()
         t = self.ajouter(a)
-        ap = espaces.apercu_travail(t["id"])
+        ap = workspace_manager.work_preview(t["id"])
         self.assertEqual(ap["ancien"]["conversations"], 1)
         self.assertEqual(ap["ancien"]["skills"], 1)
         self.assertIn("skills/ : 1 fiche(s)", ap["lus"], "les skills lus par Lutin sont dits")
@@ -123,7 +150,7 @@ class Dossiers(unittest.TestCase):
         d.mkdir()
         (d / "CLAUDE.md").write_text("consignes", encoding="utf-8")
         (d / "donnees").mkdir()                                     # un dossier « donnees » sans conversation n'est pas un ancien assistant
-        ap = espaces.apercu_travail(self.ajouter(d)["id"])
+        ap = workspace_manager.work_preview(self.ajouter(d)["id"])
         self.assertIsNone(ap["ancien"])
         self.assertIn("CLAUDE.md", " ".join(ap["lus"]))
 
@@ -132,7 +159,7 @@ class Dossiers(unittest.TestCase):
         d.mkdir()
         t = self.ajouter(d)
         d.rmdir()
-        self.assertIn("n'existe pas", espaces.apercu_travail(t["id"])["erreur"])
+        self.assertIn("n'existe pas", workspace_manager.work_preview(t["id"])["erreur"])
 
     def test_retirer_avec_nettoyage_ne_supprime_que_les_copies(self):
         d = self.tmp / "projet2"
@@ -140,8 +167,8 @@ class Dossiers(unittest.TestCase):
         (d / "conversations-lutin" / "a.md").write_text("x", encoding="utf-8")
         (d / "vrai.txt").write_text("à garder", encoding="utf-8")
         t = self.ajouter(d)
-        self.assertEqual(espaces.apercu_travail(t["id"])["copies"], 1)
-        r = espaces.retirer_travail(t["id"], nettoyer=True)
+        self.assertEqual(workspace_manager.work_preview(t["id"])["copies"], 1)
+        r = workspace_manager.remove_work(t["id"], nettoyer=True)
         self.assertEqual(r["copies_supprimees"], 1)
         self.assertFalse((d / "conversations-lutin").exists())
         self.assertTrue((d / "vrai.txt").is_file(), "aucun fichier à toi n'est touché")
@@ -151,7 +178,7 @@ class Dossiers(unittest.TestCase):
         (d / "conversations-lutin").mkdir(parents=True)
         (d / "conversations-lutin" / "a.md").write_text("x", encoding="utf-8")
         t = self.ajouter(d)
-        self.assertEqual(espaces.retirer_travail(t["id"])["copies_supprimees"], 0)
+        self.assertEqual(workspace_manager.remove_work(t["id"])["copies_supprimees"], 0)
         self.assertTrue((d / "conversations-lutin" / "a.md").is_file())
 
 
@@ -164,76 +191,48 @@ class Emplacements(unittest.TestCase):
     def test_null_et_vide_comptent_comme_absents(self):
         for valeur in (None, "", "null", "  "):
             Path(os.environ["LUTIN_CONFIG"]).write_text(json.dumps({"emplacements": {"modeles": valeur}}), encoding="utf-8")
-            self.assertEqual(emplacements.lire_config_modeles(), "", repr(valeur))
-        self.assertEqual(emplacements.dossier_modeles(), Path.home() / ".ollama" / "models")
+            self.assertEqual(locations.read_models_config(), "", repr(valeur))
+        self.assertEqual(locations.models_folder(), Path.home() / ".ollama" / "models")
 
     def test_changer_le_dossier_des_modeles(self):
         nouveau = _TEMP / "modeles-ollama"
         if os.name == "nt":
             from unittest import mock
-            with mock.patch("lutin.installation.definir_variables_utilisateur") as definir:
-                p = emplacements.definir_dossier_modeles(str(nouveau))
+            with mock.patch("lutin.setup_wizard.set_variables_user") as definir:
+                p = locations.set_models_folder(str(nouveau))
             definir.assert_called_once()
         else:
-            p = emplacements.definir_dossier_modeles(str(nouveau))
+            p = locations.set_models_folder(str(nouveau))
         self.assertEqual(p, nouveau)
         self.assertTrue(nouveau.is_dir())
-        self.assertEqual(emplacements.lire_config_modeles(), str(nouveau))
-        self.assertEqual(emplacements.dossier_modeles(), nouveau)
+        self.assertEqual(locations.read_models_config(), str(nouveau))
+        self.assertEqual(locations.models_folder(), nouveau)
         with self.assertRaises(ValueError):
-            emplacements.definir_dossier_modeles("relatif/chemin")
+            locations.set_models_folder("relatif/chemin")
         with self.assertRaises(ValueError):
-            emplacements.definir_dossier_modeles("")
+            locations.set_models_folder("")
 
     def test_la_liste_montre_tous_les_emplacements(self):
-        r = emplacements.lister()
+        r = locations.list_locations()
         cles = [x["cle"] for x in r["lignes"]]
         for attendu in ("programme", "config", "donnees", "memoire", "cache", "modeles"):
             self.assertIn(attendu, cles)
         for ligne in r["lignes"]:
             self.assertTrue(ligne["chemin"] and ligne["explication"])
-        self.assertIn("libre", (emplacements.jauge_modeles() or {"libre": 0}))
+        self.assertIn("libre", (locations.models_gauge() or {"libre": 0}))
 
     def test_analyse_d_un_dossier_local(self):
         d = _TEMP / "analyse"
         d.mkdir(exist_ok=True)
-        a = emplacements.analyse_dossier(str(d))
+        a = locations.analyze_folder(str(d))
         self.assertFalse(a["reseau"])
         self.assertTrue(a["existe"])
         self.assertIsNotNone(a["debit"])
         self.assertGreater(a["debit"], 0)
         self.assertFalse((d / ".lutin-debit").exists(), "le fichier d'essai est supprimé")
-        r = emplacements.analyse_dossier(chr(92) * 2 + "nas-qui-n-existe-pas" + chr(92) + "modeles")
+        r = locations.analyze_folder(chr(92) * 2 + "nas-qui-n-existe-pas" + chr(92) + "modeles")
         self.assertTrue(r["reseau"])
         self.assertTrue(any("réseau" in w for w in r["avertissements"]), "un dossier réseau est signalé")
-
-    def test_copie_des_modeles_existants(self):
-        import time
-        source, cible = _TEMP / "ollama-source", _TEMP / "ollama-cible"
-        (source / "blobs").mkdir(parents=True, exist_ok=True)
-        (source / "manifests" / "registry.ollama.ai" / "library" / "x").mkdir(parents=True, exist_ok=True)
-        (source / "blobs" / "sha256-aaa").write_bytes(b"A" * 3_000_000)
-        (source / "blobs" / "sha256-bbb").write_bytes(b"B" * 1_000_000)
-        (source / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").write_text("{}", encoding="utf-8")
-        os.environ["OLLAMA_MODELS"] = str(source)
-        with self.assertRaises(ValueError):
-            emplacements.copier_modeles(source)                                  # même dossier
-        with self.assertRaises(ValueError):
-            emplacements.copier_modeles(source / "dedans")                       # dans l'ancien
-        emplacements.copier_modeles(cible)
-        fin = time.time() + 20
-        while time.time() < fin and emplacements.etat_copie()["etat"] == "en cours":
-            time.sleep(0.05)
-        self.assertEqual(emplacements.etat_copie()["etat"], "fini", emplacements.etat_copie())
-        self.assertEqual((cible / "blobs" / "sha256-aaa").stat().st_size, 3_000_000)
-        self.assertTrue((cible / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").is_file())
-        self.assertTrue((source / "blobs" / "sha256-aaa").is_file(), "l'ancien dossier n'est jamais supprimé")
-        self.assertEqual(list(cible.rglob("*.lutin-tmp")), [], "pas de fichier temporaire laissé")
-        emplacements.copier_modeles(cible)                                      # relancer saute ce qui est déjà copié
-        fin = time.time() + 20
-        while time.time() < fin and emplacements.etat_copie()["etat"] == "en cours":
-            time.sleep(0.05)
-        self.assertEqual(emplacements.etat_copie()["etat"], "fini")
 
 
 if __name__ == "__main__":

@@ -4,9 +4,9 @@
 
 **Un conteneur par moteur (Ollama ou llama.cpp), profils Compose, Docker Desktop et WSL2** : [DOCKER_INSTALLATION.fr.md](DOCKER_INSTALLATION.fr.md).
 
-**Pas à pas depuis un Debian vierge** : [TUTO-DOCKER-DEBIAN.fr.md](TUTO-DOCKER-DEBIAN.fr.md) (et [un prompt pour que ton IA locale écrive le docker-compose](PROMPT-DOCKER-COMPOSE.fr.md)).
+**Pas à pas depuis un Debian vierge** : [TUTO-DOCKER-DEBIAN.fr.md](TUTO-DOCKER-DEBIAN.fr.md).
 
-Une image prête à l'emploi : **Lutin et Ollama dans le même conteneur**. Tu la lances, tu ouvres la page, tu installes un modèle : c'est tout. Pratique sous Linux, sur un serveur ou un NAS.
+Une image prête à l'emploi de **Lutin seul** : tu la lances, tu ouvres la page, tu la laisses installer le moteur qu'elle conseille (dans `/engines`) et un modèle : c'est tout. Pratique sous Linux, sur un serveur ou un NAS.
 
 > **Honnêteté.** Les images sont construites et démarrées par la CI (page de connexion, code PIN) et publiées sur `ghcr.io`. Elles n'ont **jamais été lancées avec une vraie carte NVIDIA** ni sur un NAS : si quelque chose ne marche pas, ouvre un [bug](https://github.com/Slater-proj/lutin/issues/new/choose) avec `docker compose logs`.
 
@@ -63,7 +63,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 Dans le terminal : `docker exec -it lutin lutin chat`.
 
-**Langue** : anglais par défaut. Pour le français : dans la page (Réglages > Langue), avec `docker exec lutin lutin language fr`, ou avec `-e LUTIN_LANGUE=fr`.
+**Langue** : anglais par défaut. Pour le français : dans la page (Réglages › Général › Langue), avec `docker exec lutin lutin language fr`, ou avec `-e LUTIN_LANGUE=fr`.
 
 ## Les volumes
 
@@ -74,7 +74,7 @@ Dans le terminal : `docker exec -it lutin lutin chat`.
 | `lutin-models` | `/models` | les modèles | non (retéléchargeables), mais lourd |
 | `lutin-engines` (facultatif) | `/engines` | **les moteurs** (Ollama, llama.cpp) que Lutin installe depuis la page | non (réinstallables en un clic), mais ça évite de tout retélécharger |
 
-**Les moteurs ne sont plus dans l'image.** L'image de Lutin est légère (Lutin seul) : au premier lancement, la page propose d'installer le moteur conseillé pour ta machine (Ollama, llama.cpp…), ou celui que tu choisis dans Réglages > Moteurs. Il est téléchargé une fois, dans `/engines` si tu montes ce dossier (`- /srv/docker/volumes/lutin/engines:/engines`, accessible en écriture pour l'utilisateur 1000), sinon dans `/data/engines` : dans les deux cas, **une mise à jour de l'image ne l'efface pas**. Les modèles d'Ollama restent dans `/models`, ceux de llama.cpp (fichiers GGUF) dans `/models/gguf`. Pour un serveur déjà lancé ailleurs (un autre conteneur), donne son adresse (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`) : Lutin ne l'installe ni ne l'arrête alors. **Non vérifié sur ta carte** : l'installation d'Ollama et de llama.cpp dans l'image légère a été testée avec de faux serveurs, pas encore sur du vrai matériel.
+**Les moteurs ne sont plus dans l'image.** L'image de Lutin est légère (Lutin seul) : au premier lancement, la page propose d'installer le moteur conseillé pour ta machine (Ollama, llama.cpp…), ou celui que tu choisis dans Modèles › Moteurs. Il est téléchargé une fois, dans `/engines` si tu montes ce dossier (`- /srv/docker/volumes/lutin/engines:/engines`, accessible en écriture pour l'utilisateur 1000), sinon dans `/data/engines` : dans les deux cas, **une mise à jour de l'image ne l'efface pas**. Les modèles d'Ollama restent dans `/models`, ceux de llama.cpp (fichiers GGUF) dans `/models/gguf`. Pour un serveur déjà lancé ailleurs (un autre conteneur), donne son adresse (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`) : Lutin ne l'installe ni ne l'arrête alors. **Non vérifié sur ta carte** : l'installation d'Ollama et de llama.cpp dans l'image légère a été testée avec de faux serveurs, pas encore sur du vrai matériel.
 
 Pour mettre les modèles sur un autre disque, remplace `lutin-models:/models` par un chemin (`/mnt/gros-disque/modeles:/models`).
 
@@ -129,7 +129,7 @@ Un conteneur ne voit pas la carte graphique tant qu'on ne la lui donne pas. Sans
 
 1. NVIDIA : `docker run --rm --gpus all ubuntu nvidia-smi` doit lister la carte ; puis `docker exec lutin nvidia-smi` aussi.
 2. Les premières lignes de `/data/ollama.log` (`docker exec lutin head -20 /data/ollama.log`) disent quelle carte le conteneur voit (NVIDIA, `/dev/kfd`, `/dev/dri`) ; les lignes d'Ollama disent ensuite s'il a trouvé un périphérique de calcul.
-3. Dans la page, **Santé > mémoire vidéo** montre la carte, et une fois un modèle chargé, « modèle chargé à … % sur la carte » : **100 %** = la carte travaille ; **0 %** = c'est le processeur (carte non donnée ou non gérée).
+3. Dans la page, **Réglages › Santé › mémoire vidéo** montre la carte, et une fois un modèle chargé, « modèle chargé à … % sur la carte » : **100 %** = la carte travaille ; **0 %** = c'est le processeur (carte non donnée ou non gérée).
 4. `docker exec lutin lutin doctor` dit « Pas de carte graphique utilisable » et quoi ajouter si le conteneur n'en voit aucune.
 
 Intel : sur un Core Ultra 5 125H (Meteor Lake, 32 Go partagés) la puce intégrée **fonctionne** avec `docker-compose.intel.yml` (`ollama ps` dit `100% GPU`) mais était **plus lente que le processeur** pour générer du texte (environ 8 contre 11 jetons/s sur `qwen3:4b`) : elle lit la même mémoire que le processeur, donc la bande passante mémoire, pas la puissance de calcul, est la limite. Garde le processeur sauf si ta propre mesure dit le contraire. Vérifie avec `docker exec lutin ollama ps`. Donner `/dev/dri` et le groupe `render` laisse le conteneur utiliser tout le périphérique graphique (et le reste de ce groupe) : à faire seulement si tu l'acceptes. Lutin garde la RAM comme budget (règle `LUTIN_BUDGET_GO` à ce que tu peux prêter), et la mémoire graphique est cette même RAM.

@@ -164,12 +164,15 @@ def principal(choix=None):
     """Les captures anglaises s'appellent capture-*.png (README.md), les françaises capture-*.fr.png (README.fr.md)."""
     chrome = navigateur(choix)
     ASSETS.mkdir(exist_ok=True)
+    # The new interface (/app/, frontend/: it must be built first, npm run build).
+    pages = (("capture-app-chat", "app/#/chat/a1b2c3d4", "1440,900"), ("capture-app-models", "app/#/models", "1440,900"),
+             ("capture-app-settings", "app/#/settings/general", "1440,900"), ("capture-app-agents", "app/#/agents/tasks", "1440,900"))
     for langue, suffixe in (("en", ""), ("fr", ".fr")):
         with serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
-            for base, ancre in (("capture-conversation", "#conv=a1b2c3d4"), ("capture-modeles", "#modeles"), ("capture-palette", "#palette"), ("capture-sante", "#sante")):
+            for base, ancre, taille in pages:
                 nom = base + suffixe + ".png"
                 profil = tmp / ("profil-" + nom)
-                subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", "--user-data-dir=" + str(profil), "--window-size=1280,800",
+                subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", "--user-data-dir=" + str(profil), "--window-size=" + taille,
                                 "--virtual-time-budget=8000", "--screenshot=" + str(ASSETS / nom), "http://127.0.0.1:%d/%s" % (port, ancre)], capture_output=True, timeout=120)
                 print("✔ assets/" + nom if (ASSETS / nom).is_file() else "✘ " + nom)
 

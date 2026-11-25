@@ -1,0 +1,23 @@
+# Builds the interface (ADR 0002) into src/lutin/web/app/, where the wheel, the source archive and the Docker image take it from.
+# Every job that tests or packages Lutin runs this first: running Lutin never needs Node.js, building its interface does.
+name: Build the interface
+description: Type-checks, tests and builds frontend/ into src/lutin/web/app/
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: "24"
+        cache: npm
+        cache-dependency-path: frontend/package-lock.json
+    - name: Install the pinned development dependencies (no install script is run)
+      shell: bash
+      working-directory: frontend
+      run: npm ci --ignore-scripts
+    - name: Types, unit tests, build
+      shell: bash
+      working-directory: frontend
+      run: |
+        npm run check
+        npm test
+        npm run build

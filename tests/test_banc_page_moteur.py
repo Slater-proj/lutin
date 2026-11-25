@@ -13,8 +13,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import bench, dialogue  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import bench, agent  # noqa: E402
 
 
 class MoteurFictif:
@@ -36,35 +36,35 @@ class MoteurFictif:
 class BancDeLaPage(unittest.TestCase):
     def setUp(self):
         self.moteur = MoteurFictif()
-        self.vrai = dialogue.moteur_local
-        A.moteur_local = lambda r=None: self.moteur
-        dialogue.moteur_local = lambda r=None: self.moteur
+        self.vrai = agent.local_engine
+        A.local_engine = lambda r=None: self.moteur
+        agent.local_engine = lambda r=None: self.moteur
         A.BENCH.update(en_cours="", etape="", erreur="", file=[])
 
     def tearDown(self):
-        A.moteur_local = self.vrai
-        dialogue.moteur_local = self.vrai
+        A.local_engine = self.vrai
+        agent.local_engine = self.vrai
 
     def test_le_client_du_banc_est_l_adaptateur_pour_un_autre_moteur(self):
-        self.assertIsInstance(dialogue.client_banc(), bench.AdaptateurMoteur)
+        self.assertIsInstance(agent.bench_client(), bench.EngineAdapter)
 
     def test_la_mesure_rapide_passe_par_le_moteur_choisi(self):
-        A._mesurer_un("m1", True)
+        A._measure_one("m1", True)
         self.assertEqual(A.BENCH["erreur"], "")
         self.assertTrue(self.moteur.demandes, "le moteur choisi a reçu la demande de mesure")
-        mesure = bench.lire(A.chemin_bench())["m1"]
+        mesure = bench.read(A.bench_path())["m1"]
         self.assertEqual(mesure["resultats"]["vitesse"]["tok_s"], 50.0)
 
     def test_la_serie_demande_les_modeles_du_moteur_choisi(self):
         with self.assertRaises(ValueError) as e:
-            A.lancer_bench_serie(["absent-de-ce-moteur"])
+            A.start_bench_series(["absent-de-ce-moteur"])
         self.assertIn("absent-de-ce-moteur", str(e.exception))
-        self.assertEqual(A.lancer_bench_serie(["m1"], True)["modeles"], ["m1"])
+        self.assertEqual(A.start_bench_series(["m1"], True)["modeles"], ["m1"])
 
 
 class AvecOllama(unittest.TestCase):
     def test_ollama_reste_interroge_directement(self):
-        self.assertNotIsInstance(dialogue.client_banc({"moteur": "ollama"}), bench.AdaptateurMoteur)
+        self.assertNotIsInstance(agent.bench_client({"moteur": "ollama"}), bench.EngineAdapter)
 
 
 if __name__ == "__main__":

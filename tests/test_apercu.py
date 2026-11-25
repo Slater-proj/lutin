@@ -12,8 +12,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402
-from lutin import apercu, images, revue  # noqa: E402
+from lutin import core as _m  # noqa: E402
+from lutin import page_preview, images, change_review  # noqa: E402
 
 # Un « navigateur » de théâtre : écrit une capture PNG là où on le lui demande, affiche un DOM, et se plaint dans la console.
 FAUX = _TEMP / "faux_navigateur.py"
@@ -35,16 +35,16 @@ class Apercu(unittest.TestCase):
         return {"accord": lambda t, d, df, auto=False: (self.accords.append(t), accord)[1], "auto_commandes": False, "essai": False}
 
     def setUp(self):
-        (_m.RACINE / "page.html").write_text("<html></html>", encoding="utf-8")
-        self.vrai = apercu.navigateur
-        apercu.navigateur = lambda: [sys.executable, str(FAUX)]
+        (_m.ROOT / "page.html").write_text("<html></html>", encoding="utf-8")
+        self.vrai = page_preview.browser
+        page_preview.browser = lambda: [sys.executable, str(FAUX)]
 
     def tearDown(self):
-        apercu.navigateur = self.vrai
+        page_preview.browser = self.vrai
 
     def test_la_capture_est_montree_et_le_texte_rendu_au_modele(self):
         ctx = self.ctx()
-        res = revue.appeler_outil("apercu_page", {"chemin": "page.html", "largeur": 900, "hauteur": 600}, ctx)
+        res = change_review.call_tool("apercu_page", {"chemin": "page.html", "largeur": 900, "hauteur": 600}, ctx)
         self.assertEqual(len(self.accords), 1)
         self.assertIn("Titre de la page : Ma page", res)
         self.assertIn("Titre visible Un élément", res, "le texte affiché, sans script ni style")
@@ -52,39 +52,39 @@ class Apercu(unittest.TestCase):
         self.assertIn("demarrer is not defined", res)
         self.assertIn("1 erreur(s)", res)
         self.assertIn("bonjour de la page", res)
-        octets, mime = images.lire(ctx["medias"][0])
+        octets, mime = images.read_image(ctx["medias"][0])
         self.assertEqual(mime, "image/png")
         self.assertTrue(octets.startswith(b"\x89PNG"))
 
     def test_le_profil_temporaire_est_supprime(self):
         import glob
         avant = set(glob.glob(os.path.join(tempfile.gettempdir(), "lutin-apercu-*")))
-        revue.appeler_outil("apercu_page", {"chemin": "page.html"}, self.ctx())
+        change_review.call_tool("apercu_page", {"chemin": "page.html"}, self.ctx())
         self.assertEqual(set(glob.glob(os.path.join(tempfile.gettempdir(), "lutin-apercu-*"))) - avant, set())
 
     def test_refus_et_essai_a_blanc_n_ouvrent_rien(self):
         ctx = self.ctx(accord=False)
-        res = revue.appeler_outil("apercu_page", {"chemin": "page.html"}, ctx)
+        res = change_review.call_tool("apercu_page", {"chemin": "page.html"}, ctx)
         self.assertIn("Refusé", res)
         self.assertNotIn("medias", ctx)
 
     def test_seuls_les_fichiers_du_projet_et_les_adresses_locales(self):
         for cible in ("https://example.com/", "http://192.168.1.5/x", "../dehors.html", "inexistant.html", "file:///C:/Windows/win.ini"):
-            with self.assertRaises(_m.ErreurOutil, msg=cible):
-                apercu.adresse(cible)
-        self.assertTrue(apercu.adresse("page.html").startswith("file:///"))
-        self.assertEqual(apercu.adresse("http://127.0.0.1:8000/a"), "http://127.0.0.1:8000/a")
-        self.assertEqual(apercu.adresse("http://localhost/"), "http://localhost/")
+            with self.assertRaises(_m.ToolError, msg=cible):
+                page_preview.address(cible)
+        self.assertTrue(page_preview.address("page.html").startswith("file:///"))
+        self.assertEqual(page_preview.address("http://127.0.0.1:8000/a"), "http://127.0.0.1:8000/a")
+        self.assertEqual(page_preview.address("http://localhost/"), "http://localhost/")
 
     def test_sans_navigateur_le_message_est_clair(self):
-        apercu.navigateur = lambda: None
-        with self.assertRaises(_m.ErreurOutil) as e:
-            revue.appeler_outil("apercu_page", {"chemin": "page.html"}, self.ctx())
+        page_preview.browser = lambda: None
+        with self.assertRaises(_m.ToolError) as e:
+            change_review.call_tool("apercu_page", {"chemin": "page.html"}, self.ctx())
         self.assertIn("Aucun navigateur", str(e.exception))
 
     def test_dimensions_invalides(self):
-        with self.assertRaises(_m.ErreurOutil):
-            revue.appeler_outil("apercu_page", {"chemin": "page.html", "largeur": "large"}, self.ctx())
+        with self.assertRaises(_m.ToolError):
+            change_review.call_tool("apercu_page", {"chemin": "page.html", "largeur": "large"}, self.ctx())
 
 
 if __name__ == "__main__":

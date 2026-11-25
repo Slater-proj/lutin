@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-OUTILS = [
+TOOLS = [
     {"name": "heure", "description": "Donne la date et l'heure du serveur.", "inputSchema": {"type": "object", "properties": {}}, "annotations": {"readOnlyHint": True}},
     {"name": "additionner", "description": "Additionne deux nombres.", "inputSchema": {"type": "object", "properties": {"a": {"type": "number"}, "b": {"type": "number"}}, "required": ["a", "b"]},
      "annotations": {"readOnlyHint": True}},
@@ -16,7 +16,7 @@ OUTILS = [
 ]
 
 
-def appeler(nom, args):
+def call(nom, args):
     if nom == "heure":
         return time.strftime("%Y-%m-%d %H:%M:%S")
     if nom == "additionner":
@@ -29,7 +29,7 @@ def appeler(nom, args):
     raise KeyError(nom)
 
 
-def repondre(message):
+def answer(message):
     methode, ident = message.get("method"), message.get("id")
     if ident is None:
         return None          # notification
@@ -38,23 +38,23 @@ def repondre(message):
     if methode == "ping":
         return {}
     if methode == "tools/list":
-        return {"tools": OUTILS}
+        return {"tools": TOOLS}
     if methode == "tools/call":
         p = message.get("params") or {}
         try:
-            return {"content": [{"type": "text", "text": appeler(p.get("name"), p.get("arguments") or {})}]}
+            return {"content": [{"type": "text", "text": call(p.get("name"), p.get("arguments") or {})}]}
         except (KeyError, ValueError, TypeError) as e:
             return {"content": [{"type": "text", "text": "Erreur : " + str(e)}], "isError": True}
     return {"__erreur__": "méthode inconnue : " + str(methode)}
 
 
-def principal():
+def main():
     for ligne in sys.stdin:
         try:
             message = json.loads(ligne)
         except ValueError:
             continue
-        r = repondre(message)
+        r = answer(message)
         if r is None:
             continue
         if "__erreur__" in r:
@@ -66,4 +66,4 @@ def principal():
 
 
 if __name__ == "__main__":
-    principal()
+    main()

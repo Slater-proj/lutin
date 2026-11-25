@@ -10,15 +10,15 @@ import re
 import threading
 from pathlib import Path
 
-LANGUES = ("fr", "en")
-DOSSIER = Path(__file__).resolve().parent / "langues"
-_verrou = threading.RLock()                    # réentrant : gabarits() appelle dico()
-_dicos = {}
+LANGUAGES = ("fr", "en")
+FOLDER = Path(__file__).resolve().parent / "langues"
+_lock = threading.RLock()                    # réentrant : gabarits() appelle dico()
+_dictionaries = {}
 _config = {"chemin": "", "mtime": None, "valeur": None}
-_forcee = {"valeur": None}                   # choix fait pendant l'installation guidée, avant que config.json soit écrit
+_forced = {"valeur": None}                   # choix fait pendant l'installation guidée, avant que config.json soit écrit
 
 
-def langue_systeme():
+def system_language():
     """« fr » si le système est réglé en français, « en » sinon."""
     for variable in ("LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"):
         v = os.environ.get(variable, "").strip().lower()
@@ -39,106 +39,97 @@ def langue_systeme():
         return "en"
 
 
-def _chemin_config():
+def _config_path():
     chemin = os.environ.get("LUTIN_CONFIG")
     if chemin:
         return Path(chemin)
     from . import config
-    return Path(config.dossiers()["config"]) / "config.json"
+    return Path(config.folders()["config"]) / "config.json"
 
 
-def langue_configuree(chemin_config=None):
+def configured_language(chemin_config=None):
     """Le réglage de config.json (« fr » ou « en »), ou None s'il n'y en a pas (langue automatique). Relit le fichier seulement quand il a changé."""
-    chemin = Path(chemin_config) if chemin_config else _chemin_config()
+    chemin = Path(chemin_config) if chemin_config else _config_path()
     try:
         mtime = chemin.stat().st_mtime_ns
     except OSError:
         return None
-    with _verrou:
+    with _lock:
         if _config["chemin"] == str(chemin) and _config["mtime"] == mtime:
             return _config["valeur"]
         try:
             v = json.loads(chemin.read_text(encoding="utf-8")).get("langue")
         except (OSError, ValueError, AttributeError):
             v = None
-        v = v if v in LANGUES else None
+        v = v if v in LANGUAGES else None
         _config.update(chemin=str(chemin), mtime=mtime, valeur=v)
         return v
 
 
-def langue():
+def language():
     """La langue courante : « fr » ou « en »."""
     v = os.environ.get("LUTIN_LANGUE", "").strip().lower()
-    if v in LANGUES:
+    if v in LANGUAGES:
         return v
-    return _forcee["valeur"] or langue_configuree() or langue_systeme()
+    return _forced["valeur"] or configured_language() or system_language()
 
 
-def forcer(valeur):
+def force(valeur):
     """Fixe la langue du processus en cours (None pour revenir au réglage) : sert à l'installation guidée, qui enregistre la configuration seulement à la fin."""
-    _forcee["valeur"] = valeur if valeur in LANGUES else None
+    _forced["valeur"] = valeur if valeur in LANGUAGES else None
 
 
-def definir(valeur, chemin_config=None):
+def save_language(valeur, chemin_config=None):
     """Enregistre la langue dans config.json (« fr », « en », ou « auto » pour suivre le système). Renvoie la langue effective."""
-    if valeur not in LANGUES + ("auto",):
+    if valeur not in LANGUAGES + ("auto",):
         raise ValueError("Langue inconnue : {} (fr, en ou auto).".format(valeur))
-    chemin = Path(chemin_config) if chemin_config else _chemin_config()
-    try:
-        cfg = json.loads(chemin.read_text(encoding="utf-8"))
-        if not isinstance(cfg, dict):
-            cfg = {}
-    except (OSError, ValueError):
-        cfg = {}
-    cfg["langue"] = None if valeur == "auto" else valeur
-    chemin.parent.mkdir(parents=True, exist_ok=True)
-    tmp = chemin.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(chemin)
-    with _verrou:
+    chemin = Path(chemin_config) if chemin_config else _config_path()
+    from . import config
+    config.update_file(chemin, {"langue": None if valeur == "auto" else valeur})          # sous le verrou de config.save ; jamais la seule langue à la place du fichier
+    with _lock:
         _config["mtime"] = None
-    return langue()
+    return language()
 
 
-def dico(nom, code="en"):
+def dictionary(nom, code="en"):
     """Un dictionnaire de traduction {texte français: texte traduit} (`messages` pour Python, `interface` pour la page web). Vide s'il n'existe pas."""
     cle = (nom, code)
-    with _verrou:
-        if cle not in _dicos:
+    with _lock:
+        if cle not in _dictionaries:
             try:
-                d = json.loads((DOSSIER / "{}.{}.json".format(nom, code)).read_text(encoding="utf-8"))
+                d = json.loads((FOLDER / "{}.{}.json".format(nom, code)).read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 d = {}
-            _dicos[cle] = d if isinstance(d, dict) else {}
-        return _dicos[cle]
+            _dictionaries[cle] = d if isinstance(d, dict) else {}
+        return _dictionaries[cle]
 
 
 def t(texte):
     """Le texte dans la langue courante. Le français est la langue source : il passe tel quel ; sinon la traduction, ou le français si elle manque."""
-    if langue() == "fr":
+    if language() == "fr":
         return texte
-    return dico("messages").get(texte, texte)
+    return dictionary("messages").get(texte, texte)
 
 
-_gabarits = {"liste": None}
+_templates = {"liste": None}
 
 
-def gabarits():
+def templates():
     """[(longueur du texte fixe, expression régulière, traduction, morceaux fixes)] pour reconnaître un message déjà formaté d'après son gabarit (« Lutin est déjà à jour ({}). »). Les plus précis d'abord."""
-    with _verrou:
-        if _gabarits["liste"] is None:
+    with _lock:
+        if _templates["liste"] is None:
             liste = []
-            for fr, en in dico("messages").items():
+            for fr, en in dictionary("messages").items():
                 morceaux = re.split(r"\{[^{}]*\}", fr)
                 if len(morceaux) < 2 or len("".join(morceaux).strip()) < 6:
                     continue                                             # pas de variable, ou trop peu de texte fixe : il reconnaîtrait n'importe quoi
                 liste.append((len("".join(morceaux)), re.compile("(.*?)".join(re.escape(m) for m in morceaux), re.S), en, tuple(morceaux)))
             liste.sort(key=lambda x: -x[0])
-            _gabarits["liste"] = liste
-        return _gabarits["liste"]
+            _templates["liste"] = liste
+        return _templates["liste"]
 
 
-LONGUEUR_MAX_GABARIT = 2000                  # au-delà, ce n'est plus un message de l'application (et les expressions à trous deviendraient lentes)
+TEMPLATE_MAX_LENGTH = 2000                  # au-delà, ce n'est plus un message de l'application (et les expressions à trous deviendraient lentes)
 
 
 def _possible(texte, morceaux):
@@ -155,23 +146,23 @@ def _possible(texte, morceaux):
     return position <= fin
 
 
-def traduire(texte):
+def translate(texte):
     """Comme `t()`, mais accepte aussi un message DÉJÀ construit avec `.format()` (erreurs du serveur, évènements, mesures de santé) : texte exact d'abord, puis le gabarit qui le reconnaît.
     Sans traduction, le texte reste tel quel."""
-    if not isinstance(texte, str) or langue() == "fr":
+    if not isinstance(texte, str) or language() == "fr":
         return texte
-    d = dico("messages")
+    d = dictionary("messages")
     if texte in d:
         return d[texte]
-    if len(texte) > LONGUEUR_MAX_GABARIT:
+    if len(texte) > TEMPLATE_MAX_LENGTH:
         return texte
-    for _, regex, en, morceaux in gabarits():
+    for _, regex, en, morceaux in templates():
         if not _possible(texte, morceaux):
             continue
         m = regex.fullmatch(texte)
         if m:
             try:
-                return re.sub(r"\{[^{}]*\}", "{}", en).format(*(traduire(g) for g in m.groups()))          # les groupes sont déjà du texte : les formats numériques (:g, :.1f) ne s'appliquent plus
+                return re.sub(r"\{[^{}]*\}", "{}", en).format(*(translate(g) for g in m.groups()))          # les groupes sont déjà du texte : les formats numériques (:g, :.1f) ne s'appliquent plus
             except (IndexError, ValueError, KeyError):
                 return texte
     return texte

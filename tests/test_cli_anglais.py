@@ -9,7 +9,7 @@ from lutin import cli
 
 
 def lire(*argv):
-    return cli.parseur().parse_args(list(argv))
+    return cli.parser().parse_args(list(argv))
 
 
 def valeurs(args):
@@ -19,11 +19,11 @@ def valeurs(args):
 
 class NomsOfficiels(unittest.TestCase):
     def test_chaque_commande_anglaise_a_son_ancien_nom_en_alias(self):
-        for anglais, francais in cli.ALIAS_COMMANDES.items():
+        for anglais, francais in cli.COMMAND_ALIASES.items():
             requis = {"restore": ["f.zip"], "migrate": ["/x"], "import-project": ["/p"]}.get(anglais, [])          # ces commandes demandent un argument
             a, f = lire(anglais, *requis), lire(francais, *requis)
-            self.assertEqual(cli.ALIAS_COMMANDES.get(a.commande, a.commande), francais, anglais)
-            self.assertEqual(cli.ALIAS_COMMANDES.get(f.commande, f.commande), francais, francais)
+            self.assertEqual(cli.COMMAND_ALIASES.get(a.commande, a.commande), francais, anglais)
+            self.assertEqual(cli.COMMAND_ALIASES.get(f.commande, f.commande), francais, francais)
 
     def test_les_commandes_qui_ne_changent_pas(self):
         for nom in ("setup", "serve", "update", "chat", "pin", "doctor", "bench", "colibri", "mcp", "zone"):
@@ -32,7 +32,7 @@ class NomsOfficiels(unittest.TestCase):
     def test_l_aide_montre_les_noms_anglais_d_abord(self):
         sortie = io.StringIO()
         with redirect_stdout(sortie), self.assertRaises(SystemExit):
-            cli.parseur().parse_args(["--help"])
+            cli.parser().parse_args(["--help"])
         texte = sortie.getvalue()
         for anglais in ("workspaces", "offline", "models", "backup", "autostart", "engine-trial", "import-project", "migrate"):
             self.assertIn(anglais, texte)
@@ -94,15 +94,15 @@ class Dispatch(unittest.TestCase):
     def test_le_nom_anglais_lance_la_meme_commande(self):
         appels = []
         for argv in (["workspaces", "list"], ["travaux", "lister"]):
-            args = cli.parseur().parse_args(argv)
-            nom = cli.ALIAS_COMMANDES.get(args.commande, args.commande)
+            args = cli.parser().parse_args(argv)
+            nom = cli.COMMAND_ALIASES.get(args.commande, args.commande)
             appels.append((nom, args.action))
         self.assertEqual(appels[0], appels[1])
         self.assertEqual(appels[0][0], "travaux")
 
     def test_aucune_option_en_double(self):
         """argparse refuse deux options identiques : construire le parseur suffit à le vérifier ; on vérifie aussi que l'aide de chaque commande s'affiche."""
-        parseur = cli.parseur()
+        parseur = cli.parser()
         sous = next(a for a in parseur._actions if isinstance(a, argparse._SubParsersAction))
         for nom, p in sous.choices.items():
             sortie = io.StringIO()

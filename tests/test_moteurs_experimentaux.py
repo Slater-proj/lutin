@@ -14,8 +14,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import bench_moteurs, catalogue_moteurs as cm, moteur_llamacpp as ml, moteurs  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import engine_bench, engine_catalog as cm, llamacpp_engine as ml, engines  # noqa: E402
 from test_conformite_moteurs import FauxOpenAI  # noqa: E402
 
 EXPERIMENTAUX = ("colibri", "strata")
@@ -24,7 +24,7 @@ RACINE = Path(__file__).resolve().parent.parent
 
 class Catalogue(unittest.TestCase):
     def entrees(self):
-        return {m["id"]: m for m in cm.charger()["moteurs"]}
+        return {m["id"]: m for m in cm.load()["moteurs"]}
 
     def test_colibri_et_strata_sont_des_preregalages_externes_experimentaux(self):
         e = self.entrees()
@@ -36,44 +36,51 @@ class Catalogue(unittest.TestCase):
 
     def test_aucun_moteur_experimental_n_a_d_adaptateur_propre(self):
         for ident in EXPERIMENTAUX:
-            self.assertNotIn(ident, moteurs.MOTEURS)
-            self.assertNotIn(ident, cm.GERES)
+            if ident in engines.MANAGED_SERVERS:
+                # ADR 0020 (accepted 2026-11-21, « finish the integration of Colibri »): Colibri is an engine of its own that Lutin installs and starts, as it
+                # already was behind the « openai » card. It speaks the OpenAI interface through the same class as any other server: no adapter of its own.
+                self.assertIsInstance(engines.ENGINES[ident], ml.ManagedServerEngine)
+                for classe in type(engines.ENGINES[ident]).__mro__[:2]:
+                    self.assertFalse({"chat", "chat_flux", "modeles"} & set(vars(classe)), classe)
+            else:
+                self.assertNotIn(ident, engines.ENGINES)
+            self.assertNotIn(ident, cm.MANAGED)
 
     def test_ils_sont_dans_la_liste_des_preregalages_mais_marques(self):
-        pre = {p["id"]: p for p in cm.prereglages()}
+        pre = {p["id"]: p for p in cm.presets()}
         for ident in EXPERIMENTAUX:
             self.assertTrue(pre[ident]["experimental"])
         self.assertFalse(pre["lmstudio"]["experimental"])
 
     def test_les_limites_sont_dites(self):
-        pre = {p["id"]: p for p in cm.prereglages()}
+        pre = {p["id"]: p for p in cm.presets()}
         self.assertTrue(any("recherche" in t for t in pre["colibri"]["points_faibles"]))
         self.assertTrue(any("ni ne le démarre" in t for t in pre["colibri"]["points_faibles"]))
         self.assertIn("recommandation", pre["strata"]["remarque"])
 
     def test_le_schema_refuse_un_experimental_qui_n_est_pas_booleen(self):
-        c = json.loads(json.dumps(cm.charger()))
+        c = json.loads(json.dumps(cm.load()))
         for m in c["moteurs"]:
             if m["id"] == "colibri":
                 m["experimental"] = "oui"
-        with self.assertRaises(cm.ErreurCatalogue):
-            cm.valider(c)
+        with self.assertRaises(cm.CatalogueError):
+            cm.validate(c)
 
     def test_le_catalogue_livre_est_bien_signe(self):
         enveloppe = json.loads((RACINE / "src" / "lutin" / "data" / "moteurs.json").read_text(encoding="utf-8"))
-        cm.verifier(enveloppe)
+        cm.check(enveloppe)
 
 
 class JamaisParDefaut(unittest.TestCase):
     def test_le_banc_et_la_recommandation_ne_les_connaissent_pas(self):
         for ident in EXPERIMENTAUX:
-            self.assertNotIn(ident, bench_moteurs.MOTEURS_BANC)
+            self.assertNotIn(ident, engine_bench.ENGINES_BENCH)
         for docker in (False, True):
-            r = bench_moteurs.recommander(None, docker=docker)
+            r = engine_bench.recommend(None, docker=docker)
             self.assertNotIn(r["moteur"], EXPERIMENTAUX)
 
     def test_le_moteur_par_defaut_reste_ollama(self):
-        self.assertEqual(_m.REGLAGES_DEFAUT["moteur"], "ollama")
+        self.assertEqual(_m.DEFAULT_SETTINGS["moteur"], "ollama")
 
 
 class AvecUnFauxServeur(unittest.TestCase):
@@ -90,22 +97,22 @@ class AvecUnFauxServeur(unittest.TestCase):
         cls.srv.shutdown()
 
     def setUp(self):
-        self.ancien = dict(moteurs.CONTEXTE)
+        self.ancien = dict(engines.CONTEXT)
         dossier = Path(tempfile.mkdtemp(prefix="lutin-exper-d-"))
-        moteurs.CONTEXTE.update(donnees=lambda: dossier, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
-        self.addCleanup(moteurs.CONTEXTE.update, self.ancien)
+        engines.CONTEXT.update(donnees=lambda: dossier, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.addCleanup(engines.CONTEXT.update, self.ancien)
 
     def test_un_serveur_experimental_repond_comme_un_serveur_externe(self):
-        mo = moteurs.MOTEURS["openai"]
-        ml.regler("openai", self.adresse, None)
+        mo = engines.ENGINES["openai"]
+        ml.configure("openai", self.adresse, None)
         self.assertEqual(mo.modeles()["installes"], ["modele-test"])
         rep = mo.chat({"model": "modele-test", "messages": [{"role": "user", "content": "Salut"}], "stream": False}, 20)
         self.assertEqual(rep["message"]["content"], "réponse complète")
 
     def test_regler_un_moteur_experimental_ne_touche_pas_a_llama_cpp(self):
-        avant = json.dumps(ml.lire_config().get("llamacpp", {}), sort_keys=True)
-        ml.regler("openai", self.adresse, None)
-        self.assertEqual(json.dumps(ml.lire_config().get("llamacpp", {}), sort_keys=True), avant)
+        avant = json.dumps(ml.read_config().get("llamacpp", {}), sort_keys=True)
+        ml.configure("openai", self.adresse, None)
+        self.assertEqual(json.dumps(ml.read_config().get("llamacpp", {}), sort_keys=True), avant)
 
 
 if __name__ == "__main__":

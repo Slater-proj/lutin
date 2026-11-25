@@ -2,6 +2,48 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Toward 1.0: the new interface, a versioned API, several computers as one assistant
+
+Not released yet: this is the work of the `modernization` branch since the entry below. Plan and state: [docs/modernization/PLAN.md](docs/modernization/PLAN.md).
+
+- **A new interface, the default at `/`** (Svelte, TypeScript; [INTERFACE.md](docs/modernization/INTERFACE.md)): Chat, Agents, Projects, Models
+  and Settings, in English and French, from a phone held upright to a 2560-pixel screen; Settings and Agents in parts kept in the address; the
+  open conversation kept in the address too; checked in a real Chrome and by axe in both themes. It does everything the previous page did
+  ([PARITY.md](docs/modernization/PARITY.md)): strict offline mode, web search set-up, access, model upkeep and measures, engine settings,
+  conversation tools and Git, background work, documents and notes, « / » commands and the Ctrl+K palette. The previous page and its routes
+  are removed ([ADR 0022](docs/adr/0022-the-old-page-goes-at-1.0.md)).
+- **Long conversations on a small window** ([ADR 0018](docs/adr/0018-keeping-the-thread-on-a-small-window.md)): the first request is never
+  dropped and is kept word for word at the head of the request; passages of the conversation come back as soon as its history no longer fits;
+  the progress sheet keeps its first decisions and its current step.
+- **One memory for long conversations** ([ADR 0019](docs/adr/0019-one-memory-for-long-conversations.md)): the progress sheet, for every long
+  conversation. The automatic summary and the question « sheet or summary? » are retired; a conversation that has a summary keeps it. The start
+  leaves far enough for several exchanges to fit before the next removal.
+- **Health opens in about two seconds** instead of fifteen on Windows when an engine is stopped.
+- **A versioned API, `/api/v1`** ([API_V1.md](docs/modernization/API_V1.md)): 243 routes, each with its right declared in one table and fixed by a
+  contract test; English names, the turn stream translated at the border.
+- **Several computers, one assistant** ([ADR 0016](docs/adr/0016-paired-machines-in-v1-and-the-new-interface.md)): pair a machine, use its models
+  from the Chat, lend this one (with a clear name for each machine allowed to use it), continue a conversation another machine holds, with its
+  images and documents staying there; wake, update or shut down only what the other machine's owner allowed there.
+- **Models**: the whole catalogue, with what each model is for, how it fits this machine and what it is good and less good at; « Update » is
+  offered for an engine only when a newer version is known.
+- **Fixes**: on Windows, a data file read while it was being replaced was taken as missing (a list of missions read as empty); the first probe of
+  a machine could say « unreachable » for one that was on; the countdown of a shutdown showed while a machine was getting ready.
+- **For contributors**: one entry runs a turn for every launcher ([ADR 0015](docs/adr/0015-one-entry-runs-a-turn.md)); the tests of paired machines
+  no longer start PowerShell, schtasks or nvidia-smi on the machine that runs them; 22 decision records in [docs/adr/](docs/adr/README.md).
+- **Upgrading from 0.50 (breaking)**: the old page and the French HTTP routes are gone (only pairing, node and relay routes stay); conversations
+  move into SQLite at the first start ([ADR 0017](docs/adr/0017-conversations-in-sqlite.md)), `lutin export --conversations` writes them back as
+  0.x files; the compose files mount `./workspace` (rename a `./travail` folder; a mounted `/travail` is still accepted).
+
+## Modernization, steps 0 and 1: security fixes, hermetic tests, decision records
+
+From here on the changelog is written in English ([ADR 0001](docs/adr/0001-english-and-clean-break-at-1.0.md)). Plan: [docs/modernization/PLAN.md](docs/modernization/PLAN.md).
+
+- **Security — commands run without approval could be bypassed.** The « simple reads » the assistant runs without asking (`git status`, `dir`, `type`, `ls`, `cat`, `echo`…) were recognised by a pattern, then run in a shell, which rewrote them afterwards: `type %USERPROFILE%\…`, `cat $HOME/…`, `echo $(…)`, a second command after a newline, or `git branch -D` all ran without approval. A page read on the web could chain them to read a file outside the workspace and send it out. These commands **no longer go through a shell**; each argument is checked by rules written for its program ([ADR 0006](docs/adr/0006-approval-free-commands.md)). What changes for you: on Windows `dir` and `type` answer in Lutin's own format; `dir` with options, `echo` with variables or wildcards, and a declared-safe command with quoted arguments now ask for approval.
+- **Security — web reads could reach the local network.** The target of a redirection was contacted before being checked, the host name was resolved twice (a changing DNS answer could slip between the check and the connection), and the range `100.64.0.0/10` (Tailscale, carrier-grade NAT) was accepted. The connection now resolves once and connects to the address it checked; each redirection is checked before anything is sent; an API key is not carried to another host ([ADR 0008](docs/adr/0008-outbound-web-guard.md)). Limit: behind a system proxy the address cannot be pinned.
+- **Security review corrected**: it stated that no command ran through a shell ([SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md)).
+- **Tests no longer depend on the machine**: five tests failed on a computer with a real Ollama installed (the CI machines have none).
+- **For contributors**: the HTTP contract is inventoried (`tools/api_inventory.py`, 184 routes) and a test fails when it drifts; eight decision records in [docs/adr/](docs/adr/README.md).
+
 ## Serveurs gérés (ExLlamaV3…) fiables, réponses lisibles, mémoire mieux tenue
 
 - **Téléchargement ExLlamaV3 avec vraie progression** (« X / Y Go (Z %) · N Mo/s ») ; la mémoire de conversation de TabbyAPI est bornée (`max_seq_len` d'après le contexte des réglages, cache Q8) : fin du « Insufficient VRAM in split for model and cache ».

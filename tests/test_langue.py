@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import catalogue, cli, config, i18n
+from lutin import model_catalog, cli, config, i18n
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "lutin"
 VARIABLE = re.compile(r"\{[^{}]*\}")
@@ -37,39 +37,63 @@ class Detection(unittest.TestCase):
     def test_langue_du_systeme(self):
         for valeur, attendu in (("fr_FR.UTF-8", "fr"), ("fr", "fr"), ("FR_CA", "fr"), ("en_US.UTF-8", "en"), ("de_DE", "en"), ("es_ES", "en")):
             with self.avec_systeme(LANG=valeur):
-                self.assertEqual(i18n.langue_systeme(), attendu, valeur)
+                self.assertEqual(i18n.system_language(), attendu, valeur)
 
     def test_c_et_posix_ne_disent_rien_on_retombe_sur_le_systeme_reel_sans_planter(self):
         with self.avec_systeme(LANG="C"):
-            self.assertIn(i18n.langue_systeme(), ("fr", "en"))
+            self.assertIn(i18n.system_language(), ("fr", "en"))
         with self.avec_systeme(LC_ALL="fr_FR.UTF-8", LANG="en_US"):
-            self.assertEqual(i18n.langue_systeme(), "fr", "LC_ALL l'emporte sur LANG")
+            self.assertEqual(i18n.system_language(), "fr", "LC_ALL l'emporte sur LANG")
 
     def test_priorite_variable_puis_configuration_puis_systeme(self):
         with self.avec_systeme(LANG="en_US"):
-            self.assertEqual(i18n.langue(), "en")
+            self.assertEqual(i18n.language(), "en")
             self.config.write_text(json.dumps({"langue": "fr"}), encoding="utf-8")
-            self.assertEqual(i18n.langue(), "fr", "le réglage l'emporte sur le système")
+            self.assertEqual(i18n.language(), "fr", "le réglage l'emporte sur le système")
             with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
-                self.assertEqual(i18n.langue(), "en", "la variable l'emporte sur le réglage")
+                self.assertEqual(i18n.language(), "en", "la variable l'emporte sur le réglage")
             with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "klingon"}):
-                self.assertEqual(i18n.langue(), "fr", "une valeur inconnue est ignorée")
+                self.assertEqual(i18n.language(), "fr", "une valeur inconnue est ignorée")
 
     def test_reglage_illisible_ou_invalide(self):
         with self.avec_systeme(LANG="fr_FR"):
             for contenu in ("{pas du json", '{"langue": "xx"}', '{"langue": 5}', "[]"):
                 self.config.write_text(contenu, encoding="utf-8")
-                self.assertEqual(i18n.langue(), "fr", contenu)
+                self.assertEqual(i18n.language(), "fr", contenu)
 
     def test_definir_et_auto(self):
         with self.avec_systeme(LANG="fr_FR"):
             self.config.write_text(json.dumps({"installe": True}), encoding="utf-8")
-            self.assertEqual(i18n.definir("en"), "en")
+            self.assertEqual(i18n.save_language("en"), "en")
             self.assertEqual(json.loads(self.config.read_text(encoding="utf-8")), {"installe": True, "langue": "en"}, "le reste de la configuration est gardé")
-            self.assertEqual(i18n.definir("auto"), "fr", "auto : on suit le système")
+            self.assertEqual(i18n.save_language("auto"), "fr", "auto : on suit le système")
             self.assertIsNone(json.loads(self.config.read_text(encoding="utf-8"))["langue"])
             with self.assertRaises(ValueError):
-                i18n.definir("klingon")
+                i18n.save_language("klingon")
+
+    def test_une_configuration_tenue_un_instant_n_est_jamais_remplacee_par_la_seule_langue(self):
+        """Sous Windows, config.json se lit mal un instant quand un autre programme le tient (antivirus, ou config.save qui le remplace : vu en CI,
+        6dfc47f). definir lisait alors {} et réécrivait config.json avec la seule langue : dossiers, port et le reste perdus. Il relit un peu plus tard,
+        et si le fichier reste illisible il échoue sans y toucher."""
+        with self.avec_systeme(LANG="fr_FR"):
+            self.config.write_text(json.dumps({"installe": True, "port": 8123}), encoding="utf-8")
+            vrai, refus = Path.read_text, []
+
+            def tenu(fois):
+                def lire(chemin, *a, **k):
+                    if chemin.name == "config.json" and len(refus) < fois:
+                        refus.append(chemin)
+                        raise PermissionError(13, "Access is denied", str(chemin))
+                    return vrai(chemin, *a, **k)
+                return lire
+            with mock.patch.object(Path, "read_text", tenu(2)):
+                self.assertEqual(i18n.save_language("en"), "en")
+            self.assertEqual(json.loads(self.config.read_text(encoding="utf-8")), {"installe": True, "port": 8123, "langue": "en"}, "relu un instant plus tard : rien de perdu")
+            refus.clear()
+            with mock.patch.object(Path, "read_text", tenu(1000)), mock.patch.object(config.time, "sleep", lambda s: None):
+                with self.assertRaises(OSError):
+                    i18n.save_language("fr")
+            self.assertEqual(json.loads(self.config.read_text(encoding="utf-8")), {"installe": True, "port": 8123, "langue": "en"}, "toujours illisible : le fichier n'est pas touché")
 
 
 class Traduction(unittest.TestCase):
@@ -78,7 +102,7 @@ class Traduction(unittest.TestCase):
 
     def test_le_francais_passe_tel_quel(self):
         self.assertEqual(i18n.t("Rien n'a été changé."), "Rien n'a été changé.")
-        self.assertEqual(i18n.traduire("Lutin est déjà à jour (1.0)."), "Lutin est déjà à jour (1.0).")
+        self.assertEqual(i18n.translate("Lutin est déjà à jour (1.0)."), "Lutin est déjà à jour (1.0).")
 
     def test_traduction_exacte_et_repli_francais(self):
         with self.en():
@@ -87,33 +111,33 @@ class Traduction(unittest.TestCase):
 
     def test_gabarit_reconnu_dans_un_message_deja_formate(self):
         with self.en():
-            self.assertEqual(i18n.traduire("Lutin est déjà à jour (1.2.3)."), "Lutin is already up to date (1.2.3).")
-            self.assertEqual(i18n.traduire("Mode hors ligne strict : impossible de télécharger un modèle. Désactive-le pour continuer (lutin offline off)."),
+            self.assertEqual(i18n.translate("Lutin est déjà à jour (1.2.3)."), "Lutin is already up to date (1.2.3).")
+            self.assertEqual(i18n.translate("Mode hors ligne strict : impossible de télécharger un modèle. Désactive-le pour continuer (lutin offline off)."),
                              "Strict offline mode: unable to download a model. Turn it off to continue (lutin offline off).")
-            self.assertEqual(i18n.traduire("Une phrase que personne n'a prévue (3)."), "Une phrase que personne n'a prévue (3).", "sans gabarit : inchangé")
+            self.assertEqual(i18n.translate("Une phrase que personne n'a prévue (3)."), "Une phrase que personne n'a prévue (3).", "sans gabarit : inchangé")
 
     def test_formats_numeriques_du_gabarit_ne_cassent_pas(self):
         with self.en():
-            self.assertEqual(i18n.traduire("\nÀ télécharger : 18.5 Go (qwen3.8:27b). Espace libre : 400.0 Go."), "\nTo download: 18.5 GB (qwen3.8:27b). Free space: 400.0 GB.")
+            self.assertEqual(i18n.translate("\nÀ télécharger : 18.5 Go (qwen3.8:27b). Espace libre : 400.0 Go."), "\nTo download: 18.5 GB (qwen3.8:27b). Free space: 400.0 GB.")
 
     def test_un_texte_quelconque_n_est_jamais_confondu_avec_un_gabarit(self):
         with self.en():
             for texte in ("Bonjour, voici ma réponse de modèle.", "def f(x): return x", "{} libres", "Écrire", "", "x" * 5000):
-                self.assertEqual(i18n.traduire(texte), texte)
-            self.assertEqual(i18n.traduire(None), None)
-            self.assertEqual(i18n.traduire(5), 5)
+                self.assertEqual(i18n.translate(texte), texte)
+            self.assertEqual(i18n.translate(None), None)
+            self.assertEqual(i18n.translate(5), 5)
 
     def test_traduction_complete_des_messages_du_moteur(self):
-        from lutin import moteur as A
+        from lutin import core as A
         with self.en():
-            self.assertEqual(A.traduire_json({"erreur": "Nom de modèle invalide.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}),
+            self.assertEqual(A.translate_json({"erreur": "Nom de modèle invalide.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}),
                              {"erreur": "Invalid model name.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}), "le contenu des conversations n'est jamais traduit"
-            self.assertEqual(A.traduire_evenement({"type": "info", "texte": "Accord automatique : Modifier docs/a.txt"})["texte"], "Automatic approval: Modify docs/a.txt")
-            self.assertEqual(A.traduire_evenement({"type": "texte", "texte": "Nom de modèle invalide."})["texte"], "Nom de modèle invalide.", "le texte du modèle n'est jamais traduit")
-            sante = A.evaluer_sante({"ram": {"total": 8 * 1024 ** 3, "libre": 1 * 1024 ** 3, "engagement_libre": 3 * 1024 ** 3}}, A.reglages())
-            ram = A.traduire_json(sante)["items"][0]
+            self.assertEqual(A.translate_event({"type": "info", "texte": "Accord automatique : Modifier docs/a.txt"})["texte"], "Automatic approval: Modify docs/a.txt")
+            self.assertEqual(A.translate_event({"type": "texte", "texte": "Nom de modèle invalide."})["texte"], "Nom de modèle invalide.", "le texte du modèle n'est jamais traduit")
+            sante = A.assess_health({"ram": {"total": 8 * 1024 ** 3, "libre": 1 * 1024 ** 3, "engagement_libre": 3 * 1024 ** 3}}, A.settings())
+            ram = A.translate_json(sante)["items"][0]
             self.assertEqual((ram["nom"], ram["valeur"]), ("Memory (RAM)", "1.0 GB free of 8.0 GB"))
-        self.assertEqual(A.traduire_json({"erreur": "Nom de modèle invalide."}), {"erreur": "Nom de modèle invalide."}, "en français : rien ne change")
+        self.assertEqual(A.translate_json({"erreur": "Nom de modèle invalide."}), {"erreur": "Nom de modèle invalide."}, "en français : rien ne change")
 
 
 class Completude(unittest.TestCase):
@@ -144,19 +168,19 @@ class Completude(unittest.TestCase):
             self.assertTrue(en.strip(), fr)
 
     def test_le_catalogue_est_entierement_traduit(self):
-        for m in catalogue.charger()["modeles"]:
+        for m in model_catalog.load()["modeles"]:
             for champ in ("nom", "phrase", "avertissement"):
                 if m.get(champ):
                     self.assertIn(m[champ], self.dico, "{} : {}".format(m["id"], champ))
-        for role, (titre, detail) in catalogue.LIBELLES.items():
+        for role, (titre, detail) in model_catalog.LABELS.items():
             self.assertIn(titre, self.dico)
             self.assertIn(detail, self.dico)
 
     def test_les_constantes_de_niveau_module_sont_traduites(self):
-        from lutin import chat_terminal, installation, moteur
-        for texte in (cli.AIDE_GENERALE, chat_terminal.AIDE, installation.AVERTISSEMENT_RESEAU, installation.AVERTISSEMENT_PROXY, *moteur.TEXTES_PAGE_CONNEXION):
+        from lutin import terminal_chat, setup_wizard, core
+        for texte in (cli.HELP_GENERAL, terminal_chat.HELP, setup_wizard.WARNING_NETWORK, setup_wizard.WARNING_PROXY, *core.LOGIN_PAGE_TEXTS):
             self.assertIn(texte, self.dico, texte[:60])
-        for _, titre, detail in installation.NIVEAUX_TEXTE.values():
+        for _, titre, detail in setup_wizard.LEVELS_TEXT.values():
             self.assertIn(titre, self.dico)
             self.assertIn(detail, self.dico)
 
@@ -170,25 +194,25 @@ class QuestionALInstallation(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"LC_ALL": "", "LC_MESSAGES": "", "LANGUAGE": "", "LANG": "fr_FR.UTF-8"})
         self.env.start()
         os.environ.pop("LUTIN_LANGUE", None)
-        i18n.forcer(None)
+        i18n.force(None)
 
     def tearDown(self):
-        i18n.forcer(None)
+        i18n.force(None)
         self.env.stop()
 
     def poser(self, reponses, options=None, cfg=None, oui=False):
-        from lutin import installation
+        from lutin import setup_wizard
         cfg = {} if cfg is None else cfg
         sortie = []
         reponses = list(reponses)
-        es = installation.Es(entree=lambda invite: (sortie.append(invite), reponses.pop(0))[1], sortie=lambda *a: None, oui=oui)
-        installation.choisir_langue(es, options or {}, cfg)
+        es = setup_wizard.Es(entree=lambda invite: (sortie.append(invite), reponses.pop(0))[1], sortie=lambda *a: None, oui=oui)
+        setup_wizard.choose_language(es, options or {}, cfg)
         return cfg, sortie
 
     def test_le_choix_est_enregistre_et_applique_tout_de_suite(self):
         cfg, invites = self.poser(["2"])
         self.assertEqual(cfg["langue"], "en")
-        self.assertEqual(i18n.langue(), "en", "les questions suivantes sont déjà en anglais")
+        self.assertEqual(i18n.language(), "en", "les questions suivantes sont déjà en anglais")
         self.assertIn("[1]", invites[0], "français proposé par défaut sur un système français")
 
     def test_defaut_selon_le_systeme_et_reponse_vide(self):
@@ -196,7 +220,7 @@ class QuestionALInstallation(unittest.TestCase):
         cfg, invites = self.poser([""])
         self.assertEqual(cfg["langue"], "en")
         self.assertIn("[2]", invites[0])
-        i18n.forcer(None)
+        i18n.force(None)
         os.environ["LANG"] = "fr_FR.UTF-8"
         self.assertEqual(self.poser([""])[0]["langue"], "fr")
 
@@ -225,7 +249,7 @@ class LigneDeCommandeEnAnglais(unittest.TestCase):
         sortie = io.StringIO()
         with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
             try:
-                code = cli.principal(list(argv))
+                code = cli.main(list(argv))
             except SystemExit as e:
                 code = e.code
         return code, sortie.getvalue()
@@ -253,7 +277,7 @@ class LigneDeCommandeEnAnglais(unittest.TestCase):
         code, sortie = self.lancer("langue", "fr")
         self.assertEqual(code, 0, sortie)
         self.assertIn("Langue : Français", sortie)
-        self.assertEqual(config.charger(config.dossiers())["langue"], "fr")
+        self.assertEqual(config.load(config.folders())["langue"], "fr")
         self.assertIn("cette machine seulement", self.lancer("securite")[1])
         code, sortie = self.lancer("langue", "en")
         self.assertIn("Language: English", sortie)

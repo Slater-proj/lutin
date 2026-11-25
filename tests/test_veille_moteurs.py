@@ -14,9 +14,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
-from lutin import catalogue_moteurs as cm  # noqa: E402
-from lutin import ed25519, moteurs  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
+from lutin import engine_catalog as cm  # noqa: E402
+from lutin import ed25519, engines  # noqa: E402
 
 RACINE = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("veille_moteurs", RACINE / "tools" / "veille_moteurs.py")
@@ -34,9 +34,9 @@ def bloc(**plus):
 class Fiches(unittest.TestCase):
     def test_les_cartes_d_ollama_et_de_llamacpp_viennent_du_catalogue(self):
         for ident in ("ollama", "llamacpp"):
-            f = cm.fiche(ident)
+            f = cm.engine_card(ident)
             self.assertIsNotNone(f, ident)
-            vue = moteurs.MOTEURS[ident].vue()
+            vue = engines.ENGINES[ident].vue()
             self.assertEqual(vue["source_fiche"], "catalogue")
             self.assertEqual(vue["description"], f["description"])
             self.assertEqual(vue["points_forts"], f["points_forts"])
@@ -45,22 +45,22 @@ class Fiches(unittest.TestCase):
     def test_langue_et_repli_sur_le_code(self):
         os.environ["LUTIN_LANGUE"] = "en"
         try:
-            self.assertIn("Ollama", moteurs.MOTEURS["ollama"].vue()["description"])
-            self.assertIn("managed by Lutin", moteurs.MOTEURS["ollama"].vue()["description"])
+            self.assertIn("Ollama", engines.ENGINES["ollama"].vue()["description"])
+            self.assertIn("managed by Lutin", engines.ENGINES["ollama"].vue()["description"])
         finally:
             os.environ.pop("LUTIN_LANGUE", None)
-        self.assertIsNone(cm.fiche("ollama", {"moteurs": []}), "pas dans le catalogue : la page garde les textes du code")
-        self.assertEqual(moteurs.MOTEURS["openai"].vue()["source_fiche"], "code", "le serveur externe n'est pas un moteur géré")
+        self.assertIsNone(cm.engine_card("ollama", {"moteurs": []}), "pas dans le catalogue : la page garde les textes du code")
+        self.assertEqual(engines.ENGINES["openai"].vue()["source_fiche"], "code", "le serveur externe n'est pas un moteur géré")
 
     def test_les_moteurs_geres_ne_sont_pas_des_prereglages(self):
-        ids = [p["id"] for p in cm.prereglages()]
+        ids = [p["id"] for p in cm.presets()]
         self.assertNotIn("ollama", ids)
         self.assertNotIn("llamacpp", ids)
         self.assertIn("lmstudio", ids)
 
     def test_schema_des_moteurs_geres(self):
         def ok(m):
-            return cm.valider({"version": 1, "moteurs": [m]})
+            return cm.validate({"version": 1, "moteurs": [m]})
         ok(bloc(depot="ollama/ollama", version_testee="0.12.0"))
         ok(bloc(id="llamacpp", genre="openai", nom="llama.cpp", etiquette="^b[0-9]+$"))
         for mauvais in (bloc(type="gere", id="vllm"),                      # un moteur géré porte un identifiant réservé
@@ -68,21 +68,21 @@ class Fiches(unittest.TestCase):
                         bloc(genre="ollama", id="llamacpp"),               # seul Ollama a le genre « ollama »
                         bloc(depot="pas un depot"), bloc(depot="a/b/c"), bloc(version_testee=""), bloc(version_testee="x" * 50),
                         bloc(etiquette="(["), bloc(etiquette=3), bloc(type="autre")):
-            with self.assertRaises(cm.ErreurCatalogue, msg=str(mauvais)):
+            with self.assertRaises(cm.CatalogueError, msg=str(mauvais)):
                 ok(mauvais)
 
     def test_un_catalogue_falsifie_ne_change_pas_les_fiches(self):
-        ancien = dict(cm.CLES_PUBLIQUES)
-        cm.CLES_PUBLIQUES["test"] = ed25519.cle_publique(GRAINE).hex()
+        ancien = dict(cm.PUBLIC_KEYS)
+        cm.PUBLIC_KEYS["test"] = ed25519.public_key(GRAINE).hex()
         try:
-            e = cm.signer({"version": 99, "moteurs": [bloc(description={"fr": "Pirate."})]}, GRAINE, "test")
+            e = cm.sign({"version": 99, "moteurs": [bloc(description={"fr": "Pirate."})]}, GRAINE, "test")
             e["catalogue"]["moteurs"][0]["description"] = {"fr": "Autre texte, signature périmée."}
             f = _TEMP / "falsifie.json"
             f.write_text(json.dumps(e), encoding="utf-8")
-            self.assertLess(cm.charger(f)["version"], 99)
+            self.assertLess(cm.load(f)["version"], 99)
         finally:
-            cm.CLES_PUBLIQUES.clear()
-            cm.CLES_PUBLIQUES.update(ancien)
+            cm.PUBLIC_KEYS.clear()
+            cm.PUBLIC_KEYS.update(ancien)
 
 
 class Veille(unittest.TestCase):

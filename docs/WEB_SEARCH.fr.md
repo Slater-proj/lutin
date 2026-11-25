@@ -4,7 +4,7 @@
 
 Avec l'option **Web** cochée, le modèle a deux outils : `web_chercher` (chercher) et `web_lire` (lire une page). Rien n'est envoyé quand la case est décochée ou en mode hors ligne strict ([PRIVACY.fr.md](PRIVACY.fr.md)).
 
-> **Honnêteté.** Toute la chaîne est testée avec de **faux serveurs** (un faux SearXNG, un faux Brave, de fausses pages). **L'image réelle de SearXNG et l'API réelle de Brave n'ont pas été lancées par le projet** : utilise le bouton **Tester la recherche** (Réglages > Recherche web) pour voir ce qui marche chez toi.
+> **Honnêteté.** Toute la chaîne est testée avec de **faux serveurs** (un faux SearXNG, un faux Brave, de fausses pages). **L'image réelle de SearXNG et l'API réelle de Brave n'ont pas été lancées par le projet** : utilise le bouton **Tester la recherche** (Réglages › Web et mémoire › Recherche web) pour voir ce qui marche chez toi.
 
 ## Quel moteur répond
 
@@ -52,17 +52,17 @@ Un petit modèle local n'appelle souvent pas l'outil de recherche : il répond d
 SEARXNG_SECRET=$(openssl rand -hex 32) docker compose -f docker-compose.searxng.yml up -d
 ```
 
-Le fichier [docker-compose.searxng.yml](../docker-compose.searxng.yml) n'écoute que sur `127.0.0.1:8080`, et [docker/searxng/settings.yml](../docker/searxng/settings.yml) active le format **json** (celui que Lutin lit ; sans lui SearXNG répond en HTML et Lutin te dit de l'activer). Ensuite, **depuis cette machine** : Réglages > Recherche web > adresse de SearXNG = `http://127.0.0.1:8080` (`http://searxng:8080` si Lutin est dans le même réseau Docker), Enregistrer, **Tester la recherche**.
+Le fichier [docker-compose.searxng.yml](../docker-compose.searxng.yml) n'écoute que sur `127.0.0.1:8080`, et [docker/searxng/settings.yml](../docker/searxng/settings.yml) active le format **json** (celui que Lutin lit ; sans lui SearXNG répond en HTML et Lutin te dit de l'activer). Ensuite, **depuis cette machine** : Réglages › Web et mémoire › Recherche web > adresse de SearXNG = `http://127.0.0.1:8080` (`http://searxng:8080` si Lutin est dans le même réseau Docker), Enregistrer, **Tester la recherche**.
 
 **Sécurité.** SearXNG vit en général sur ton réseau, et Lutin **refuse normalement toute adresse locale** (une page piégée ne doit pas lire tes services internes). L'adresse que tu règles est la **seule exception**, seulement pour chercher (jamais pour lire des pages), et elle ne se règle que **depuis cette machine**, pas depuis un appareil appairé.
 
 ## Brave Search
 
-Crée une clé (offre gratuite) sur brave.com/search/api et colle-la dans Réglages > Recherche web > Brave Search. Elle est rangée dans `recherche.json` à côté de tes données, lisible par toi seul (là où le système le permet), et **jamais renvoyée à la page** (seuls ses quatre derniers caractères le sont). Réglable depuis cette machine seulement.
+Crée une clé (offre gratuite) sur brave.com/search/api et colle-la dans Réglages › Web et mémoire › Recherche web > Brave Search. Elle est rangée dans `recherche.json` à côté de tes données, lisible par toi seul (là où le système le permet), et **jamais renvoyée à la page** (seuls ses quatre derniers caractères le sont). Réglable depuis cette machine seulement.
 
 ## Tavily, Exa, Perplexity (clés)
 
-Colle une clé dans Réglages > Recherche web ; chacune est gardée dans `recherche.json` comme celle de Brave, jamais renvoyée à la page. **Seuls les résultats (titre, adresse, extrait) servent : la réponse que ces services peuvent rédiger eux-mêmes est ignorée**, donc tout repasse par le modèle de Lutin, qui lit, compare et cite. **Chaque recherche part chez ce service** (elle n'est plus privée, contrairement à un SearXNG chez toi) et le mode hors ligne les coupe. Perplexity est utilisé par son API de *recherche* (résultats classés), pas par ses modèles qui répondent. Les formats de requête sont écrits d'après la documentation de chacun et **testés avec de faux serveurs seulement**, pas avec une vraie clé : si l'un change, le bouton « Tester la recherche » montre quel moteur échoue.
+Colle une clé dans Réglages › Web et mémoire › Recherche web ; chacune est gardée dans `recherche.json` comme celle de Brave, jamais renvoyée à la page. **Seuls les résultats (titre, adresse, extrait) servent : la réponse que ces services peuvent rédiger eux-mêmes est ignorée**, donc tout repasse par le modèle de Lutin, qui lit, compare et cite. **Chaque recherche part chez ce service** (elle n'est plus privée, contrairement à un SearXNG chez toi) et le mode hors ligne les coupe. Perplexity est utilisé par son API de *recherche* (résultats classés), pas par ses modèles qui répondent. Les formats de requête sont écrits d'après la documentation de chacun et **testés avec de faux serveurs seulement**, pas avec une vraie clé : si l'un change, le bouton « Tester la recherche » montre quel moteur échoue.
 
 ## Ce qu'elle ne sait pas faire
 

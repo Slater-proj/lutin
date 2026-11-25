@@ -5,23 +5,24 @@ Rien n'est envoyé ailleurs qu'au modèle local. Le type est reconnu au contenu,
 import base64
 import hashlib
 import re
+import secrets
 import time
 
 from .i18n import t as _t
-from . import moteur as _m
+from . import core as _m
 
-TAILLE_MAX = 8 * 1024 * 1024       # octets par image
-PAR_MESSAGE = 4
-RECENTS = 6                         # les images ne sont renvoyées au modèle que pour les derniers messages : les anciennes alourdiraient chaque réponse pour rien
+MAX_SIZE = 8 * 1024 * 1024       # octets par image
+PER_MESSAGE = 4
+RECENT = 6                         # les images ne sont renvoyées au modèle que pour les derniers messages : les anciennes alourdiraient chaque réponse pour rien
 RE_ID = re.compile(r"^[0-9a-f]{20}\.(png|jpg|gif|webp)$")
 TYPES = {"png": "image/png", "jpg": "image/jpeg", "gif": "image/gif", "webp": "image/webp"}
 
 
-def dossier():
-    return _m.DONNEES / "images"
+def folder():
+    return _m.DATA / "images"
 
 
-def type_de(octets):
+def type_of(octets):
     """Extension reconnue d'après les premiers octets, ou None."""
     if octets[:8] == b"\x89PNG\r\n\x1a\n":
         return "png"
@@ -34,55 +35,68 @@ def type_de(octets):
     return None
 
 
-def enregistrer(octets):
+def save(octets):
     if not octets:
         raise ValueError(_t("Image vide."))
-    if len(octets) > TAILLE_MAX:
-        raise ValueError(_t("Image trop grosse ({} Mo au plus).").format(TAILLE_MAX // (1024 * 1024)))
-    ext = type_de(octets)
+    if len(octets) > MAX_SIZE:
+        raise ValueError(_t("Image trop grosse ({} Mo au plus).").format(MAX_SIZE // (1024 * 1024)))
+    ext = type_of(octets)
     if ext is None:
         raise ValueError(_t("Format d'image non géré : PNG, JPEG, GIF ou WebP."))
     ident = hashlib.sha256(octets).hexdigest()[:20] + "." + ext
-    f = dossier() / ident
+    f = folder() / ident
     if not f.is_file():
-        dossier().mkdir(parents=True, exist_ok=True)
-        tmp = f.with_suffix(".tmp")
-        tmp.write_bytes(octets)
-        tmp.replace(f)
+        folder().mkdir(parents=True, exist_ok=True)
+        tmp = f.with_name("{}.{}.tmp".format(f.name, secrets.token_hex(4)))          # à soi : deux envois du même fichier à la fois partageaient un nom
+        try:
+            tmp.write_bytes(octets)
+            tmp.replace(f)
+        except OSError:
+            if not f.is_file():                    # l'autre envoi l'a écrit (même contenu, même nom) : rien à refaire
+                raise
+        finally:
+            tmp.unlink(missing_ok=True)
     return ident
 
 
-def chemin(ident):
+def path_of(ident):
     if not RE_ID.match(str(ident or "")):
         raise ValueError(_t("Image inconnue."))
-    f = dossier() / ident
+    f = folder() / ident
     if not f.is_file():
         raise ValueError(_t("Image inconnue."))
     return f
 
 
-def lire(ident):
+def read_image(ident):
     """(octets, type MIME)."""
-    f = chemin(ident)
+    f = path_of(ident)
     return f.read_bytes(), TYPES[f.suffix[1:]]
 
 
-def verifier_liste(ids):
+def check_list(ids):
     """Liste d'identifiants valides et existants (au plus PAR_MESSAGE) ; ValueError sinon."""
     ids = [str(i) for i in (ids or [])]
-    if len(ids) > PAR_MESSAGE:
-        raise ValueError(_t("{} images au plus par message.").format(PAR_MESSAGE))
+    if len(ids) > PER_MESSAGE:
+        raise ValueError(_t("{} images au plus par message.").format(PER_MESSAGE))
     for i in ids:
-        chemin(i)
+        path_of(i)
     return ids
 
 
-def pour_le_modele(messages, voit=True):
+CURRENT = "demande_en_cours"          # marque posée par l'agent sur le message de la demande en cours (retirée ici, Ollama ne la reçoit pas)
+
+
+def for_model(messages, voit=True):
     """Copie des messages où les identifiants d'images des derniers messages deviennent du base64 (ce qu'attend Ollama).
-    Les anciennes images sont retirées, avec une mention dans le texte : le modèle sait qu'elles existaient."""
+    Les anciennes images sont retirées, avec une mention dans le texte : le modèle sait qu'elles existaient. Les images de la demande en cours (le message
+    marqué `CURRENT`) sont toujours envoyées : avant, trois appels d'outils dans la même demande les sortaient des derniers messages."""
     sortie = []
-    debut_recent = max(0, len(messages) - RECENTS)
+    marque = next((n for n, m in enumerate(messages) if m.get(CURRENT)), len(messages))
+    debut_recent = max(0, min(len(messages) - RECENT, marque))
     for n, m in enumerate(messages):
+        if m.get(CURRENT):
+            m = {k: v for k, v in m.items() if k != CURRENT}
         ids = m.get("images")
         if not ids:
             sortie.append(m)
@@ -92,7 +106,7 @@ def pour_le_modele(messages, voit=True):
             encodees = []
             for i in ids:
                 try:
-                    encodees.append(base64.b64encode(chemin(i).read_bytes()).decode("ascii"))
+                    encodees.append(base64.b64encode(path_of(i).read_bytes()).decode("ascii"))
                 except (OSError, ValueError):
                     pass                      # fichier purgé : on continue sans
             m["images"] = encodees
@@ -105,22 +119,23 @@ def pour_le_modele(messages, voit=True):
     return sortie
 
 
-def referencees():
+def referenced():
     """Identifiants cités par au moins une conversation."""
+    from . import store
     vus = set()
-    for c in (_m.DONNEES / "conversations").glob("*.json"):
-        for m in (_m.lire_json(c, {}) or {}).get("messages", []):
+    for c in store.every():
+        for m in c.get("messages", []):
             vus.update(m.get("images") or [])
             vus.update(m.get("medias") or [])
     return vus
 
 
-def nettoyer(age_jours=2):
+def clean(age_jours=2):
     """Supprime les images que plus aucune conversation ne cite, après un délai (le temps d'envoyer le message). Renvoie le nombre supprimé."""
-    if not dossier().is_dir():
+    if not folder().is_dir():
         return 0
-    gardees, limite, n = referencees(), time.time() - age_jours * 86400, 0
-    for f in dossier().iterdir():
+    gardees, limite, n = referenced(), time.time() - age_jours * 86400, 0
+    for f in folder().iterdir():
         try:
             if f.name not in gardees and f.stat().st_mtime < limite:
                 f.unlink()

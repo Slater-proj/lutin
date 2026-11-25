@@ -13,10 +13,12 @@ import os
 import platform
 import shutil
 import sys
+import threading
+import time
 from pathlib import Path
 
 SCHEMA = 1
-DEFAUT = {
+DEFAULTS = {
     "schema": SCHEMA,
     "installe": False,
     "securite": {"niveau": "local", "port": 8777, "url_publique": "", "proxy_ips": [], "ecoute": ""},
@@ -29,18 +31,34 @@ DEFAUT = {
     "avance": False,
     "langue": None,                                          # None : langue du système ; "fr" ou "en" (voir lutin.i18n)
     "admin_a_distance": False,                               # vrai : toute personne déjà admise (appareil appairé, utilisateur du proxy) peut configurer depuis la page (modifiable depuis la machine seulement)
-    "hors_ligne": False,                                     # mode hors ligne strict : aucune connexion vers Internet (voir lutin.horsligne)
+    "hors_ligne": False,                                     # mode hors ligne strict : aucune connexion vers Internet (voir lutin.offline)
 }
 
 
-def systeme():
+def system_info():
     return {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), "linux")
 
 
-def dossiers(env=None, os_=None):
-    """{config, donnees, memoire, cache} pour ce système."""
+def folders(env=None, os_=None):
+    """{config, donnees, memoire, cache} for this system. LUTIN_HOME puts everything under one folder (portable mode, Docker, the installer, tests) and wins.
+    Without it, LUTIN_DONNEES and LUTIN_MEMOIRE (or their English names LUTIN_DATA, LUTIN_MEMORY) win over the default, as they do in `app_context`: before,
+    a data folder set by its variable left uv, Node.js, ExLlamaV3, Colibri and the backup in the default folder. LUTIN_HOME first because the command line
+    sets LUTIN_DONNEES from these folders and the programs it starts inherit it: an inherited value must not move a LUTIN_HOME given on purpose."""
     env = os.environ if env is None else env
-    os_ = os_ or systeme()
+    found = _default_folders(env, os_ or system_info())
+    if env.get("LUTIN_HOME"):
+        return found
+    data = env.get("LUTIN_DONNEES") or env.get("LUTIN_DATA")
+    memory = env.get("LUTIN_MEMOIRE") or env.get("LUTIN_MEMORY")
+    if data:
+        found["donnees"] = Path(data)
+        found["memoire"] = Path(data).parent / "memoire"          # beside it, as app_context.Settings.from_env does
+    if memory:
+        found["memoire"] = Path(memory)
+    return found
+
+
+def _default_folders(env, os_):
     home = env.get("LUTIN_HOME")
     if home:
         b = Path(home)
@@ -58,7 +76,7 @@ def dossiers(env=None, os_=None):
     return {"config": config, "donnees": donnees, "memoire": donnees / "memoire", "cache": Path(env.get("XDG_CACHE_HOME") or utilisateur / ".cache") / "lutin"}
 
 
-def lire_source(env=None):
+def read_source(env=None):
     """D'où Lutin a été installé (adresse ou roue donnée à pip), pour `lutin update` : variable LUTIN_SOURCE, sinon le fichier `source.txt` que l'installateur pose à côté de l'environnement privé."""
     env = os.environ if env is None else env
     if env.get("LUTIN_SOURCE"):
@@ -72,15 +90,15 @@ def lire_source(env=None):
 MIGRATIONS = {}          # {version_de_départ: fonction(dict) -> dict} ; ajoutée à chaque changement de schéma, testée avec un ancien fichier réel
 
 
-def migrer(d):
+def migrate_config(d):
     """Amène une configuration quelconque au schéma courant en gardant tout ce qui est connu ; ne plante jamais sur un fichier inattendu."""
     if not isinstance(d, dict):
-        return copy.deepcopy(DEFAUT)
+        return copy.deepcopy(DEFAULTS)
     version = d.get("schema") if isinstance(d.get("schema"), int) else 0
     while version < SCHEMA:
         d = MIGRATIONS.get(version, lambda x: x)(d)
         version += 1
-    sortie = copy.deepcopy(DEFAUT)
+    sortie = copy.deepcopy(DEFAULTS)
     for cle, valeur in d.items():
         if cle in sortie and isinstance(sortie[cle], dict) and isinstance(valeur, dict):
             sortie[cle].update(valeur)
@@ -90,36 +108,87 @@ def migrer(d):
     return sortie
 
 
-def charger(d):
+def load(d):
     f = Path(d["config"]) / "config.json"
     try:
         brut = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         brut = None
-    return migrer(brut)
+    return migrate_config(brut)
 
 
-def enregistrer(d, cfg):
+_SAVE_LOCK = threading.Lock()
+
+
+def replace_retrying(tmp, f, essais=20):
+    """os.replace, réessayé un instant : sous Windows, remplacer un fichier qu'un autre fil (ou un antivirus, un indexeur) a ouvert à cet instant
+    échoue (PermissionError, « Access is denied ») alors que la même opération réussit quelques millisecondes plus tard."""
+    for essai in range(essais):
+        try:
+            os.replace(tmp, f)
+            return
+        except PermissionError:
+            if essai == essais - 1:
+                raise
+            time.sleep(0.05)
+
+
+def save(d, cfg):
     f = Path(d["config"]) / "config.json"
     f.parent.mkdir(parents=True, exist_ok=True)
+    with _SAVE_LOCK:                                          # deux enregistrements à la fois : la copie .bak de l'un tenait le fichier que l'autre remplaçait
+        _write_locked(f, cfg)
+
+
+def _write_locked(f, cfg):
+    """Écrit cfg dans f ; à appeler sous _SAVE_LOCK."""
+    texte = json.dumps(cfg, ensure_ascii=False, indent=1)
     if f.is_file():
         try:
             shutil.copyfile(f, str(f) + ".bak")               # la version précédente reste disponible
         except OSError:
             pass
-    tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(f)
+    tmp = f.with_name("{}.{}.tmp".format(f.stem, threading.get_ident()))
+    try:
+        tmp.write_text(texte, encoding="utf-8")
+        replace_retrying(tmp, f)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
-def preparer(d):
+def update_file(f, changes, essais=20):
+    """Fusionne `changes` dans le fichier de configuration f, sous le verrou des enregistrements (lecture, modification, écriture d'un seul tenant).
+    Un fichier qui existe mais ne se lit pas (tenu un instant sous Windows) est relu un peu plus tard ; s'il reste illisible, OSError : il n'est
+    jamais remplacé par les seuls changements (avant, i18n.definir réécrivait config.json avec la seule langue). Un fichier abîmé repart de zéro."""
+    f = Path(f)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with _SAVE_LOCK:
+        cfg = {}
+        for essai in range(essais):
+            try:
+                cfg = json.loads(f.read_text(encoding="utf-8"))
+                break
+            except FileNotFoundError:
+                break
+            except PermissionError:
+                if essai == essais - 1:
+                    raise
+                time.sleep(0.05)
+            except ValueError:
+                break
+        cfg = dict(cfg if isinstance(cfg, dict) else {}, **changes)
+        _write_locked(f, cfg)
+        return cfg
+
+
+def prepare(d):
     """Crée les dossiers et pose les fichiers de mémoire de départ (sans jamais écraser ceux de l'utilisateur)."""
     for chemin in d.values():
         Path(chemin).mkdir(parents=True, exist_ok=True)
     from . import i18n
     modeles = Path(__file__).resolve().parent / "data"
-    if i18n.langue() != "fr" and (modeles / i18n.langue()).is_dir():
-        modeles = modeles / i18n.langue()                 # les fichiers de départ existent dans la langue choisie ; sans traduction, le français
+    if i18n.language() != "fr" and (modeles / i18n.language()).is_dir():
+        modeles = modeles / i18n.language()                 # les fichiers de départ existent dans la langue choisie ; sans traduction, le français
     for nom in ("CONTEXTE.md", "MEMOIRE.md"):
         cible = Path(d["memoire"]) / nom
         if not cible.exists():

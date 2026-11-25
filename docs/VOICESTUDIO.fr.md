@@ -20,7 +20,7 @@ Le clonage demande à chaque fois ton accord, avec une déclaration écrite : «
 ## Mise en route
 
 1. **Lance VoiceStudio** : application de bureau (`bun run dev` dans le dépôt) ou Docker : `docker run -d -p 127.0.0.1:3900:3900 -e OMNIVOICE_API_KEY ghcr.io/debpalash/voicestudio:stable`. Sans carte graphique, il fonctionne sur le processeur, plus lentement.
-2. Dans Lutin : **Extensions > VoiceStudio**, règle le port (3900 par défaut) et, **avec l'image Docker**, la clé API (la valeur de `OMNIVOICE_API_KEY`, que VoiceStudio exige même depuis cette machine). Active l'addon : Lutin vérifie que VoiceStudio répond et compte les voix.
+2. Dans Lutin : **Agents › Extensions › VoiceStudio**, règle le port (3900 par défaut) et, **avec l'image Docker**, la clé API (la valeur de `OMNIVOICE_API_KEY`, que VoiceStudio exige même depuis cette machine). Active l'addon : Lutin vérifie que VoiceStudio répond et compte les voix.
 3. Demande dans une conversation : « lis ce texte avec la voix de Narrateur », « transcris enregistrement.wav », « clone ma voix à partir de moi.wav ».
 
 Les fichiers audio créés sont rangés dans le dossier de données de Lutin (`addons/voicestudio/audio/`) ; la carte sous le message permet de les écouter, les télécharger ou les supprimer.

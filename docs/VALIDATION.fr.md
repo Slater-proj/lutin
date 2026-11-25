@@ -8,7 +8,7 @@ Pour chaque ligne : **Fais** ce qui est écrit, **vois** ce qui est attendu. Sin
 
 ## 1. Les moteurs (un par un, sur la machine qui peut le faire tourner)
 
-Réglages > Moteur : seuls les moteurs qui peuvent tourner sur cette machine sont proposés (les autres sont repliés, avec la raison).
+Modèles › Moteurs : seuls les moteurs qui peuvent tourner sur cette machine sont proposés (les autres sont repliés, avec la raison).
 
 | Moteur | Fais | Vois |
 |---|---|---|
@@ -21,13 +21,19 @@ Réglages > Moteur : seuls les moteurs qui peuvent tourner sur cette machine son
 
 Pour **chaque** moteur : la liste des modèles installés s'affiche, un modèle se télécharge en un clic avec une progression, et « Tester » renvoie une réponse. Note celui qui échoue et à quelle étape.
 
+### llama.cpp en ligne de commande (`lutin engine-trial`)
+
+Un essai réel avec un rapport, hors de la page. `lutin engine-trial llamacpp --test-model` vérifie en 30 secondes environ (un modèle de 1 Mo) que le programme s'installe, démarre et répond. `lutin engine-trial llamacpp --model unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf` (2,5 Go) ajoute une conversation avec sa vitesse et un appel d'outil. Attendu : une ligne `✔` par étape ; un `⚠` sur l'appel d'outil veut dire que le modèle n'a pas appelé l'outil. Si la version choisie ne démarre pas, réessayer avec `--variant vulkan`, puis `--variant cpu`. Renvoyer ce que la commande a affiché, ou le fichier `essai-llamacpp-….json` qu'elle nomme (ni conversation ni clé : le système, le matériel et les mesures). Lancer la seconde commande deux fois et garder les chiffres de la seconde (le premier chargement est plus lent).
+
+Réussi le 6 novembre 2026 (0.16.5, Windows, NVIDIA, version CUDA) : environ 247 jetons/s, premier jeton en 0,04 s, appel d'outil complet. Le workflow `moteurs` fait le même essai dans l'image légère de Docker à chaque changement du code des moteurs.
+
 ## 2. Plusieurs ordinateurs
 
 À faire avec deux vrais PC (A = celui où tu travailles, B = l'autre).
 
 | Étape | Fais | Vois |
 |---|---|---|
-| Appairer | Sur B : Réglages > Machines, activer, copier le code ; sur A : « Ajouter une machine » | B apparaît, statut vert en moins de 10 s |
+| Appairer | Sur B : Réglages › Cette machine, activer le prêt, copier le code ; sur A : « Ajouter une machine » | B apparaît, statut vert en moins de 10 s |
 | Réveil | Éteindre B, bouton « Réveiller » sur A | B s'allume ; le statut passe au vert sans second clic (la machine est sondée toutes les 2 s) |
 | Icône | Sur B, après le démarrage de Windows | L'icône de Lutin est près de l'horloge (au besoin sous la flèche « ^ ») |
 | Répondre ici | Choisir « Cette machine » ou « B » dans « Qui répond à tes messages ? » | La réponse vient bien du moteur choisi (nom du moteur visible dans la conversation) |
@@ -39,7 +45,7 @@ Pour **chaque** moteur : la liste des modèles installés s'affiche, un modèle 
 
 | Étape | Fais | Vois |
 |---|---|---|
-| Canal | Automatisation > Notifications : ajouter Gotify / ntfy / Telegram / webhook, « Envoyer un test » | Le message arrive sur ton téléphone ou ton salon Discord/Slack |
+| Canal | Réglages › Général › Notifications : ajouter Gotify / ntfy / Telegram / webhook, « Envoyer un test » | Le message arrive sur ton téléphone ou ton salon Discord/Slack |
 | Tâche | Créer une tâche « donne-moi l'heure », la lancer deux fois | Une seule conversation, deux échanges datés |
 | Résultat | Associer le canal à la tâche, la lancer | La réponse de la tâche arrive sur ton canal |
 | Échec | Éteindre le moteur, relancer la tâche | La conversation affiche la raison (pas un silence) et la notification le dit |

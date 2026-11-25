@@ -1,0 +1,185 @@
+"""Les modèles d'ExLlamaV3 : où les trouver, comment les juger pour cette machine.
+
+ExLlamaV3 lit des modèles au format EXL3, publiés sur Hugging Face. Son auteur (turboderp) en publie pour la plupart des modèles du moment, un dépôt par modèle, et UNE BRANCHE PAR QUANTIFICATION
+(« 4.0bpw » = 4 bits par poids : petit et rapide ; « 6.0bpw » : plus fidèle, plus gros). D'autres personnes en publient aussi. Ce module :
+  - cherche ces dépôts (récents ou populaires, auteur officiel ou toute la communauté) avec l'API publique de Hugging Face, sans compte ;
+  - liste les quantifications d'un dépôt avec leur taille exacte (somme des fichiers de la branche) ;
+  - estime la taille d'après le nom du modèle (« 27B » à 4 bits ≈ 16 Go) pour juger un dépôt sans demander toutes ses branches ;
+  - dit si un modèle téléchargé a une version plus récente (l'empreinte de sa branche a changé).
+Tout passe par `http(url, entetes) -> (statut, entetes, corps)` : testable sans réseau. Rien n'est téléchargé ici."""
+import concurrent.futures
+import json
+import re
+import time
+import urllib.parse
+
+from . import kv_cache
+from . import updates
+from .i18n import t as _t
+
+API = "https://huggingface.co/api/models"
+OFFICIAL_AUTHOR = "turboderp"
+PER_PAGE = 24
+RE_REPO = re.compile(r"^[A-Za-z0-9][\w.-]{0,60}/[A-Za-z0-9][\w.-]{0,100}$")
+RE_BPW = re.compile(r"^(\d+(?:\.\d+)?)bpw")
+RE_PARAMS = re.compile(r"(?<![\w.])(\d{1,4}(?:\.\d+)?)\s?[bB](?![a-zA-Z])")
+CACHE = {}          # url -> (instant, valeur) : ni la liste ni les branches ne bougent en quelques minutes
+CACHE_DURATION = 300
+KV = {}          # (dépôt, révision) -> mémoire de conversation lue dans son config.json
+
+
+def _json(url, http):
+    garde = CACHE.get(url)
+    if garde and time.time() - garde[0] < CACHE_DURATION:
+        return garde[1]
+    try:
+        statut, _, corps = http(url, {"Accept": "application/json"})
+    except OSError as e:
+        raise ValueError(_t("Hugging Face ne répond pas ({}). Vérifie ta connexion.").format(str(e)[:80]))
+    if statut == 404:
+        raise ValueError(_t("Ce dépôt n'existe pas sur Hugging Face."))
+    if statut != 200:
+        raise ValueError(_t("Hugging Face a répondu une erreur (HTTP {}). Réessaie dans quelques minutes.").format(statut))
+    try:
+        valeur = json.loads(corps.decode("utf-8"))
+    except ValueError:
+        raise ValueError(_t("Réponse illisible de Hugging Face."))
+    CACHE[url] = (time.time(), valeur)
+    return valeur
+
+
+def estimate_gb(nom, bpw):
+    """La taille probable (Go) d'un modèle d'après son nom (« Qwen3-8B-exl3 » à 4 bits ≈ 5,2 Go), ou None quand le nom ne donne pas le nombre de paramètres.
+    Un modèle « à experts » (Qwen3-30B-A3B) pèse selon ses 30 milliards, pas ses 3 actifs : on prend le plus grand nombre du nom."""
+    nombres = [float(x) for x in RE_PARAMS.findall(str(nom))]
+    if not nombres or not bpw:
+        return None
+    return round(max(nombres) * float(bpw) / 8 * 1.1 + 0.8, 1)          # + la couche d'entrée et de sortie, gardées plus précises (mesuré : 8B à 4 bits = 5,2 Go)
+
+
+def _capabilities(m):
+    tags = [str(t) for t in (m.get("tags") or [])]
+    pipeline = str(m.get("pipeline_tag") or "")
+    sortie = []
+    if "image" in pipeline or any(t in ("vision", "multimodal") for t in tags):
+        sortie.append("vision")
+    return sortie
+
+
+def search(q="", tri="recent", communaute=False, page=1, http=updates.http_get, auteur=OFFICIAL_AUTHOR, etiquette="exl3", bpw=4.0):
+    """Les dépôts EXL3 qui correspondent : [{id, nom, telechargements, aime, maj, capacites, licence, base, estimation_go}] et `suite` (il y en a d'autres).
+    tri : « recent » ou « populaire » ; communaute : tous les auteurs au lieu du seul auteur officiel. Une page de PAR_PAGE ; `page` agrandit la liste (l'API n'a pas de page suivante simple)."""
+    page = max(1, min(int(page or 1), 10))
+    limite = PER_PAGE * page + 1          # un de plus que demandé : sert à savoir s'il y a une suite
+    q = str(q or "").strip()[:60]
+    parametres = [("sort", "downloads" if tri == "populaire" else "lastModified"), ("direction", "-1"), ("limit", str(limite))]
+    if communaute:
+        parametres += [("filter", etiquette)] + ([("search", q)] if q else [])
+    else:
+        parametres += [("author", auteur), ("search", (q + " " + etiquette).strip())]
+    parametres += [("expand[]", x) for x in ("downloads", "likes", "lastModified", "tags", "pipeline_tag")]
+    donnees = _json(API + "?" + urllib.parse.urlencode(parametres), http)
+    if not isinstance(donnees, list):
+        raise ValueError(_t("Réponse inattendue de Hugging Face."))
+    sortie = []
+    for m in donnees:
+        ident = str(m.get("id", ""))
+        if not RE_REPO.match(ident) or etiquette not in (ident.lower() + " " + " ".join(str(t).lower() for t in (m.get("tags") or []))):
+            continue
+        if etiquette != "gguf" and ("gguf" in ident.lower() or "gguf" in [str(t).lower() for t in (m.get("tags") or [])]):
+            continue          # un dépôt GGUF porte parfois l'étiquette « exl3 » de son modèle d'origine : ExLlamaV3 ne le lit pas, il n'aurait aucune précision à proposer
+        tags = [str(t) for t in (m.get("tags") or [])]
+        base = next((t.split(":", 2)[2] for t in tags if t.startswith("base_model:quantized:")), "") or next((t.split(":", 1)[1] for t in tags if t.startswith("base_model:") and t.count(":") == 1), "")
+        sortie.append({"id": ident, "nom": ident.split("/")[-1], "auteur": ident.split("/")[0], "telechargements": int(m.get("downloads") or 0), "aime": int(m.get("likes") or 0), "maj": str(m.get("lastModified") or "")[:10],
+                       "capacites": _capabilities(m), "licence": next((t.split(":", 1)[1] for t in tags if t.startswith("license:")), ""), "base": base,
+                       "estimation_go": estimate_gb(ident.split("/")[-1], bpw)})
+    return {"modeles": sortie[:PER_PAGE * page], "suite": len(sortie) > PER_PAGE * page}
+
+
+def kv_of(depot, revision="main", http=updates.http_get):
+    """La mémoire de conversation du modèle (Mo pour 1 000 jetons, en 16 bits) d'après le config.json de cette révision du dépôt, ou None si Hugging Face ne le donne pas
+    (fichier absent, dépôt fermé, pas de réseau) : le verdict garde alors l'estimation prudente. Une architecture ne change pas : un chiffre lu est gardé pour la session."""
+    if not RE_REPO.match(str(depot or "")):
+        return None
+    cle = (str(depot), str(revision or "main"))
+    if cle in KV:
+        return KV[cle]
+    try:
+        valeur = kv_cache.mb_per_1k(_json("https://huggingface.co/" + urllib.parse.quote(cle[0], safe="/") + "/resolve/" + urllib.parse.quote(cle[1], safe="") + "/config.json", http))
+    except ValueError:
+        return None
+    if valeur:
+        KV[cle] = valeur
+    return valeur
+
+
+def branches_of(depot, http=updates.http_get):
+    """{nom de branche: empreinte} d'un dépôt."""
+    if not RE_REPO.match(str(depot)):
+        raise ValueError(_t("Nom de dépôt invalide : écris « propriétaire/modèle » (Hugging Face)."))
+    d = _json(API + "/" + urllib.parse.quote(depot, safe="/") + "/refs", http)
+    return {str(b.get("name")): str(b.get("targetCommit", "")) for b in (d.get("branches") or []) if b.get("name")}
+
+
+def commit_of(depot, revision, http=updates.http_get):
+    """L'empreinte actuelle d'une révision (branche) d'un dépôt, ou '' si elle n'existe pas."""
+    return branches_of(depot, http).get(revision or "main", "")
+
+
+def revision_size(depot, revision, http=updates.http_get):
+    """Octets de tous les fichiers d'une révision (somme des fichiers de la branche) : le total d'un téléchargement. ValueError si illisible."""
+    if not RE_REPO.match(str(depot)):
+        raise ValueError(_t("Nom de dépôt invalide : écris « propriétaire/modèle » (Hugging Face)."))
+    d = _json(API + "/" + urllib.parse.quote(depot, safe="/") + "/tree/" + urllib.parse.quote(str(revision or "main"), safe=""), http)
+    return sum(int(f.get("size") or 0) for f in d if isinstance(f, dict) and f.get("type") == "file")
+
+
+RE_BPW_IN_NAME = re.compile(r"(\d+(?:\.\d+)?)bpw", re.I)
+
+
+def quantizations(depot, http=updates.http_get):
+    """Les quantifications d'un dépôt : [{revision, bpw, go, commit}] triées du plus léger au plus lourd. `go` = somme exacte des fichiers de la branche (None si illisible).
+    Un dépôt sans branche « 4.0bpw »… qui range sa seule quantification sur « main » (des poids .safetensors) la propose sous « main », `bpw` lu dans son nom
+    s'il l'écrit : avant, la liste était vide et la page n'avait aucun bouton pour le télécharger."""
+    liste = []
+    branches = branches_of(depot, http)
+    for nom, empreinte in branches.items():
+        m = RE_BPW.match(nom)
+        if m:
+            liste.append({"revision": nom, "bpw": float(m.group(1)), "commit": empreinte})
+    if not liste and "main" in branches:
+        try:
+            fichiers = [str(f.get("path", "")).lower() for f in _json(API + "/" + urllib.parse.quote(depot, safe="/") + "/tree/main", http) if isinstance(f, dict) and f.get("type") == "file"]
+        except (ValueError, TypeError):
+            fichiers = []
+        if "config.json" in fichiers and any(f.endswith(".safetensors") for f in fichiers) and not any(f.endswith(".gguf") for f in fichiers):          # un modèle entier, pas un LoRA (adapter_config.json)
+            dans_le_nom = RE_BPW_IN_NAME.search(str(depot).split("/")[-1])
+            liste.append({"revision": "main", "bpw": float(dans_le_nom.group(1)) if dans_le_nom else 0.0, "commit": branches["main"]})
+
+    def taille(q):
+        try:
+            d = _json(API + "/" + urllib.parse.quote(depot, safe="/") + "/tree/" + urllib.parse.quote(q["revision"], safe=""), http)
+            return round(sum(int(f.get("size") or 0) for f in d if isinstance(f, dict) and f.get("type") == "file") / 1e9, 1) or None
+        except (ValueError, TypeError):
+            return None
+    if liste:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+            for q, go in zip(liste, pool.map(taille, liste)):
+                q["go"] = go
+    return sorted(liste, key=lambda q: q["bpw"])
+
+
+def newer_versions(modeles, http=updates.http_get):
+    """Parmi les modèles téléchargés par Lutin ({nom, depot, revision, commit}), ceux dont la branche a changé depuis : [{nom, depot, revision}]. Un modèle sans origine connue ne peut pas être vérifié."""
+    plus_recentes, erreurs = [], []
+    for m in modeles:
+        if not m.get("depot") or not m.get("commit"):
+            continue
+        try:
+            actuel = commit_of(m["depot"], m.get("revision") or "main", http)
+        except ValueError as e:
+            erreurs.append(str(e))
+            continue
+        if actuel and actuel != m["commit"]:
+            plus_recentes.append({"nom": m["nom"], "depot": m["depot"], "revision": m.get("revision", "")})
+    return {"plus_recentes": plus_recentes, "erreurs": sorted(set(erreurs))}

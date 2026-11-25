@@ -5,7 +5,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import context  # noqa: F401
-from lutin import moteur_openai as mo
+from lutin import openai_engine as mo
 
 RECUES = []
 
@@ -44,7 +44,7 @@ threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
 ADRESSE = "http://127.0.0.1:%d/v1" % SERVEUR.server_address[1]
 
 
-class Essai(mo.MoteurOpenAI):
+class Essai(mo.OpenAIEngine):
     id, nom = "essai", "Essai"
 
     def adresse(self):
@@ -60,7 +60,7 @@ class Traduction(unittest.TestCase):
                  "messages": [{"role": "system", "content": "S"}, {"role": "user", "content": "Lis a", "images": ["iVBORw0KGgo="]},
                               {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "lire", "arguments": {"chemin": "a"}}}]},
                               {"role": "tool", "tool_name": "lire", "content": "contenu"}, {"role": "tool", "tool_name": "orphelin", "content": "reste"}]}
-        s = mo.vers_openai(corps)
+        s = mo.to_openai(corps)
         self.assertEqual((s["model"], s["temperature"], s["top_p"], s["top_k"], s["max_tokens"]), ("m", 0.3, 0.9, 40, 200))
         self.assertNotIn("num_ctx", s)
         self.assertEqual(s["stream_options"], {"include_usage": True})
@@ -77,7 +77,7 @@ class Traduction(unittest.TestCase):
         self.assertEqual(mo.arguments_json('{"a": 1,}'), {"a": 1})
         self.assertEqual(mo.arguments_json(""), {})
         self.assertEqual(mo.arguments_json("n'importe quoi"), {})
-        s = mo.vers_openai({"model": "m", "stream": False, "format": "json", "messages": []})
+        s = mo.to_openai({"model": "m", "stream": False, "format": "json", "messages": []})
         self.assertEqual(s["response_format"], {"type": "json_object"})
         self.assertNotIn("stream_options", s)
 
@@ -101,6 +101,24 @@ class AvecUnServeur(unittest.TestCase):
         self.assertEqual(Absent().modeles(), {"actif": False, "installes": [], "tailles": {}})
         self.assertIsNone(Absent().en_memoire("x"))
 
+    def test_un_serveur_local_arrete_est_dit_inactif_tout_de_suite(self):
+        """CI Windows du 2026-11-21 : `/api/moteurs` dépassait 15 s. Sous Windows, joindre un port fermé de cette machine attend environ 2 s avant le refus,
+        et chaque carte (ExLlamaV3, LM Studio, Colibri) demande son serveur plusieurs fois. Un serveur local qui n'écoute pas est vu tout de suite."""
+        import socket
+        import time
+        libre = socket.socket()
+        libre.bind(("127.0.0.1", 0))
+        port = libre.getsockname()[1]
+        libre.close()          # un port qui vient d'être libéré : personne n'y écoute
+
+        class Arrete(Essai):
+            def adresse(self):
+                return "http://127.0.0.1:%d/v1" % port
+        debut = time.monotonic()
+        self.assertFalse(Arrete().actif())
+        self.assertFalse(Arrete().modeles()["actif"])
+        self.assertLess(time.monotonic() - debut, 1.0)
+
     def test_chat_d_un_coup(self):
         r = self.m.chat({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}], "options": {"temperature": 0.1}}, 10)
         self.assertEqual(r["message"]["content"], "Bonjour")
@@ -108,6 +126,17 @@ class AvecUnServeur(unittest.TestCase):
         self.assertEqual((r["prompt_eval_count"], r["eval_count"], r["done"]), (7, 3, True))
         chemin, corps, auth = RECUES[0]
         self.assertEqual((chemin, corps["stream"], auth), ("/v1/chat/completions", False, "Bearer secret"))
+
+    def test_sans_reflexion_le_serveur_local_le_recoit_et_un_serveur_distant_rien_de_plus(self):
+        """Maintainer, 2026-11-21: « Propose a commit message » timed out with ExLlamaV3: `think: False` stayed in Lutin, the Qwen3 model thought for
+        minutes before a one-line answer. The servers of this machine read `chat_template_kwargs`; a distant one is sent nothing it might refuse."""
+        RECUES.clear()
+        self.m.chat({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}], "think": False}, 10)
+        self.assertEqual(RECUES[-1][1]["chat_template_kwargs"], {"enable_thinking": False})
+        self.m.chat({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}]}, 10)
+        self.assertNotIn("chat_template_kwargs", RECUES[-1][1], "reflection is the model's own choice unless Lutin says no")
+        distant = mo.to_openai({"model": "m", "messages": [], "think": False}, gabarit=False)
+        self.assertNotIn("chat_template_kwargs", distant)
 
     def test_chat_en_flux_traduit_au_format_d_ollama(self):
         with self.m.chat_flux({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}]}, 10) as flux:

@@ -1,0 +1,60 @@
+{
+ "nom": "ACE-Step",
+ "description": "Donne de la musique à Lutin : composer un morceau (avec ou sans voix chantée, dans plus de 50 langues) à partir d'une description de style et de paroles, avec ACE-Step 1.5 qui tourne sur ta machine ; rien ne part sur internet.",
+ "hotes": [
+  "127.0.0.1"
+ ],
+ "doc": "https://github.com/ACE-Step/ACE-Step-1.5",
+ "reglages": [
+  {
+   "cle": "port",
+   "libelle": "Port d'ACE-Step",
+   "defaut": "8001",
+   "obligatoire": false,
+   "aide": "8001 par défaut (le serveur d'API d'ACE-Step). Lutin ne joint que cette machine (127.0.0.1)."
+  },
+  {
+   "cle": "cle",
+   "libelle": "Clé API (seulement si ACE-Step en exige une)",
+   "secret": true,
+   "obligatoire": false,
+   "aide": "Inutile pour une installation de bureau : le serveur d'ACE-Step n'exige une clé que si tu en as réglé une."
+  },
+  {
+   "cle": "format",
+   "libelle": "Format des fichiers audio",
+   "defaut": "mp3",
+   "obligatoire": false,
+   "choix": [
+    [
+     "mp3",
+     "MP3 (léger)"
+    ],
+    [
+     "wav",
+     "WAV (sans perte)"
+    ],
+    [
+     "flac",
+     "FLAC (sans perte, plus léger)"
+    ]
+   ],
+   "aide": "Le format des morceaux générés. Le modèle peut en demander un autre dans sa demande."
+  }
+ ],
+ "etapes": [
+  {
+   "titre": "Lance le serveur d'ACE-Step",
+   "texte": "Installe ACE-Step 1.5 (Python 3.11 ou 3.12 ; une carte NVIDIA, AMD, Apple ou, plus lentement, le processeur), puis lance son serveur d'API : uv run acestep-api (ou start_api_server.bat sous Windows). Le premier lancement télécharge ses modèles."
+  },
+  {
+   "titre": "Active l'addon.",
+   "texte": "Lutin vérifie que le serveur d'ACE-Step répond."
+  },
+  {
+   "titre": "Demande un morceau",
+   "texte": "dans une conversation (« compose un morceau de jazz lent au piano », « écris une chanson sur… »). Chaque génération demande ton accord ; sans paroles, le morceau est instrumental."
+  }
+ ],
+ "verification": []
+}

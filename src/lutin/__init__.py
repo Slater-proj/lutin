@@ -2,15 +2,15 @@
 import re
 from importlib.metadata import PackageNotFoundError, distributions, version
 
-NOM = "Lutin"
+NAME = "Lutin"
 
 
-def _numeros(texte):
+def _numbers(texte):
     m = re.match(r"(\d+)\.(\d+)\.(\d+)", texte or "")
     return tuple(int(n) for n in m.groups()) if m else (0, 0, 0)
 
 
-def version_installee():
+def installed_version():
     """La version de Lutin installée : la plus haute des métadonnées trouvées. Une mise à jour par-dessus un dossier existant (installateur Windows, copie) peut laisser les métadonnées
     d'une ancienne version à côté des nouvelles ; « la première trouvée » afficherait alors l'ancienne alors que le code est le nouveau."""
     try:
@@ -18,20 +18,24 @@ def version_installee():
     except Exception:  # noqa: BLE001 — jamais bloquant au démarrage
         versions = []
     if versions:
-        return max(versions, key=_numeros)
+        return max(versions, key=_numbers)
     return version("lutin")
 
 
 try:
-    __version__ = version_installee()           # installé : la version vient des étiquettes git (voir pyproject.toml)
+    __version__ = installed_version()           # installé : la version vient des étiquettes git (voir pyproject.toml)
 except PackageNotFoundError:
     __version__ = "0.0.0+source"             # lancé depuis les sources, sans installation (tests, développement)
 
-from . import sansconsole  # noqa: E402
+from . import environment  # noqa: E402
 
-sansconsole.activer()          # Windows sans console (icône de la zone de notification) : aucun programme lancé n'ouvre de fenêtre noire
+environment.apply()          # les noms anglais des variables d'environnement (LUTIN_ROOT…) remplissent les noms d'origine (LUTIN_RACINE…) avant que rien ne les lise
+
+from . import no_console  # noqa: E402
+
+no_console.enable()          # Windows sans console (icône de la zone de notification) : aucun programme lancé n'ouvre de fenêtre noire
 
 import os  # noqa: E402
 
 if os.environ.get("LUTIN_TRACE_PROCESSUS"):          # enquête sur une fenêtre qui clignote : chaque programme lancé par Lutin est noté dans un fichier
-    sansconsole.tracer(os.environ["LUTIN_TRACE_PROCESSUS"])
+    no_console.start_trace(os.environ["LUTIN_TRACE_PROCESSUS"])

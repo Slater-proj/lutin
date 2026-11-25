@@ -6,8 +6,8 @@ Lutin sait faire tourner un même modèle avec Ollama ou avec llama.cpp (les mod
 
 ## Utiliser
 
-- **Dans la page** : Réglages > Moteurs, carte « Quel moteur pour ma machine ? » : la recommandation et sa raison, puis « Comparer les moteurs » (environ 1 minute) ou « Comparaison approfondie » (environ 5 minutes).
-- **En ligne de commande** : `lutin bench-engines [modèle] [--mode rapide|approfondi] [--output resultat.json]`.
+- **Dans la page** : Modèles › Mesures, « Comparaison des moteurs » : la recommandation et sa raison, puis « Comparer les moteurs » (environ 1 minute) ou « Comparaison approfondie » (environ 5 minutes).
+- **En ligne de commande** : `lutin bench-engines [modèle] [--mode fast|deep] (`rapide|approfondi` aussi) [--output resultat.json]`.
 
 Il faut que le modèle existe sur chaque moteur comparé (un modèle d'Ollama apparaît tel quel dans llama.cpp). Le banc ne tourne **jamais tout seul**, jamais au premier lancement, et ne télécharge rien. Avant de mesurer un moteur, il décharge le modèle de l'autre pour que la mémoire et la carte graphique soient à lui seul.
 

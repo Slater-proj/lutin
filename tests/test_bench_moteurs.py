@@ -16,9 +16,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import bench_moteurs as bm  # noqa: E402
-from lutin import machine, moteurs  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import engine_bench as bm  # noqa: E402
+from lutin import hardware, engines  # noqa: E402
 
 RACINE = Path(__file__).resolve().parent.parent
 
@@ -81,21 +81,24 @@ class Profil:
 
 
 def carte(fabricant, vram, nom="Carte"):
-    return machine.Gpu(nom=nom, fabricant=fabricant, vram_go=vram, source="test")
+    return hardware.Gpu(nom=nom, fabricant=fabricant, vram_go=vram, source="test")
 
 
 class Base(unittest.TestCase):
     def setUp(self):
-        self.ancien = dict(moteurs.MOTEURS)
-        self.addCleanup(lambda: (moteurs.MOTEURS.clear(), moteurs.MOTEURS.update(self.ancien)))
+        self.ancien = dict(engines.ENGINES)
+        self.addCleanup(lambda: (engines.ENGINES.clear(), engines.ENGINES.update(self.ancien)))
 
     def installer(self, ollama, llama):
-        moteurs.MOTEURS["ollama"], moteurs.MOTEURS["llamacpp"] = ollama, llama
+        """Only the engines a test installs take part: the servers Lutin manages (ADR 0020, engines of their own) would probe this machine."""
+        engines.ENGINES["ollama"], engines.ENGINES["llamacpp"] = ollama, llama
+        for identifier in engines.MANAGED_SERVERS:
+            engines.ENGINES.pop(identifier, None)
 
 
 class Mesure(Base):
     def test_les_chiffres_du_moteur_donnent_la_vitesse(self):
-        r = bm.mesurer(Faux("ollama", "Ollama", tok_s=40), "m", "rapide", horloge=Horloge(), memoire=lambda: {"ram": 1, "vram": 2})
+        r = bm.measure(Faux("ollama", "Ollama", tok_s=40), "m", "rapide", horloge=Horloge(), memoire=lambda: {"ram": 1, "vram": 2})
         self.assertTrue(r["ok"])
         self.assertEqual((r["tok_s"], r["passes"], r["ram"], r["vram"]), (40.0, 3, 1, 2))
         self.assertEqual(r["lecture_tok_s"], 800)
@@ -103,11 +106,11 @@ class Mesure(Base):
 
     def test_le_mode_approfondi_fait_plus_de_passes(self):
         f = Faux("ollama", "Ollama")
-        bm.mesurer(f, "m", "approfondi", horloge=Horloge())
+        bm.measure(f, "m", "approfondi", horloge=Horloge())
         self.assertEqual(f.appels, 1 + bm.PASSES["approfondi"])
 
     def test_une_panne_est_un_resultat_pas_une_exception(self):
-        r = bm.mesurer(Faux("llamacpp", "llama.cpp", echec="le serveur ne démarre pas"), "m", horloge=Horloge())
+        r = bm.measure(Faux("llamacpp", "llama.cpp", echec="le serveur ne démarre pas"), "m", horloge=Horloge())
         self.assertFalse(r["ok"])
         self.assertIn("ne démarre pas", r["erreurs"][0])
         self.assertIsNone(r["tok_s"])
@@ -116,7 +119,7 @@ class Mesure(Base):
         class SansChiffres(Faux):
             def chat_flux(self, corps, delai=900):
                 return Flux([{"message": {"content": "a"}, "done": False}] * 30 + [{"done": True}])
-        r = bm.mesurer(SansChiffres("openai", "X"), "m", horloge=Horloge())
+        r = bm.measure(SansChiffres("openai", "X"), "m", horloge=Horloge())
         self.assertTrue(r["ok"])
         self.assertGreater(r["tok_s"], 0)
 
@@ -143,7 +146,7 @@ class Comparaison(Base):
     def lancer(self, o, l, **kw):
         self.installer(o, l)
         liberes = []
-        r = bm.comparer("m", "rapide", Profil(), horloge=Horloge(), memoire=lambda i, m: None, liberer_autres=lambda a, m: liberes.append(list(a)), date="2026-11-07T10:00:00", **kw)
+        r = bm.compare("m", "rapide", Profil(), horloge=Horloge(), memoire=lambda i, m: None, liberer_autres=lambda a, m: liberes.append(list(a)), date="2026-11-07T10:00:00", **kw)
         return r, liberes
 
     def test_ecart_sous_dix_pour_cent_on_garde_le_plus_simple(self):
@@ -179,7 +182,7 @@ class Comparaison(Base):
 
     def test_le_texte_lisible_dit_tout(self):
         r, _ = self.lancer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", 130))
-        t = bm.lisible(r)
+        t = bm.readable(r)
         for attendu in ("Ollama", "llama.cpp", "jetons/s", "Recommandation"):
             self.assertIn(attendu, t)
 
@@ -188,52 +191,52 @@ class Recommandation(unittest.TestCase):
     def test_regles_marquees_comme_non_mesurees(self):
         cas = [(Profil(carte("nvidia", 12)), "ollama"), (Profil(carte("amd", 8)), "llamacpp"), (Profil(None, integrees=True), "ollama"), (Profil(None), "ollama")]
         for profil, attendu in cas:
-            r = bm.recommander(profil)
+            r = bm.recommend(profil)
             self.assertEqual(r["moteur"], attendu)
             self.assertEqual(r["source"], "regles")
             self.assertIn("pas encore mesuré", r["raison"])
             self.assertTrue(r["limites"])
 
     def test_docker_suit_les_memes_regles_car_les_moteurs_s_installent_depuis_la_page(self):
-        r = bm.recommander(Profil(carte("nvidia", 24)), docker=True)
+        r = bm.recommend(Profil(carte("nvidia", 24)), docker=True)
         self.assertEqual(r["moteur"], "ollama")
         self.assertNotIn("image", r["raison"])          # plus d'Ollama dans l'image : la page l'installe
 
 
     def test_sans_modele_installe_la_recommandation_est_theorique(self):
-        self.assertTrue(bm.recommander(Profil(), modele_installe=False)["theorique"])
-        self.assertFalse(bm.recommander(Profil(), modele_installe=True)["theorique"])
+        self.assertTrue(bm.recommend(Profil(), modele_installe=False)["theorique"])
+        self.assertFalse(bm.recommend(Profil(), modele_installe=True)["theorique"])
 
     def test_sans_profil_pas_d_exception(self):
-        self.assertEqual(bm.recommander(None)["moteur"], "ollama")
+        self.assertEqual(bm.recommend(None)["moteur"], "ollama")
 
 
 class Conservation(Base):
     def resultat(self, version="1.0", cpu="CPU A"):
         self.installer(Faux("ollama", "Ollama", version=version), Faux("llamacpp", "llama.cpp", version="b100"))
-        return bm.comparer("m", "rapide", Profil(cpu=cpu), horloge=Horloge(), memoire=lambda i, m: None, liberer_autres=lambda a, m: None)
+        return bm.compare("m", "rapide", Profil(cpu=cpu), horloge=Horloge(), memoire=lambda i, m: None, liberer_autres=lambda a, m: None)
 
     def test_enregistrer_lire_et_garder_le_dernier_par_modele(self):
         d = Path(tempfile.mkdtemp(dir=_TEMP))
         r = self.resultat()
-        bm.enregistrer(d, r)
-        bm.enregistrer(d, dict(r, modele="autre"))
-        self.assertEqual(set(bm.lire(d)), {"m", "autre"})
-        self.assertEqual(bm.lire(d)["m"]["moteurs"][0]["id"], "ollama")
-        self.assertEqual(bm.lire(_TEMP / "absent"), {})
+        bm.save(d, r)
+        bm.save(d, dict(r, modele="autre"))
+        self.assertEqual(set(bm.read(d)), {"m", "autre"})
+        self.assertEqual(bm.read(d)["m"]["moteurs"][0]["id"], "ollama")
+        self.assertEqual(bm.read(_TEMP / "absent"), {})
 
     def test_a_refaire_quand_le_materiel_ou_une_version_change(self):
         r = self.resultat()
         versions = {"ollama": "1.0", "llamacpp": "b100"}
-        self.assertFalse(bm.a_refaire(r, Profil(cpu="CPU A"), versions))
-        self.assertTrue(bm.a_refaire(r, Profil(cpu="CPU B"), versions), "autre processeur")
-        self.assertTrue(bm.a_refaire(r, Profil(cpu="CPU A"), dict(versions, ollama="2.0")), "nouvelle version d'Ollama")
-        self.assertTrue(bm.a_refaire(r, Profil(cpu="CPU A", ram=64), versions), "autre quantité de mémoire")
-        self.assertTrue(bm.a_refaire(None, Profil(), versions))
+        self.assertFalse(bm.needs_rerun(r, Profil(cpu="CPU A"), versions))
+        self.assertTrue(bm.needs_rerun(r, Profil(cpu="CPU B"), versions), "autre processeur")
+        self.assertTrue(bm.needs_rerun(r, Profil(cpu="CPU A"), dict(versions, ollama="2.0")), "nouvelle version d'Ollama")
+        self.assertTrue(bm.needs_rerun(r, Profil(cpu="CPU A", ram=64), versions), "autre quantité de mémoire")
+        self.assertTrue(bm.needs_rerun(None, Profil(), versions))
 
     def test_le_fichier_partage_ne_contient_rien_de_personnel(self):
         r = self.resultat()
-        texte = bm.exporter(r)
+        texte = bm.export(r)
         d = json.loads(texte)
         self.assertNotIn("recommandation", d)
         self.assertEqual(d["modele"], "m")
@@ -244,13 +247,13 @@ class Conservation(Base):
         d = Path(tempfile.mkdtemp(dir=_TEMP))
         r = self.resultat()
         r["moteurs"][1]["tok_s"] = 500          # un résultat flatteur pour llama.cpp
-        bm.enregistrer(d, r)
+        bm.save(d, r)
         self.installer(Faux("ollama", "Ollama", version="1.0"), Faux("llamacpp", "llama.cpp", version="b100"))
-        v = bm.vue(d, "m", Profil(cpu="CPU A"))
+        v = bm.view(d, "m", Profil(cpu="CPU A"))
         self.assertFalse(v["a_refaire"])
         self.assertEqual(v["recommandation"]["moteur"], "llamacpp")
         self.installer(Faux("ollama", "Ollama", version="9.9"), Faux("llamacpp", "llama.cpp", version="b100"))
-        v = bm.vue(d, "m", Profil(cpu="CPU A"))
+        v = bm.view(d, "m", Profil(cpu="CPU A"))
         self.assertTrue(v["a_refaire"])
         self.assertEqual(v["recommandation"]["source"], "regles", "un résultat périmé ne décide plus")
 
@@ -260,70 +263,67 @@ class Lancement(Base):
         class Serveur(Faux):
             def adresse(self):
                 return "http://127.0.0.1:1234/v1"
-
-            def config(self):
-                return {"serveur": "lmstudio"}
         self.installer(Faux("ollama", "Ollama", 100, modeles=("qwen3:8b",)), Faux("llamacpp", "llama.cpp", 100, installe=False))
-        moteurs.MOTEURS["openai"] = Serveur("openai", "Serveur compatible OpenAI", 60, modeles=("qwen/qwen3-8b", "autre-70b"))
+        engines.ENGINES["lmstudio"] = Serveur("lmstudio", "LM Studio", 60, modeles=("qwen/qwen3-8b", "autre-70b"))          # an engine of its own since ADR 0020
         utilises = []
-        r = bm.comparer("qwen3:8b", "rapide", Profil(), horloge=Horloge(), memoire=lambda i, m: utilises.append((i, m)) or None, liberer_autres=lambda a, m: None, date="2026-11-09T10:00:00")
+        r = bm.compare("qwen3:8b", "rapide", Profil(), horloge=Horloge(), memoire=lambda i, m: utilises.append((i, m)) or None, liberer_autres=lambda a, m: None, date="2026-11-09T10:00:00")
         self.assertEqual([(m["nom"], m["modele"]) for m in r["moteurs"]], [("Ollama", "qwen3:8b"), ("LM Studio", "qwen/qwen3-8b")])
-        self.assertIn(("openai", "qwen/qwen3-8b"), utilises, "la mémoire est lue avec le nom de modèle PROPRE à ce moteur")
+        self.assertIn(("lmstudio", "qwen/qwen3-8b"), utilises, "la mémoire est lue avec le nom de modèle PROPRE à ce moteur")
         self.assertEqual([i["id"] for i in r["ignores"]], ["llamacpp"])
 
     def test_un_serveur_openai_arrete_est_signale_pas_demarre_et_sans_adresse_il_est_absent(self):
         self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", 100))
         arrete = Faux("openai", "Serveur compatible OpenAI", 60, actif=False)
         arrete.adresse = lambda: "http://127.0.0.1:1234/v1"
-        moteurs.MOTEURS["openai"] = arrete
-        raisons = {mo.id: raison for mo, raison, _ in bm.disponibles("m")}
+        engines.ENGINES["openai"] = arrete
+        raisons = {mo.id: raison for mo, raison, _ in bm.available("m")}
         self.assertEqual(raisons["openai"], "pas démarré")
         sans_adresse = Faux("openai", "Serveur compatible OpenAI", 60)
         sans_adresse.adresse = lambda: ""
-        moteurs.MOTEURS["openai"] = sans_adresse
-        self.assertNotIn("openai", [mo.id for mo, _, _ in bm.disponibles("m")])
+        engines.ENGINES["openai"] = sans_adresse
+        self.assertNotIn("openai", [mo.id for mo, _, _ in bm.available("m")])
 
     def test_comparer_demande_deux_moteurs(self):
         self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", installe=False))
         d = Path(tempfile.mkdtemp(dir=_TEMP))
         with self.assertRaises(ValueError) as e:
-            bm.lancer("m", "rapide", d, Profil())
+            bm.launch("m", "rapide", d, Profil())
         self.assertIn("au moins deux", str(e.exception))
-        v = bm.vue(d, "m", Profil())
+        v = bm.view(d, "m", Profil())
         self.assertEqual(v["comparables"], 1)
         self.assertTrue(any(x["raison"] for x in v["disponibilite"]))
     def test_une_seule_comparaison_a_la_fois_et_resultat_conserve(self):
         self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", 100))
         d = Path(tempfile.mkdtemp(dir=_TEMP))
         with self.assertRaises(ValueError):
-            bm.lancer("", "rapide", d, Profil())
+            bm.launch("", "rapide", d, Profil())
         with self.assertRaises(ValueError):
-            bm.lancer("m", "bizarre", d, Profil())
+            bm.launch("m", "bizarre", d, Profil())
         ouvert, entre = threading.Event(), threading.Event()
 
         def retenir(autres, modele):          # la première comparaison reste « en cours » jusqu'à ce qu'on la libère : le test ne dépend plus de la vitesse de la machine
             entre.set()
             ouvert.wait(10)
-        bm.lancer("m", "rapide", d, Profil(), liberer_autres=retenir, memoire=lambda i, m: None)
+        bm.launch("m", "rapide", d, Profil(), liberer_autres=retenir, memoire=lambda i, m: None)
         self.assertTrue(entre.wait(10))
         with self.assertRaises(ValueError):
-            bm.lancer("m", "rapide", d, Profil())
+            bm.launch("m", "rapide", d, Profil())
         ouvert.set()
         fin = time.time() + 20
-        while bm.ETAT["en_cours"] and time.time() < fin:
+        while bm.STATE["en_cours"] and time.time() < fin:
             time.sleep(0.05)
-        self.assertFalse(bm.ETAT["en_cours"])
-        self.assertEqual(bm.ETAT["erreur"], "")
-        self.assertIn("m", bm.lire(d))
+        self.assertFalse(bm.STATE["en_cours"])
+        self.assertEqual(bm.STATE["erreur"], "")
+        self.assertIn("m", bm.read(d))
 
     def test_aucun_moteur_pret_donne_une_erreur_claire(self):
         self.installer(Faux("ollama", "Ollama", installe=False), Faux("llamacpp", "llama.cpp", installe=False))
         d = Path(tempfile.mkdtemp(dir=_TEMP))
         with self.assertRaises(ValueError) as e:          # refusé tout de suite, avec la raison de chaque moteur (avant : lancé pour rien)
-            bm.lancer("m", "rapide", d, Profil())
+            bm.launch("m", "rapide", d, Profil())
         self.assertIn("pas installé", str(e.exception))
-        self.assertFalse(bm.ETAT["en_cours"])
-        self.assertEqual(bm.lire(d), {})
+        self.assertFalse(bm.STATE["en_cours"])
+        self.assertEqual(bm.read(d), {})
 
 
 class Branchement(unittest.TestCase):
@@ -335,10 +335,11 @@ class Branchement(unittest.TestCase):
         self.assertIn("--sortie", r.stdout)
 
     def test_les_routes_et_la_page(self):
-        src = (RACINE / "src" / "lutin" / "serveur.py").read_text(encoding="utf-8")
-        self.assertEqual(src.count('"/api/bench-moteurs"'), 2)
-        page = (RACINE / "src" / "lutin" / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("carteBancMoteurs", page)
+        from lutin import api_v1
+        routes = {(r["method"], r["path"]) for r in api_v1.table()}
+        self.assertTrue({("GET", "/api/v1/engines/comparison"), ("POST", "/api/v1/engines/comparison")} <= routes)
+        ecrans = RACINE / "frontend" / "src"
+        self.assertTrue(any("/engines/comparison" in f.read_text(encoding="utf-8") for f in ecrans.rglob("*.svelte")), "the interface shows the comparison")
 
 
 if __name__ == "__main__":

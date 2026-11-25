@@ -15,7 +15,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
+from lutin import core as A  # noqa: E402
 
 
 def port_libre():
@@ -34,7 +34,7 @@ class EcouteLocale(unittest.TestCase):
 
     def test_une_adresse_du_reseau_ouvre_aussi_127_0_0_1(self):
         # 127.0.0.2 joue « l'adresse du réseau local » : une adresse de la machine qui n'est pas 127.0.0.1
-        local = A.ecouter_aussi_en_local("127.0.0.2")
+        local = A.also_listen_locally("127.0.0.2")
         self.assertIsNotNone(local)
         self.addCleanup(lambda: (local.shutdown(), local.server_close()))
         c = http.client.HTTPConnection("127.0.0.1", A.PORT, timeout=5)
@@ -44,20 +44,20 @@ class EcouteLocale(unittest.TestCase):
 
     def test_rien_a_ajouter_quand_c_est_deja_local_ou_partout(self):
         for hote in ("127.0.0.1", "localhost", "::1", "0.0.0.0", ""):
-            self.assertIsNone(A.ecouter_aussi_en_local(hote), hote)
+            self.assertIsNone(A.also_listen_locally(hote), hote)
 
     def test_port_deja_pris_le_serveur_principal_continue(self):
         with socket.socket() as occupe:
             occupe.bind(("127.0.0.1", A.PORT))
             occupe.listen(1)
-            self.assertIsNone(A.ecouter_aussi_en_local("127.0.0.2"), "pas d'exception : le serveur principal ne doit pas tomber pour ça")
+            self.assertIsNone(A.also_listen_locally("127.0.0.2"), "pas d'exception : le serveur principal ne doit pas tomber pour ça")
 
 
 class CetteMachine(unittest.TestCase):
     """Un navigateur de cette machine qui ouvre http://192.168.x.y:8777 arrive avec l'adresse réseau de la machine comme origine : c'est bien cette machine."""
 
     def handler(self, ip_client, host="127.0.0.1:8777", **entetes):
-        h = A.Gestionnaire.__new__(A.Gestionnaire)
+        h = A.Handler.__new__(A.Handler)
         h.client_address = (ip_client, 50000)
         h.headers = dict({"Host": host}, **entetes)
         return h

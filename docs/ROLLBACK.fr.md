@@ -6,6 +6,7 @@
 
 - **Avant toute mise à jour** (`lutin update`, ou le bouton de la page) Lutin sauvegarde tes données (réglages, conversations, mémoire, journal des actions) dans un `.zip` et garde les **trois dernières**. Si cette sauvegarde échoue (disque plein…), tu en es prévenu et la mise à jour continue.
 - **Si la mise à jour échoue** (pas de réseau, erreur de pip), ta version actuelle reste en place : Lutin ne laisse rien d'installé à moitié.
+- **Tes conversations sont dans une base** (`donnees/lutin.db`, SQLite, depuis la 1.0). `lutin export --conversations [dossier]` les réécrit en fichiers JSON de la 0.x (en lecture seule, même pendant que Lutin tourne) : une version antérieure les lit dans son dossier `donnees/conversations/`. Une base devenue illisible n'est jamais remplacée sans rien dire : elle est déplacée dans `donnees/archives/base-illisible-<date>/`, Lutin le dit au démarrage, dans `lutin doctor` et dans Réglages › Santé, et repart d'une base vide ; remets une sauvegarde avec `lutin restore`. Garde `donnees/` sur un disque de la machine : sur un partage réseau, SQLite ne verrouille pas sûrement la base, et Lutin t'en avertit.
 - **Un fichier de données abîmé ou modifié à la main** (coupé par une panne de courant, un JSON qui n'est plus un objet…) n'arrête pas Lutin : il reprend les valeurs par défaut pour ce fichier au lieu de planter. Restaure une sauvegarde pour retrouver tes réglages.
 
 ## Où sont les sauvegardes automatiques

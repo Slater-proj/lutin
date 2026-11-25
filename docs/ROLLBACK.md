@@ -6,6 +6,7 @@
 
 - **Before any update** (`lutin update`, or the update button in the page) Lutin saves your data (settings, conversations, memory, action log) into a `.zip` and keeps the **last three**. If that backup fails (disk full…), you are told and the update goes on.
 - **If the update fails** (no network, pip error), your current version stays in place: nothing is half-installed by Lutin itself.
+- **Your conversations are in a database** (`donnees/lutin.db`, SQLite, from 1.0). `lutin export --conversations [folder]` writes them back as the JSON files of 0.x (read-only, it can run while Lutin runs): an earlier version reads them from its `donnees/conversations/` folder. A database that can no longer be read is never replaced in silence: it is moved to `donnees/archives/base-illisible-<date>/`, Lutin says so at start, in `lutin doctor` and in Settings › Health, and goes on with an empty one; put a backup back with `lutin restore`. Keep `donnees/` on a disk of the machine: on a network share SQLite cannot lock the database reliably, and Lutin warns about it.
 - **A damaged or hand-edited data file** (cut by a power failure, a JSON that is no longer an object…) does not stop Lutin: it falls back to defaults for that file instead of crashing. Restore a backup to get your settings back.
 
 ## Where the automatic backups are

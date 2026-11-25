@@ -19,10 +19,10 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import horsligne, miseajour, ollama_client  # noqa: E402
-from lutin import moteur as A  # noqa: E402
-from lutin import securite as S  # noqa: E402
-from lutin.machine import Gpu, Profil  # noqa: E402
+from lutin import offline, updates, ollama_client  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import security as S  # noqa: E402
+from lutin.hardware import Gpu, Profile  # noqa: E402
 
 
 class FauxOllama(BaseHTTPRequestHandler):
@@ -54,29 +54,29 @@ class Base(unittest.TestCase):
         self.t.cleanup()
 
     def couper(self, valeur=True):
-        horsligne.definir(valeur, self.config)
+        offline.set_mode(valeur, self.config)
 
 
 class Etat(Base):
     def test_lecture_de_la_configuration_et_changement_pris_en_compte_tout_de_suite(self):
-        self.assertFalse(horsligne.actif())
+        self.assertFalse(offline.is_active())
         self.couper(True)
-        self.assertTrue(horsligne.actif())
+        self.assertTrue(offline.is_active())
         self.assertTrue(json.loads(self.config.read_text(encoding="utf-8"))["hors_ligne"])
         self.couper(False)
-        self.assertFalse(horsligne.actif())
+        self.assertFalse(offline.is_active())
 
     def test_variable_d_environnement_force_le_mode(self):
         with mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": "1"}):
-            self.assertTrue(horsligne.actif())
+            self.assertTrue(offline.is_active())
         with mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": "non"}):
-            self.assertFalse(horsligne.actif())
+            self.assertFalse(offline.is_active())
 
     def test_fichier_absent_ou_abime_n_active_rien_et_ne_plante_pas(self):
         self.config.write_text("{pas du json", encoding="utf-8")
-        self.assertFalse(horsligne.actif())
+        self.assertFalse(offline.is_active())
         self.config.unlink()
-        self.assertFalse(horsligne.actif())
+        self.assertFalse(offline.is_active())
 
     def test_definir_garde_le_reste_de_la_configuration(self):
         self.config.write_text(json.dumps({"installe": True, "securite": {"niveau": "reseau"}}), encoding="utf-8")
@@ -85,27 +85,27 @@ class Etat(Base):
         self.assertEqual((d["installe"], d["securite"]["niveau"], d["hors_ligne"]), (True, "reseau", True))
 
     def test_garde(self):
-        horsligne.garde("https://exemple.org/x")            # mode coupé : tout passe
+        offline.guard("https://exemple.org/x")            # mode coupé : tout passe
         self.couper(True)
         for ok in (ADRESSE_OLLAMA + "/api/tags", "http://localhost:11434/", "http://127.0.0.1/"):
-            horsligne.garde(ok)
+            offline.guard(ok)
         for non in ("https://exemple.org/x", "http://192.168.1.10/", "https://registry.ollama.ai/v2/library/qwen3/manifests/8b", "http:///"):
-            with self.assertRaises(horsligne.HorsLigne, msg=non):
-                horsligne.garde(non)
+            with self.assertRaises(offline.OfflineError, msg=non):
+                offline.guard(non)
 
     def test_les_services_declares_sont_autorises(self):
         self.couper(True)
         with mock.patch.dict(os.environ, {"OLLAMA_URL": "http://ollama:11434", "LUTIN_OUTIL_URL": "http://192.168.1.50:8765"}):
-            horsligne.garde("http://ollama:11434/api/tags")
-            horsligne.garde("http://192.168.1.50:8765/api/sante")
-            with self.assertRaises(horsligne.HorsLigne):
-                horsligne.garde("http://192.168.1.51:8765/")
+            offline.guard("http://ollama:11434/api/tags")
+            offline.guard("http://192.168.1.50:8765/api/sante")
+            with self.assertRaises(offline.OfflineError):
+                offline.guard("http://192.168.1.51:8765/")
 
     def test_exiger_en_ligne(self):
-        horsligne.exiger_en_ligne("télécharger")
+        offline.require_online("télécharger")
         self.couper(True)
-        with self.assertRaises(horsligne.HorsLigne) as e:
-            horsligne.exiger_en_ligne("télécharger un modèle")
+        with self.assertRaises(offline.OfflineError) as e:
+            offline.require_online("télécharger un modèle")
         self.assertIn("télécharger un modèle", str(e.exception))
 
 
@@ -130,42 +130,42 @@ class Points_de_sortie(Base):
         return [c for c in self.contacts if c not in ("127.0.0.1", "::1", "localhost")]
 
     def test_telechargement_de_modele_refuse_sans_contacter_ollama(self):
-        with self.assertRaises(horsligne.HorsLigne):
+        with self.assertRaises(offline.OfflineError):
             ollama_client.Ollama(ADRESSE_OLLAMA).telecharger("qwen3:8b")
         self.assertEqual(self.contacts, [])
-        with self.assertRaises(horsligne.HorsLigne):
-            A.installer_modele("qwen3:8b")
+        with self.assertRaises(offline.OfflineError):
+            A.install_model("qwen3:8b")
         self.assertEqual(self.contacts, [])
 
     def test_telechargement_de_fichier_refuse(self):
-        with self.assertRaises(horsligne.HorsLigne):
-            ollama_client.telecharger_fichier("https://ollama.com/download/OllamaSetup.exe", Path(self.t.name) / "x.exe")
+        with self.assertRaises(offline.OfflineError):
+            ollama_client.download_file("https://ollama.com/download/OllamaSetup.exe", Path(self.t.name) / "x.exe")
         self.assertEqual(self.contacts, [])
 
     def test_web_refuse_et_outils_web_retires(self):
-        with self.assertRaises(A.ErreurOutil) as e:
-            A.web_telecharger("https://exemple.org/")
+        with self.assertRaises(A.ToolError) as e:
+            A.web_download("https://exemple.org/")
         self.assertIn("hors ligne", str(e.exception))
         self.assertEqual(self.exterieur(), [])
-        noms = {t["function"]["name"] for t in A.outils_du_mode(dict(A.REGLAGES_DEFAUT, web=True))}
+        noms = {t["function"]["name"] for t in A.mode_tools(dict(A.DEFAULT_SETTINGS, web=True))}
         self.assertFalse(noms & {"web_chercher", "web_lire"})
         self.couper(False)
-        noms = {t["function"]["name"] for t in A.outils_du_mode(dict(A.REGLAGES_DEFAUT, web=True))}
+        noms = {t["function"]["name"] for t in A.mode_tools(dict(A.DEFAULT_SETTINGS, web=True))}
         self.assertTrue({"web_chercher", "web_lire"} <= noms)
 
     def test_verification_des_modeles_ne_sort_pas_sur_internet(self):
-        machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
+        machine = Profile(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": "https://exemple.org/catalogue.json"}
         d = {"cache": Path(self.t.name) / "cache", "config": self.config.parent}
-        r = miseajour.verifier(machine, cfg, d, ollama_client.Ollama(ADRESSE_OLLAMA), force=True)        # vrai http_get, vraie résolution : rien ne doit partir
+        r = updates.check(machine, cfg, d, ollama_client.Ollama(ADRESSE_OLLAMA), force=True)        # vrai http_get, vraie résolution : rien ne doit partir
         self.assertEqual(self.exterieur(), [], "aucune connexion vers autre chose que cette machine")
         self.assertTrue(any("hors ligne" in e for e in r["erreurs"]))
         self.assertEqual([p["type"] for p in r["propositions"]], ["nouveau"], "la comparaison avec la liste livrée reste possible")
         self.assertEqual(r["catalogue"], "absent")
 
     def test_http_get_refuse_directement(self):
-        with self.assertRaises(horsligne.HorsLigne):
-            miseajour.http_get("https://registry.ollama.ai/v2/library/qwen3/manifests/8b")
+        with self.assertRaises(offline.OfflineError):
+            updates.http_get("https://registry.ollama.ai/v2/library/qwen3/manifests/8b")
         self.assertEqual(self.contacts, [])
 
     def test_ce_qui_reste_local_fonctionne(self):
@@ -177,33 +177,78 @@ class Points_de_sortie(Base):
 class Serveur(Base):
     def setUp(self):
         super().setUp()
-        self.avant = (A.SECURITE, A.APPAREILS)
-        A.SECURITE = S.Securite()
-        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
+        self.avant = (A.SECURITY, A.DEVICES)
+        A.SECURITY = S.Security()
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.port = self.srv.server_address[1]
 
     def tearDown(self):
         self.srv.shutdown()
-        A.SECURITE, A.APPAREILS = self.avant
+        A.SECURITY, A.DEVICES = self.avant
         super().tearDown()
 
     def appel(self, methode, chemin, corps=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         c.request(methode, chemin, body=json.dumps(corps).encode() if corps is not None else None,
-                  headers={"Host": "127.0.0.1:%d" % self.port, "X-Token": A.JETON, "Content-Type": "application/json"})
+                  headers={"Host": "127.0.0.1:%d" % self.port, "X-Token": A.TOKEN, "Content-Type": "application/json"})
         r = c.getresponse()
         return r.status, json.loads(r.read().decode("utf-8") or "{}")
 
     def test_bascule_par_l_api_et_visible_dans_l_etat(self):
-        self.assertFalse(self.appel("GET", "/api/etat")[1]["hors_ligne"])
-        self.assertEqual(self.appel("POST", "/api/hors-ligne", {"actif": True}), (200, {"hors_ligne": True}))
-        self.assertTrue(self.appel("GET", "/api/etat")[1]["hors_ligne"])
-        statut, d = self.appel("POST", "/api/installer-modele", {"modele": "qwen3:8b"})
-        self.assertEqual(statut, 400)
-        self.assertIn("hors ligne", d["erreur"])
-        self.assertEqual(self.appel("POST", "/api/hors-ligne", {"actif": False}), (200, {"hors_ligne": False}))
+        self.assertFalse(self.appel("GET", "/api/v1/status")[1]["offline"])
+        statut, d = self.appel("POST", "/api/v1/offline", {})
+        self.assertEqual((statut, d["active"]), (200, True))
+        self.assertTrue(self.appel("GET", "/api/v1/status")[1]["offline"])
+        statut, d = self.appel("POST", "/api/v1/models", {"name": "qwen3:8b"})
+        self.assertEqual(statut, 409)
+        self.assertIn("hors ligne", d["error"]["message"])
+        statut, d = self.appel("DELETE", "/api/v1/offline")
+        self.assertEqual((statut, d["active"]), (200, False))
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["hors_ligne"])
+
+
+class Filet(Base):
+    """The single net (offline.install_net): what holds when a caller forgets offline.guard."""
+
+    def test_adresses_permises(self):
+        for host in ("127.0.0.1", "::1", "localhost", "192.168.1.20", "10.0.0.5", "172.16.3.4", "169.254.10.1", "100.101.102.103", "fd12::1", "fe80::1%3", "::ffff:192.168.1.2"):
+            self.assertTrue(offline.address_allowed(host), host)
+        for host in ("93.184.216.34", "8.8.8.8", "2606:4700::1111", "::ffff:8.8.8.8", "", "100.128.0.1"):
+            self.assertFalse(offline.address_allowed(host), host)
+
+    def test_un_nom_est_jugé_sur_ses_adresses(self):
+        with mock.patch.object(offline.socket, "getaddrinfo", return_value=[(2, 1, 6, "", ("192.168.1.9", 0))]):
+            self.assertTrue(offline.address_allowed("nas.maison"))
+        with mock.patch.object(offline.socket, "getaddrinfo", return_value=[(2, 1, 6, "", ("192.168.1.9", 0)), (2, 1, 6, "", ("93.184.216.34", 0))]):
+            self.assertFalse(offline.address_allowed("mixte.example"), "one public address is enough to refuse")
+        with mock.patch.object(offline.socket, "getaddrinfo", side_effect=OSError("no DNS")):
+            self.assertFalse(offline.address_allowed("inconnu.example"))
+
+    def test_le_filet_refuse_une_connexion_publique_avant_tout_envoi(self):
+        offline.install_net()
+        offline.install_net()                                  # twice: still one hook
+        self.config.write_text(json.dumps({"hors_ligne": True}), encoding="utf-8")
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            with self.assertRaises(offline.OfflineError):
+                s.connect(("93.184.216.34", 80))
+            u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            with self.assertRaises(offline.OfflineError):
+                u.sendto(b"x", ("8.8.8.8", 53))
+            u.close()
+        finally:
+            s.close()
+        serveur = socket.socket()
+        serveur.bind(("127.0.0.1", 0)); serveur.listen(1)
+        c = socket.create_connection(serveur.getsockname(), timeout=5)          # this machine stays reachable
+        c.close(); serveur.close()
+
+    def test_hors_mode_strict_le_filet_laisse_passer(self):
+        offline.install_net()
+        self.config.write_text(json.dumps({"hors_ligne": False}), encoding="utf-8")
+        offline._audit("socket.connect", (None, ("93.184.216.34", 80)))          # nothing raised: the mode is off
+        offline._audit("open", ("x", "r", 0))                                      # other events are ignored at once
 
 
 if __name__ == "__main__":

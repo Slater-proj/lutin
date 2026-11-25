@@ -2,7 +2,7 @@
 
 # Installing Lutin with Docker, engines included
 
-For the all-in-one image (Lutin and Ollama in one container), read [DOCKER.md](DOCKER.md) first. This page covers the case where **the engine is a container next to Lutin** (Ollama or llama.cpp), and what to know about Docker on Linux and Docker Desktop (Windows, WSL2).
+For the image alone (the page installs the engine), read [DOCKER.md](DOCKER.md) first. This page covers the case where **the engine is a container next to Lutin** (Ollama or llama.cpp), and what to know about Docker on Linux and Docker Desktop (Windows, WSL2).
 
 > **Honesty.** The Ollama and llama.cpp profiles in `docker-compose.moteurs.yml` are **checked on paper and by file tests**, **not on real hardware**. The `llamacpp-cuda`, `llamacpp-vulkan` and `llamacpp-intel` profiles have never run with a real card: if you try them, tell me what happened.
 
@@ -21,7 +21,7 @@ docker compose -f docker-compose.moteurs.yml --profile llamacpp-vulkan up -d   #
 docker compose -f docker-compose.moteurs.yml --profile llamacpp-intel up -d    # Intel (SYCL)
 ```
 
-Lutin already knows where the engine is: the file sets `OLLAMA_URL` and `LUTIN_LLAMACPP_URL`. The engine's card in **Settings > Engines** is pre-filled, nothing to type. An address you set in the page wins over the variable.
+Lutin already knows where the engine is: the file sets `OLLAMA_URL` and `LUTIN_LLAMACPP_URL`. The engine's card in **Models › Engines** is pre-filled, nothing to type. An address you set in the page wins over the variable.
 
 **Not sure which one?** Ollama. To compare on your machine, see [BENCH_MOTEURS.md](BENCH_MOTEURS.md).
 
