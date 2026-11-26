@@ -47,7 +47,7 @@ Une pré-version n'est jamais « la dernière version » pour GitHub : les scrip
 
 Sur une branche qui porte une cible, la candidate s'appelle `1.0.0.devN+branche` (toujours plus petite que `1.0.0a1`). Un fichier illisible ou incohérent arrête le calcul : rien n'est publié, plutôt qu'une version stable par accident.
 
-La branche `modernization` porte le fichier `alpha` : si elle arrivait dans `main` avant que la 1.0 soit prête, il en sortirait une pré-version.
+Après une version publiée, monte `target` au-dessus de la dernière version stable (la 1.0.1 est sortie : le fichier dit `alpha` / `1.0.2`, donc chaque fusion dans `main` publie `1.0.2a1`, `1.0.2a2`…). Si la cible est déjà publiée, la publication s'arrête avec « la cible … est déjà publiée » : change le fichier. Pour sortir la version stable à ton heure, mets `{"channel": "stable", "target": "1.0.2"}`.
 
 ## Utiliser une candidate
 

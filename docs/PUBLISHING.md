@@ -47,7 +47,7 @@ A pre-release is never « the latest release » for GitHub: the install scripts,
 
 On a branch that carries a target, the candidate is called `1.0.0.devN+branch` (always lower than `1.0.0a1`). An unreadable or inconsistent file stops the computation: nothing is published rather than a stable version by accident.
 
-The `modernization` branch carries the `alpha` file: should it reach `main` before 1.0 is ready, what comes out is a pre-release.
+After a release, raise `target` above the last stable version (1.0.1 was released: the file says `alpha` / `1.0.2`, so each merge into `main` publishes `1.0.2a1`, `1.0.2a2`…). If the target is already published, the publication stops with « la cible … est déjà publiée »: change the file. To cut the stable version on purpose, set `{"channel": "stable", "target": "1.0.2"}`.
 
 ## Using a candidate
 
