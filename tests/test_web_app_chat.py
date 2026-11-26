@@ -147,8 +147,8 @@ class Chat(unittest.TestCase):
         self.assertIn("Insufficient VRAM", p.evaluer("document.querySelector('.dock .problem')?.innerText ?? ''"), "the error stays above the field once the turn is over")
         self.assertEqual(p.evaluer("document.querySelector('.dock .problem').getAttribute('role')"), "alert")
         p.evaluer("location.hash = %s" % js(kept))
-        p.evaluer("location.reload()")          # the screen reads the conversation of the address when it opens
-        p.attendre(TEXT + ".includes('First message of the test')")
+        p.evaluer("window.__old = true; location.reload()")          # the screen reads the conversation of the address when it opens
+        p.attendre("!window.__old && " + TEXT + ".includes('First message of the test')")
         self.assertFalse(p.evaluer("!!document.querySelector('.dock .problem')"), "another conversation, another page: nothing is carried over")
         self.assertEqual(p.erreurs, [])
 
@@ -389,22 +389,22 @@ class Chat(unittest.TestCase):
         before = target.read_text(encoding="utf-8")
         back = p.evaluer("location.hash")          # the tests after this one go on in the conversation open now: this one runs in its own
         own = T.appel("POST", "/conversations", {}, attendu=201)["id"]
-        p.evaluer("location.hash = '#/chat/%s'; location.reload()" % own)
-        p.attendre("location.hash === '#/chat/%s' && !!document.querySelector('#message') && !!document.querySelector('.composer button[type=submit]')" % own)
+        p.evaluer("location.hash = '#/chat/%s'; window.__old = true; location.reload()" % own)
+        p.attendre("!window.__old && location.hash === '#/chat/%s' && !!document.querySelector('#message') && !!document.querySelector('.composer button[type=submit]')" % own)
         T.SCENARIO[:] = [[T.appel_outil("modifier", chemin="appli/moteur/code.py", ancien="return 1", nouveau="return 2")], [{"content": "Left as it was, after the reload."}]]
         self.write("Change the file, I will reload")
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
         p.attendre("!!document.querySelector('.card .button.danger') && location.hash.startsWith('#/chat/')")
-        p.evaluer("location.reload()")
-        p.attendre("!!document.querySelector('.card .button.danger') && document.querySelector('.card').innerText.includes('return 2')")
+        p.evaluer("window.__old = true; location.reload()")
+        p.attendre("!window.__old && !!document.querySelector('.card .button.danger') && document.querySelector('.card').innerText.includes('return 2')")
         self.assertFalse(p.evaluer("!!document.querySelector('.elsewhere')"), "the card is shown, not the notice that it cannot be")
         p.evaluer("document.querySelector('.card .button.danger').click()")
         p.attendre(TEXT + ".includes('Left as it was, after the reload.')")
         p.attendre("!document.querySelector('.card') && !!document.querySelector('.composer button[type=submit]')")
         self.assertEqual(target.read_text(encoding="utf-8"), before, "refused on the page opened again: the file is untouched")
         self.assertEqual(p.erreurs, [])
-        p.evaluer("location.hash = %r; location.reload()" % back)
-        p.attendre("location.hash === %r && document.querySelectorAll('.thread .mine').length > 0" % back)
+        p.evaluer("location.hash = %r; window.__old = true; location.reload()" % back)
+        p.attendre("!window.__old && location.hash === %r && document.querySelectorAll('.thread .mine').length > 0" % back)
 
     def test_3h_a_command_is_allowed_for_this_conversation_and_not_asked_again(self):
         p = self.page
@@ -1333,8 +1333,8 @@ class Chat(unittest.TestCase):
                       mock.patch.object(produced_files, "open_folder_conversation", lambda ident, path: opened.append(path) or {"ok": True})):
             patch.start()
             self.addCleanup(patch.stop)
-        p.evaluer("location.hash = '#/chat/%s'; location.reload()" % c["id"])
-        p.attendre("document.querySelector('.main h1')?.innerText === 'Facturation' && !!document.querySelector('.tools-button')")
+        p.evaluer("location.hash = '#/chat/%s'; window.__old = true; location.reload()" % c["id"])
+        p.attendre("!window.__old && document.querySelector('.main h1')?.innerText === 'Facturation' && !!document.querySelector('.tools-button')")
         p.attendre("!!document.querySelector('.mission-banner')")
         self.assertIn("Facturation", p.evaluer("document.querySelector('.mission-banner').innerText"))
         self.press("document.querySelector('.tools-button')")
@@ -1497,8 +1497,8 @@ class Chat(unittest.TestCase):
         p = self.page
         T.SCENARIO[:] = [[{"content": "Début"}, {"attendre": 2}, {"content": " et fin."}], [{"content": "Réponse au second."}]]
         self.addCleanup(lambda: T.SCENARIO.clear())
-        p.evaluer("location.hash = '#/chat'; location.reload()")
-        p.attendre("!!document.querySelector('#message')")
+        p.evaluer("location.hash = '#/chat'; window.__old = true; location.reload()")
+        p.attendre("!window.__old && !!document.querySelector('#message')")
         p.evaluer("document.querySelector('.new')?.click()")
         self.write("Premier message")
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
@@ -1583,8 +1583,8 @@ class Chat(unittest.TestCase):
                       mock.patch.object(external_programs, "state", lambda *args, **kwargs: [{"nom": "uv", "libelle": "uv", "aide": "Pour Python.", "installe": False, "par_lutin": False, "version": ""}])):
             patch.start()
             self.addCleanup(patch.stop)
-        p.evaluer("location.hash = '#/chat/%s'; location.reload()" % c["id"])
-        p.attendre("!!document.querySelector('.thread .pin')")
+        p.evaluer("location.hash = '#/chat/%s'; window.__old = true; location.reload()" % c["id"])
+        p.attendre("!window.__old && !!document.querySelector('.thread .pin')")
         self.assertTrue(p.evaluer("!!document.querySelector('.thread time')"), "the time of a message is shown")
         self.press("document.querySelector('.thread .pin')")
         self.eventually(lambda: T.A.conv_read(c["id"])["messages"][0].get("epingle") is True, "the request is pinned on the server")
@@ -2847,8 +2847,8 @@ class Chat(unittest.TestCase):
         llama = engines.ENGINES["llamacpp"]
         def reopen():          # runs last (cleanups run in reverse): the patches are gone, the page reads Ollama again
             p.evaluer("location.hash = '#/chat'")
-            p.evaluer("location.reload()")
-            p.attendre("!!document.querySelector('#message')")
+            p.evaluer("window.__old = true; location.reload()")
+            p.attendre("!window.__old && !!document.querySelector('#message')")
         self.addCleanup(reopen)
         taken = []
         files = [{"fichier": "m-q2.gguf", "taille": 2_000_000_000}, {"fichier": "m-q8-huge.gguf", "taille": 900_000_000_000}]
@@ -2863,8 +2863,8 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         self.addCleanup(lambda: engines.TASKS.pop("llamacpp", None))
         p.evaluer("location.hash = '#/models'")
-        p.evaluer("location.reload()")          # the engine in use is read once, when the page opens: read it again now that llama.cpp is in use
-        p.attendre("!!document.querySelector('.models .sections')")
+        p.evaluer("window.__old = true; location.reload()")          # the engine in use is read once, when the page opens: read it again now that llama.cpp is in use
+        p.attendre("!window.__old && !!document.querySelector('.models .sections')")
         p.evaluer("[...document.querySelectorAll('.models .sections a')].find(b => b.innerText === 'Rechercher').click()")
         p.attendre("!!document.querySelector('#engine-models-words')")
         p.evaluer("(() => { const box = document.querySelector('#engine-models-words'); box.value = 'qwen'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.engine-models form.search').requestSubmit(); })()")
@@ -3137,8 +3137,8 @@ class Chat(unittest.TestCase):
         T.A.conv_write(c)
         self.addCleanup(T.A.conv_delete, c["id"])
         p.evaluer("location.hash = '#/chat/%s'" % c["id"])
-        p.evaluer("location.reload()")          # the Chat reads the conversation of the address when the page opens
-        p.attendre("document.querySelector('.main h1')?.innerText === 'Longue' && document.querySelectorAll('.thread .markdown').length >= 20")
+        p.evaluer("window.__old = true; location.reload()")          # the Chat reads the conversation of the address when the page opens
+        p.attendre("!window.__old && document.querySelector('.main h1')?.innerText === 'Longue' && document.querySelectorAll('.thread .markdown').length >= 20")
         at_end = "(s => s.scrollHeight - s.scrollTop - s.clientHeight < 80)(document.querySelector('.scroll'))"
         p.attendre(at_end)
         self.assertFalse(p.evaluer("!!document.querySelector('.to-bottom')"), "at the end: no button")
@@ -3193,8 +3193,8 @@ class Chat(unittest.TestCase):
         model = T.A.settings()["modele"]          # what the server asks the engine about; the selector may still show a list an earlier test emptied
         T.PS.clear()
         p.evaluer("location.hash = '#/chat'")
-        p.evaluer("location.reload()")
-        p.attendre("!!document.querySelector('.memory')", 20)
+        p.evaluer("window.__old = true; location.reload()")
+        p.attendre("!window.__old && !!document.querySelector('.memory')", 20)
         self.assertIn("Pas chargé", p.evaluer("document.querySelector('.memory').innerText"))
         self.assertFalse(p.evaluer("document.querySelector('.memory').classList.contains('loaded')"))
         self.assertTrue(p.evaluer("document.querySelector('.memory').title.includes('attend son chargement')"), "the tooltip says what it means for the next answer")
@@ -3218,8 +3218,8 @@ class Chat(unittest.TestCase):
         last = "[...document.querySelectorAll('.thread .markdown')].at(-1)"
         self.addCleanup(p.evaluer, "%s.style.paddingBottom = ''; document.querySelector('.dock').style.paddingBottom = ''" % last)
         p.evaluer("location.hash = '#/chat/%s'" % c["id"])
-        p.evaluer("location.reload()")
-        p.attendre("document.querySelector('.main h1')?.innerText === 'Longue et changeante' && document.querySelectorAll('.thread .markdown').length >= 20")
+        p.evaluer("window.__old = true; location.reload()")
+        p.attendre("!window.__old && document.querySelector('.main h1')?.innerText === 'Longue et changeante' && document.querySelectorAll('.thread .markdown').length >= 20")
         at_end = "(s => s.scrollHeight - s.scrollTop - s.clientHeight < 80)(document.querySelector('.scroll'))"
         p.attendre(at_end)
         settle = "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 200))))"
